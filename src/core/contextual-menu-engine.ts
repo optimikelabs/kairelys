@@ -1,0 +1,529 @@
+import { t } from './i18n';
+import { parseTrackerList, splitTrackerRangeByMidnight } from '../systems/tracker-utils';
+
+export type ContextualMenuActionId =
+	| 'taskStatus'
+	| 'pinToggle'
+	| 'openEditor'
+	| 'startTimer'
+	| 'markDone'
+	| 'cancelTask'
+	| 'unschedule'
+	| 'jumpToSource'
+	| 'setAsTracked'
+	| 'clearDueDate'
+	| 'skipThisOccurrence';
+
+export type ContextualMenuSurface =
+	| 'readingRow'
+	| 'livePreviewTask'
+	| 'taskWikilinkOverlay'
+	| 'pinnedTask'
+	| 'trackerTask'
+	| 'flowTimeTask'
+	| 'filterTask'
+	| 'kanbanCard'
+	| 'calendarTimedItem'
+	| 'calendarAllDayScheduledItem'
+	| 'calendarDueMarker'
+	| 'calendarFinishedMarker'
+	| 'calendarSidebarTaskPoolTask'
+	| 'calendarProjectedOccurrence'
+	| 'calendarExternalItem';
+
+export type ContextualMenuSurfaceActionMatrix = Partial<Record<ContextualMenuSurface, ContextualMenuActionId[]>>;
+
+export const CONTEXTUAL_MENU_SURFACES: ContextualMenuSurface[] = [
+	'readingRow',
+	'livePreviewTask',
+	'taskWikilinkOverlay',
+	'pinnedTask',
+	'trackerTask',
+	'flowTimeTask',
+	'filterTask',
+	'kanbanCard',
+	'calendarTimedItem',
+	'calendarAllDayScheduledItem',
+	'calendarDueMarker',
+	'calendarFinishedMarker',
+	'calendarSidebarTaskPoolTask',
+	'calendarProjectedOccurrence',
+	'calendarExternalItem',
+];
+
+export interface ContextualMenuSurfaceGroup {
+	id: string;
+	labelKey: string;
+	surfaces: ContextualMenuSurface[];
+}
+
+export const CONTEXTUAL_MENU_SURFACE_GROUPS: ContextualMenuSurfaceGroup[] = [
+	{
+		id: 'taskLists',
+		labelKey: 'contextualMenuSurfaceGroupTaskLists',
+		surfaces: ['filterTask', 'calendarSidebarTaskPoolTask'],
+	},
+	{
+		id: 'noteSurfaces',
+		labelKey: 'contextualMenuSurfaceGroupNoteSurfaces',
+		surfaces: ['livePreviewTask', 'readingRow', 'taskWikilinkOverlay'],
+	},
+	{
+		id: 'planningBoards',
+		labelKey: 'contextualMenuSurfaceGroupPlanningBoards',
+		surfaces: ['kanbanCard', 'pinnedTask'],
+	},
+	{
+		id: 'timeTracking',
+		labelKey: 'contextualMenuSurfaceGroupTimeTracking',
+		surfaces: ['trackerTask', 'flowTimeTask', 'calendarTimedItem'],
+	},
+	{
+		id: 'calendar',
+		labelKey: 'contextualMenuSurfaceGroupCalendar',
+		surfaces: ['calendarAllDayScheduledItem', 'calendarDueMarker', 'calendarFinishedMarker'],
+	},
+	{
+		id: 'recurrence',
+		labelKey: 'contextualMenuSurfaceGroupRecurrence',
+		surfaces: ['calendarProjectedOccurrence'],
+	},
+	{
+		id: 'external',
+		labelKey: 'contextualMenuSurfaceGroupExternal',
+		surfaces: ['calendarExternalItem'],
+	},
+];
+
+export const CONFIGURABLE_CONTEXTUAL_MENU_SURFACE_GROUPS: ContextualMenuSurfaceGroup[] = CONTEXTUAL_MENU_SURFACE_GROUPS
+	.map(group => ({
+		...group,
+		surfaces: group.surfaces.filter(surface =>
+			surface !== 'calendarProjectedOccurrence'
+			&& surface !== 'calendarExternalItem'),
+	}))
+	.filter(group => group.surfaces.length > 0);
+
+export const CONTEXTUAL_MENU_SURFACE_LABEL_KEYS: Record<ContextualMenuSurface, string> = {
+	readingRow: 'contextualMenuSurfaceReadingRow',
+	livePreviewTask: 'contextualMenuSurfaceLivePreviewTask',
+	taskWikilinkOverlay: 'contextualMenuSurfaceTaskWikilinkOverlay',
+	pinnedTask: 'contextualMenuSurfacePinnedTask',
+	trackerTask: 'contextualMenuSurfaceTrackerTask',
+	flowTimeTask: 'contextualMenuSurfaceFlowTimeTask',
+	filterTask: 'contextualMenuSurfaceFilterTask',
+	kanbanCard: 'contextualMenuSurfaceKanbanCard',
+	calendarTimedItem: 'contextualMenuSurfaceCalendarTimedItem',
+	calendarAllDayScheduledItem: 'contextualMenuSurfaceCalendarAllDayScheduledItem',
+	calendarDueMarker: 'contextualMenuSurfaceCalendarDueMarker',
+	calendarFinishedMarker: 'contextualMenuSurfaceCalendarFinishedMarker',
+	calendarSidebarTaskPoolTask: 'contextualMenuSurfaceCalendarSidebarTaskPoolTask',
+	calendarProjectedOccurrence: 'contextualMenuSurfaceCalendarProjectedOccurrence',
+	calendarExternalItem: 'contextualMenuSurfaceCalendarExternalItem',
+};
+
+export interface ContextualMenuActionDefinition {
+	id: ContextualMenuActionId;
+	labelKey: string;
+	compactLabel: string;
+	descriptionKey: string;
+	icon: string;
+}
+
+export interface ResolvedContextualMenuAction extends ContextualMenuActionDefinition {
+	label: string;
+	description: string;
+}
+
+export interface ContextualTaskActionSource {
+	checkbox: 'open' | 'done' | 'cancelled';
+	fieldValues: Record<string, string>;
+}
+
+export interface ContextualMenuRepeatRef {
+	seriesId: string;
+	occurrenceDate: string;
+	isLatestMaterialized: boolean;
+	isProjected: boolean;
+}
+
+export interface ContextualMenuCalendarItemSource {
+	kind: 'timed' | 'allDayScheduled' | 'dueMarker' | 'finishedMarker';
+	origin: 'materialized' | 'projected' | 'external';
+	sourceTask: ContextualTaskActionSource | null;
+	renderSnapshot: {
+		checkbox: ContextualTaskActionSource['checkbox'];
+		fieldValues: Record<string, string>;
+		tags: string[];
+	};
+	repeatRef: ContextualMenuRepeatRef | null;
+	startDateTime: string | null;
+	endDateTime: string | null;
+}
+
+export interface ContextualMenuProjectedRef {
+	seriesId: string;
+	occurrenceDate: string;
+}
+
+export interface ContextualMenuContext {
+	surface: ContextualMenuSurface;
+	taskId: string;
+	task: ContextualTaskActionSource | null;
+	now: string;
+	isPinned?: boolean;
+	calendarItem?: ContextualMenuCalendarItemSource | null;
+	projectedRef?: ContextualMenuProjectedRef | null;
+}
+
+export type ContextualMenuActionHandler = (
+	taskId: string,
+	actionId: ContextualMenuActionId,
+	context?: ContextualMenuContext,
+) => void | Promise<void>;
+
+export interface ContextualMenuExecutionDeps {
+	cycleStatus: (taskId: string) => void | Promise<void>;
+	togglePin: (taskId: string) => void | Promise<void>;
+	openEditor: (taskId: string) => void | Promise<void>;
+	startTimer: (taskId: string) => void | Promise<void>;
+	markDone: (taskId: string) => void | Promise<void>;
+	cancelTask: (taskId: string) => void | Promise<void>;
+	unschedule: (taskId: string) => void | Promise<void>;
+	jumpToSource: (taskId: string) => void | Promise<void>;
+	setAsTracked: (taskId: string, start: string, end: string) => void | Promise<void>;
+	clearDueDate: (taskId: string) => void | Promise<void>;
+	openProjectedOccurrenceLatestTaskEditor: (projected: ContextualMenuProjectedRef) => void | Promise<void>;
+	skipProjectedOccurrence: (projected: ContextualMenuProjectedRef) => void | Promise<void>;
+}
+
+export const CONTEXTUAL_MENU_ACTIONS: ContextualMenuActionDefinition[] = [
+	{
+		id: 'taskStatus',
+		labelKey: 'contextualMenuActionTaskStatus',
+		compactLabel: 'St',
+		descriptionKey: 'contextualMenuActionTaskStatusDesc',
+		icon: 'kanban-square',
+	},
+	{
+		id: 'pinToggle',
+		labelKey: 'contextualMenuActionPinToggle',
+		compactLabel: 'Pn',
+		descriptionKey: 'contextualMenuActionPinToggleDesc',
+		icon: 'pin',
+	},
+	{
+		id: 'openEditor',
+		labelKey: 'contextualMenuActionOpenEditor',
+		compactLabel: 'Ed',
+		descriptionKey: 'contextualMenuActionOpenEditorDesc',
+		icon: 'square-pen',
+	},
+	{
+		id: 'startTimer',
+		labelKey: 'contextualMenuActionStartTimer',
+		compactLabel: 'Tr',
+		descriptionKey: 'contextualMenuActionStartTimerDesc',
+		icon: 'timer',
+	},
+	{
+		id: 'markDone',
+		labelKey: 'contextualMenuActionMarkDone',
+		compactLabel: 'Dn',
+		descriptionKey: 'contextualMenuActionMarkDoneDesc',
+		icon: 'check',
+	},
+	{
+		id: 'cancelTask',
+		labelKey: 'contextualMenuActionCancelTask',
+		compactLabel: 'Cn',
+		descriptionKey: 'contextualMenuActionCancelTaskDesc',
+		icon: 'ban',
+	},
+	{
+		id: 'unschedule',
+		labelKey: 'contextualMenuActionUnschedule',
+		compactLabel: 'Un',
+		descriptionKey: 'contextualMenuActionUnscheduleDesc',
+		icon: 'calendar-x',
+	},
+	{
+		id: 'jumpToSource',
+		labelKey: 'contextualMenuActionJumpToSource',
+		compactLabel: 'Go',
+		descriptionKey: 'contextualMenuActionJumpToSourceDesc',
+		icon: 'arrow-up-right',
+	},
+	{
+		id: 'setAsTracked',
+		labelKey: 'contextualMenuActionSetAsTracked',
+		compactLabel: 'Lg',
+		descriptionKey: 'contextualMenuActionSetAsTrackedDesc',
+		icon: 'history',
+	},
+	{
+		id: 'clearDueDate',
+		labelKey: 'contextualMenuActionClearDueDate',
+		compactLabel: 'Cd',
+		descriptionKey: 'contextualMenuActionClearDueDateDesc',
+		icon: 'calendar-minus',
+	},
+	{
+		id: 'skipThisOccurrence',
+		labelKey: 'contextualMenuActionSkipThisOccurrence',
+		compactLabel: 'Sk',
+		descriptionKey: 'contextualMenuActionSkipThisOccurrenceDesc',
+		icon: 'skip-forward',
+	},
+];
+
+export const CONFIGURABLE_CONTEXTUAL_MENU_ACTIONS: ContextualMenuActionDefinition[] = CONTEXTUAL_MENU_ACTIONS
+	.filter(action => action.id !== 'skipThisOccurrence');
+
+const DUE_MARKER_ALLOWED_ACTIONS = new Set<ContextualMenuActionId>([
+	'taskStatus',
+	'pinToggle',
+	'openEditor',
+	'startTimer',
+	'markDone',
+	'cancelTask',
+	'jumpToSource',
+	'clearDueDate',
+]);
+
+export function getContextualMenuActionLabel(action: Pick<ContextualMenuActionDefinition, 'labelKey'>): string {
+	return t('settings', action.labelKey);
+}
+
+export function getContextualMenuActionDescription(action: Pick<ContextualMenuActionDefinition, 'descriptionKey'>): string {
+	return t('settings', action.descriptionKey);
+}
+
+export function resolveContextualMenu(
+	context: ContextualMenuContext,
+	allowlist: ContextualMenuActionId[],
+	surfaceActionMatrix?: ContextualMenuSurfaceActionMatrix,
+): ResolvedContextualMenuAction[] {
+	if (context.surface === 'calendarProjectedOccurrence') {
+		return resolveActionsForIds(context, ['skipThisOccurrence']);
+	}
+	const matrixActionIds = getMatrixActionIds(context.surface, allowlist, surfaceActionMatrix);
+	const actionIds = getSurfaceActionIds(context, matrixActionIds);
+	return resolveActionsForIds(context, actionIds);
+}
+
+function resolveActionsForIds(
+	context: ContextualMenuContext,
+	actionIds: ContextualMenuActionId[],
+): ResolvedContextualMenuAction[] {
+	return actionIds
+		.filter(actionId => isContextualMenuActionAvailable(actionId, context))
+		.map(actionId => CONTEXTUAL_MENU_ACTIONS.find(action => action.id === actionId))
+		.filter((action): action is ContextualMenuActionDefinition => !!action)
+		.map(action => ({
+			...action,
+			label: resolveContextualMenuActionLabel(action, context),
+			description: getContextualMenuActionDescription(action),
+		}));
+}
+
+export function getContextualMenuSurfaceForCalendarItem(
+	item: ContextualMenuCalendarItemSource,
+): ContextualMenuSurface {
+	if (item.origin === 'external') return 'calendarExternalItem';
+	if (item.origin === 'projected') return 'calendarProjectedOccurrence';
+	if (item.kind === 'timed') return 'calendarTimedItem';
+	if (item.kind === 'allDayScheduled') return 'calendarAllDayScheduledItem';
+	if (item.kind === 'dueMarker') return 'calendarDueMarker';
+	return 'calendarFinishedMarker';
+}
+
+export async function executeContextualMenuAction(
+	context: ContextualMenuContext,
+	actionId: ContextualMenuActionId,
+	deps: ContextualMenuExecutionDeps,
+): Promise<void> {
+	if (actionId === 'skipThisOccurrence') {
+		if (context.projectedRef) {
+			await deps.skipProjectedOccurrence(context.projectedRef);
+		}
+		return;
+	}
+
+	if (actionId === 'openEditor' && context.projectedRef) {
+		await deps.openProjectedOccurrenceLatestTaskEditor(context.projectedRef);
+		return;
+	}
+
+	switch (actionId) {
+		case 'taskStatus':
+			await deps.cycleStatus(context.taskId);
+			return;
+		case 'pinToggle':
+			await deps.togglePin(context.taskId);
+			return;
+		case 'openEditor':
+			await deps.openEditor(context.taskId);
+			return;
+		case 'startTimer':
+			if (context.task?.checkbox !== 'open') return;
+			await deps.startTimer(context.taskId);
+			return;
+		case 'markDone':
+			if (context.task?.checkbox !== 'open') return;
+			await deps.markDone(context.taskId);
+			return;
+		case 'cancelTask':
+			if (context.task?.checkbox !== 'open') return;
+			await deps.cancelTask(context.taskId);
+			return;
+		case 'unschedule':
+			await deps.unschedule(context.taskId);
+			return;
+		case 'jumpToSource':
+			await deps.jumpToSource(context.taskId);
+			return;
+		case 'setAsTracked': {
+			const range = getTrackedRange(context);
+			if (!range) return;
+			await deps.setAsTracked(context.taskId, range.start, range.end);
+			return;
+		}
+		case 'clearDueDate':
+			if (!getDueValue(context)) return;
+			await deps.clearDueDate(context.taskId);
+			return;
+	}
+}
+
+function resolveContextualMenuActionLabel(
+	action: ContextualMenuActionDefinition,
+	context: ContextualMenuContext,
+): string {
+	if (action.id === 'taskStatus') {
+		const statusValue = (context.task?.fieldValues['status'] ?? '').trim();
+		if (statusValue) return statusValue;
+	}
+	if (action.id === 'pinToggle') {
+		return context.isPinned ? t('buttons', 'unpin') : t('buttons', 'pin');
+	}
+	return getContextualMenuActionLabel(action);
+}
+
+function getSurfaceActionIds(
+	context: ContextualMenuContext,
+	allowlist: ContextualMenuActionId[],
+): ContextualMenuActionId[] {
+	return allowlist.filter(actionId => isContextualMenuActionSupportedOnSurface(context.surface, actionId));
+}
+
+export function isContextualMenuActionSupportedOnSurface(
+	surface: ContextualMenuSurface,
+	actionId: ContextualMenuActionId,
+): boolean {
+	if (actionId === 'setAsTracked' && (
+		surface === 'trackerTask'
+		|| surface === 'flowTimeTask'
+		|| surface === 'calendarAllDayScheduledItem'
+		|| surface === 'calendarFinishedMarker'
+		|| surface === 'calendarSidebarTaskPoolTask'
+	)) {
+		return false;
+	}
+	if (actionId === 'cancelTask' && surface === 'calendarFinishedMarker') {
+		return false;
+	}
+	switch (surface) {
+		case 'calendarExternalItem':
+			return false;
+		case 'calendarProjectedOccurrence':
+			return actionId === 'skipThisOccurrence';
+		case 'calendarDueMarker':
+			return DUE_MARKER_ALLOWED_ACTIONS.has(actionId);
+		default:
+			return true;
+	}
+}
+
+function getMatrixActionIds(
+	surface: ContextualMenuSurface,
+	allowlist: ContextualMenuActionId[],
+	surfaceActionMatrix?: ContextualMenuSurfaceActionMatrix,
+): ContextualMenuActionId[] {
+	const surfaceAllowlist = surfaceActionMatrix?.[surface];
+	if (!Array.isArray(surfaceAllowlist)) return [...allowlist];
+	return allowlist.filter(actionId => surfaceAllowlist.includes(actionId));
+}
+
+function isContextualMenuActionAvailable(
+	actionId: ContextualMenuActionId,
+	context: ContextualMenuContext,
+): boolean {
+	const task = context.task;
+
+	if ((actionId === 'markDone' || actionId === 'startTimer' || actionId === 'cancelTask') && task?.checkbox !== 'open') {
+		return false;
+	}
+	if (actionId === 'unschedule') {
+		return hasSchedule(context);
+	}
+	if (actionId === 'setAsTracked') {
+		const range = getTrackedRange(context);
+		if (!range || range.end > context.now) return false;
+		return !hasTrackedCoverageForScheduledRange(getTrackerValue(context), range.start, range.end);
+	}
+	if (actionId === 'skipThisOccurrence') {
+		return context.surface === 'calendarProjectedOccurrence' && !!context.projectedRef;
+	}
+	if (actionId === 'clearDueDate') {
+		return getDueValue(context).length > 0;
+	}
+	return true;
+}
+
+function hasSchedule(context: ContextualMenuContext): boolean {
+	const fieldValues = getFieldValues(context);
+	return getDueValue(context).length > 0
+		|| (fieldValues['dateScheduled'] ?? '').trim().length > 0
+		|| getStartDateTime(context).length > 0
+		|| getEndDateTime(context).length > 0;
+}
+
+function getTrackedRange(context: ContextualMenuContext): { start: string; end: string } | null {
+	const start = getStartDateTime(context);
+	const end = getEndDateTime(context);
+	if (!start || !end) return null;
+	return { start, end };
+}
+
+function getFieldValues(context: ContextualMenuContext): Record<string, string> {
+	if (context.task) return context.task.fieldValues;
+	if (context.calendarItem?.sourceTask) return context.calendarItem.sourceTask.fieldValues;
+	return context.calendarItem?.renderSnapshot.fieldValues ?? {};
+}
+
+function getDueValue(context: ContextualMenuContext): string {
+	return (getFieldValues(context)['dateDue'] ?? '').trim();
+}
+
+function getTrackerValue(context: ContextualMenuContext): string {
+	return (getFieldValues(context)['trackers'] ?? '').trim();
+}
+
+function getStartDateTime(context: ContextualMenuContext): string {
+	if (context.calendarItem?.startDateTime) return context.calendarItem.startDateTime.trim();
+	return (getFieldValues(context)['datetimeStart'] ?? '').trim();
+}
+
+function getEndDateTime(context: ContextualMenuContext): string {
+	if (context.calendarItem?.endDateTime) return context.calendarItem.endDateTime.trim();
+	return (getFieldValues(context)['datetimeEnd'] ?? '').trim();
+}
+
+function hasTrackedCoverageForScheduledRange(trackers: string, start: string, end: string): boolean {
+	if (!trackers || !start || !end) return false;
+	const existingRanges = new Set(parseTrackerList(trackers).map(session => session.raw));
+	const neededRanges = splitTrackerRangeByMidnight(start, end)
+		.map(fragment => `${fragment.start}/${fragment.end}`);
+	return neededRanges.length > 0 && neededRanges.every(range => existingRanges.has(range));
+}

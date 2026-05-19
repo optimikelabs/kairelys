@@ -1,0 +1,148 @@
+import { App } from 'obsidian';
+import type { OperonSettings } from '../types/settings';
+import { WriteQueue } from './write-queue';
+import { preserveInvalidJsonFile, shouldSkipStoreWrite, writeJsonSafely, type RecoveredStoreWriteOptions } from './storage-file-ops';
+
+const TASK_CREATION_PROFILE_FILE = '.operon/task-creation-profile.json';
+const TASK_CREATION_PROFILE_STORE_VERSION = 1;
+const TASK_CREATION_PROFILE_STORE_QUEUE_KEY = `${TASK_CREATION_PROFILE_FILE}::__store__`;
+
+export type TaskCreationProfileStoreSettings = Pick<
+	OperonSettings,
+	| 'taskDescriptionRequired'
+	| 'assigneesRequired'
+	| 'fileTasksFolder'
+	| 'inlineTaskUseDailyNote'
+	| 'inlineTaskTargetFile'
+	| 'inlineTaskHeading'
+	| 'calendarInlineTaskHeading'
+	| 'autoParentFileTask'
+	| 'autoParentLinkedFileSubtasks'
+	| 'fileTaskTemplateFolder'
+	| 'createDailyNotesAsOperonTask'
+	| 'defaultEstimateMinutes'
+>;
+
+interface TaskCreationProfileStoreData extends TaskCreationProfileStoreSettings {
+	version: number;
+}
+
+function cloneSettings(settings: TaskCreationProfileStoreSettings): TaskCreationProfileStoreSettings {
+	return { ...settings };
+}
+
+function readBoolean(value: unknown, fallback: boolean): boolean {
+	return typeof value === 'boolean' ? value : fallback;
+}
+
+function readString(value: unknown, fallback: string): string {
+	return typeof value === 'string' ? value : fallback;
+}
+
+function readNumber(value: unknown, fallback: number): number {
+	return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function readStoreData(
+	raw: Partial<TaskCreationProfileStoreData>,
+	fallback: TaskCreationProfileStoreSettings,
+): TaskCreationProfileStoreSettings {
+	return {
+		taskDescriptionRequired: readBoolean(raw.taskDescriptionRequired, fallback.taskDescriptionRequired),
+		assigneesRequired: readBoolean(raw.assigneesRequired, fallback.assigneesRequired),
+		fileTasksFolder: readString(raw.fileTasksFolder, fallback.fileTasksFolder),
+		inlineTaskUseDailyNote: readBoolean(raw.inlineTaskUseDailyNote, fallback.inlineTaskUseDailyNote),
+		inlineTaskTargetFile: readString(raw.inlineTaskTargetFile, fallback.inlineTaskTargetFile),
+		inlineTaskHeading: readString(raw.inlineTaskHeading, fallback.inlineTaskHeading),
+		calendarInlineTaskHeading: readString(raw.calendarInlineTaskHeading, fallback.calendarInlineTaskHeading),
+		autoParentFileTask: readBoolean(raw.autoParentFileTask, fallback.autoParentFileTask),
+		autoParentLinkedFileSubtasks: readBoolean(raw.autoParentLinkedFileSubtasks, fallback.autoParentLinkedFileSubtasks),
+		fileTaskTemplateFolder: readString(raw.fileTaskTemplateFolder, fallback.fileTaskTemplateFolder),
+		createDailyNotesAsOperonTask: readBoolean(raw.createDailyNotesAsOperonTask, fallback.createDailyNotesAsOperonTask),
+		defaultEstimateMinutes: readNumber(raw.defaultEstimateMinutes, fallback.defaultEstimateMinutes),
+	};
+}
+
+export class TaskCreationProfileStore {
+	private app: App;
+	private writeQueue: WriteQueue;
+	private settings: TaskCreationProfileStoreSettings;
+	private serializedSettings: string;
+	private recoveredFromMalformed = false;
+
+	constructor(app: App, writeQueue: WriteQueue, defaults: TaskCreationProfileStoreSettings) {
+		this.app = app;
+		this.writeQueue = writeQueue;
+		this.settings = cloneSettings(defaults);
+		this.serializedSettings = JSON.stringify(this.settings);
+	}
+
+	getAll(): TaskCreationProfileStoreSettings {
+		return cloneSettings(this.settings);
+	}
+
+	async exists(): Promise<boolean> {
+		return this.app.vault.adapter.exists(TASK_CREATION_PROFILE_FILE);
+	}
+
+	async load(
+		legacySettings: TaskCreationProfileStoreSettings | null = null,
+		defaults: TaskCreationProfileStoreSettings,
+	): Promise<void> {
+		const adapter = this.app.vault.adapter;
+		if (!(await adapter.exists(TASK_CREATION_PROFILE_FILE))) {
+			this.settings = cloneSettings(legacySettings ?? defaults);
+			this.serializedSettings = JSON.stringify(this.settings);
+			this.recoveredFromMalformed = false;
+			if (legacySettings) {
+				await this.persist();
+			}
+			return;
+		}
+
+		let raw = '';
+		try {
+			raw = await adapter.read(TASK_CREATION_PROFILE_FILE);
+			const parsed = JSON.parse(raw) as Partial<TaskCreationProfileStoreData>;
+			this.settings = readStoreData(parsed, defaults);
+			this.serializedSettings = JSON.stringify(this.settings);
+			this.recoveredFromMalformed = false;
+		} catch {
+			console.warn('Operon: Failed to parse task creation profile store, preserving invalid file as backup and recovering from fallback settings');
+			await preserveInvalidJsonFile(adapter, TASK_CREATION_PROFILE_FILE, raw);
+			this.settings = cloneSettings(legacySettings ?? defaults);
+			this.serializedSettings = JSON.stringify(this.settings);
+			this.recoveredFromMalformed = true;
+		}
+	}
+
+	async replaceAll(settings: TaskCreationProfileStoreSettings, options: RecoveredStoreWriteOptions = {}): Promise<void> {
+		const nextSettings = cloneSettings(settings);
+		const nextSerialized = JSON.stringify(nextSettings);
+		const adapter = this.app.vault.adapter;
+		if (shouldSkipStoreWrite(
+			nextSerialized === this.serializedSettings,
+			await adapter.exists(TASK_CREATION_PROFILE_FILE),
+			this.recoveredFromMalformed,
+			options,
+		)) {
+			this.settings = nextSettings;
+			return;
+		}
+		this.settings = nextSettings;
+		this.serializedSettings = nextSerialized;
+		await this.persist();
+	}
+
+	private async persist(): Promise<void> {
+		const adapter = this.app.vault.adapter;
+		const data: TaskCreationProfileStoreData = {
+			version: TASK_CREATION_PROFILE_STORE_VERSION,
+			...cloneSettings(this.settings),
+		};
+		await this.writeQueue.enqueue(TASK_CREATION_PROFILE_STORE_QUEUE_KEY, async () => {
+			await writeJsonSafely(adapter, TASK_CREATION_PROFILE_FILE, data);
+		});
+		this.recoveredFromMalformed = false;
+	}
+}

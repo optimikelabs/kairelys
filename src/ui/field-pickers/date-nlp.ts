@@ -1,0 +1,142 @@
+import { App } from 'obsidian';
+import { getCurrentLang } from '../../core/i18n';
+import { getCommunityPlugin } from '../../core/obsidian-app';
+import { isRecord, isUnknownFunction } from '../../core/unknown-value';
+import { getDatePickerStrings, getQuickDateCandidates, parseFallbackDateCandidates } from './date-nlp-fallback';
+
+export type DatePickerLang = 'en' | 'tr';
+
+export interface DateParseContext {
+	fieldKey: string;
+	language: DatePickerLang;
+	referenceDate?: Date;
+}
+
+export interface DateParseCandidate {
+	isoDate: string;
+	primaryLabel: string;
+	secondaryLabel?: string;
+	source: 'nldates' | 'fallback' | 'quick';
+	confidence: number;
+	kind: 'nlp' | 'quick' | 'numeric-relative';
+}
+
+export interface DateNlpAdapter {
+	parse(input: string, context: DateParseContext): DateParseCandidate[];
+}
+
+interface NldatesPlugin {
+	parseDate: (text: string) => unknown;
+}
+
+interface MomentLike {
+	toDate: () => unknown;
+}
+
+export function resolveDatePickerLanguage(language?: string): DatePickerLang {
+	if (language === 'tr') return 'tr';
+	if (language === 'en') return 'en';
+	return getCurrentLang();
+}
+
+export function getDatePickerLocaleStrings(language?: string) {
+	return getDatePickerStrings(resolveDatePickerLanguage(language));
+}
+
+export function buildDatePickerCandidates(
+	app: App | undefined,
+	input: string,
+	context: DateParseContext,
+): { parsed: DateParseCandidate[]; quick: DateParseCandidate[] } {
+	const trimmed = input.trim();
+	const parsed: DateParseCandidate[] = [];
+	const deterministic = trimmed ? parseFallbackDateCandidates(trimmed, context) : [];
+
+	if (deterministic.length > 0) {
+		parsed.push(...deterministic);
+	} else if (trimmed) {
+		const nldatesCandidate = parseWithNldates(app, trimmed, context);
+		if (nldatesCandidate) parsed.push(nldatesCandidate);
+		const fallback = parseFallbackDateCandidates(trimmed, context);
+		parsed.push(...fallback);
+	}
+
+	return {
+		parsed: dedupeCandidates(parsed),
+		quick: dedupeCandidates(getQuickDateCandidates(context, trimmed)),
+	};
+}
+
+function parseWithNldates(
+	app: App | undefined,
+	input: string,
+	context: DateParseContext,
+): DateParseCandidate | null {
+	const plugin = resolveNldatesPlugin(app);
+	if (!plugin) return null;
+
+	try {
+		const parsed = plugin.parseDate(input);
+		const parsedRecord = isRecord(parsed) ? parsed : null;
+		const dateValue = parsedRecord?.date;
+		const momentValue = parsedRecord?.moment;
+		const maybeMomentDate = isMomentLike(momentValue) ? momentValue.toDate() : null;
+		const date = dateValue instanceof Date ? dateValue : maybeMomentDate;
+		if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+		return {
+			isoDate: toIsoDate(date),
+			primaryLabel: formatLongDate(date, context.language),
+			secondaryLabel: getDatePickerStrings(context.language).parsedFrom(input),
+			source: 'nldates',
+			confidence: 0.99,
+			kind: 'nlp',
+		};
+	} catch {
+		return null;
+	}
+}
+
+function resolveNldatesPlugin(app: App | undefined): NldatesPlugin | null {
+	const plugin = getCommunityPlugin(app, 'nldates-obsidian');
+	if (!isNldatesPlugin(plugin)) return null;
+	return {
+		parseDate: (text: string): unknown => plugin.parseDate(text),
+	};
+}
+
+function isNldatesPlugin(value: unknown): value is NldatesPlugin {
+	return isRecord(value) && isUnknownFunction(value.parseDate);
+}
+
+function isMomentLike(value: unknown): value is MomentLike {
+	return isRecord(value) && isUnknownFunction(value.toDate);
+}
+
+function dedupeCandidates(candidates: DateParseCandidate[]): DateParseCandidate[] {
+	const byIso = new Map<string, { candidate: DateParseCandidate; order: number }>();
+	for (const [order, candidate] of candidates.entries()) {
+		const existing = byIso.get(candidate.isoDate);
+		if (!existing || existing.candidate.confidence < candidate.confidence) {
+			byIso.set(candidate.isoDate, { candidate, order: existing?.order ?? order });
+		}
+	}
+	return [...byIso.values()]
+		.sort((a, b) => a.order - b.order)
+		.map(entry => entry.candidate);
+}
+
+function toIsoDate(date: Date): string {
+	const year = date.getFullYear();
+	const month = String(date.getMonth() + 1).padStart(2, '0');
+	const day = String(date.getDate()).padStart(2, '0');
+	return `${year}-${month}-${day}`;
+}
+
+function formatLongDate(date: Date, language: DatePickerLang): string {
+	return new Intl.DateTimeFormat(language === 'tr' ? 'tr-TR' : 'en-US', {
+		weekday: 'long',
+		year: 'numeric',
+		month: 'long',
+		day: 'numeric',
+	}).format(date);
+}

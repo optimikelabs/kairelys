@@ -1,0 +1,535 @@
+/**
+ * Embedded Filter Processor — renders saved filter views inside notes.
+ *
+ * Usage in any markdown file:
+ * ```operon
+ * filter: "My Filter Name"
+ * ```
+ *
+ * The code block is replaced with a live task list using the named filter set
+ * defined in Settings → Filters. Reuses the same evaluator and task bar
+ * rendering as the sidebar Filter View.
+ */
+
+import { App, MarkdownPostProcessorContext, setIcon } from 'obsidian';
+import { OperonIndexer } from '../indexer/indexer';
+import { cloneFilterSet, FilterSet, OperonSettings } from '../types/settings';
+import { Pipeline } from '../types/pipeline';
+import { PriorityDefinition } from '../types/priority';
+import { t } from '../core/i18n';
+import { evaluateFilterSet, evaluateFilterSetGrouped } from '../core/filter-evaluator';
+import { PinnedCache } from '../storage/pinned-cache';
+import { buildFilterTaskRowElement, FilterTaskRowCallbacks } from './filter-task-row';
+import { FilterSetModal } from './filter-set-modal';
+import type { ContextualMenuActionId } from '../core/contextual-menu-engine';
+import { bindOperonHoverTooltip } from './operon-hover-tooltip';
+import { applyFilterSearch, buildFilterTreeScope, isFilterSearchActive } from '../systems/filter-search';
+import {
+    FILTER_RENDER_BATCH_SIZE,
+    getVisibleFilterTasks,
+    getVisibleGroupedFilterResults,
+} from '../systems/filter-lazy-render';
+import { getOwnerDocument } from '../core/dom-compat';
+import { asyncHandler, runAsyncAction } from '../core/async-action';
+import { closeFloatingPanelsForRoot } from './field-pickers/common';
+import { closeIconOnlyChipPreviewsForRoot } from './icon-only-chip-preview';
+import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
+
+export interface EmbedFilterDeps {
+    app: App;
+    indexer: OperonIndexer;
+    settings: OperonSettings;
+    openTaskEditor: (operonId: string) => void;
+    toggleCheckbox: (operonId: string) => void;
+    cycleStatus: (operonId: string) => void;
+    getPipelines: () => Pipeline[];
+    getPriorities: () => PriorityDefinition[];
+    saveSettings: () => Promise<void>;
+    getChildIds: (parentId: string) => string[];
+    navigateToTask: (task: import('../types/fields').IndexedTask) => void;
+    getSettings: () => OperonSettings;
+    updateField: (operonId: string, key: string, value: string) => void;
+    updateFields?: (operonId: string, payload: Record<string, string>) => void;
+    updateSubtasks?: (operonId: string, subtaskIds: string[]) => void;
+    updateDependencyField?: (operonId: string, field: 'blocking' | 'blockedBy', value: string) => void;
+    requestSubtask?: (operonId: string) => void | Promise<void>;
+    onContextualAction?: (taskId: string, actionId: ContextualMenuActionId) => void | Promise<void>;
+    pinnedCache?: PinnedCache;
+    isTaskTracking?: (taskId: string) => boolean;
+    toggleTimer?: (taskId: string) => void | Promise<void>;
+    getTrackingSignature?: () => string;
+    saveFilterSet?: (filterSet: FilterSet) => Promise<void>;
+    openDailyNote?: (dateKey: string) => void | Promise<void>;
+}
+
+/** Tracks live embed instances for refresh */
+interface EmbedInstance {
+    el: HTMLElement;        // The code block's root element
+    filterId: string | null;
+    filterName: string | null;
+    lastRenderSignature: string | null;
+    expandedTaskIds: Set<string>;
+    searchQuery: string;
+    treeScopeCache: { signature: string; tasks: import('../types/fields').IndexedTask[] } | null;
+    visibleTaskLimit: number;
+    lastPaginationSignature: string | null;
+    lazyLoadObserver: IntersectionObserver | null;
+}
+
+/** Active embed instances — pruned on refresh when DOM is detached */
+const activeEmbeds: Set<EmbedInstance> = new Set();
+
+/**
+ * Parse the code block content to extract a filter reference.
+ * Supports:
+ * - filterId: "fs_abc123"
+ * - filter: "My Filter Name"
+ */
+function parseFilterReference(source: string): { filterId: string | null; filterName: string | null } | null {
+    let filterId: string | null = null;
+    let filterName: string | null = null;
+
+    for (const line of source.split('\n')) {
+        const trimmed = line.trim();
+        const idMatch = trimmed.match(/^filterId:\s*["']?(.+?)["']?\s*$/i);
+        if (idMatch) filterId = idMatch[1];
+
+        const nameMatch = trimmed.match(/^filter:\s*["']?(.+?)["']?\s*$/i);
+        if (nameMatch) filterName = nameMatch[1];
+    }
+
+    if (!filterId && !filterName) return null;
+    return { filterId, filterName };
+}
+
+function resolveFilterSet(
+    settings: OperonSettings,
+    ref: { filterId: string | null; filterName: string | null },
+): FilterSet | null {
+    if (ref.filterId) {
+        const byId = settings.filterSets.find(fs => fs.id === ref.filterId);
+        if (byId) return byId;
+    }
+
+    if (ref.filterName) {
+        return settings.filterSets.find(
+            fs => fs.name.toLowerCase() === ref.filterName!.toLowerCase(),
+        ) ?? null;
+    }
+
+    return null;
+}
+
+/**
+ * Register the `operon` code block processor on the plugin.
+ * Call this from the plugin's onload() method.
+ */
+export function registerEmbedFilterProcessor(
+    registerFn: (lang: string, handler: (source: string, el: HTMLElement, ctx: MarkdownPostProcessorContext) => void | Promise<void>) => void,
+    deps: EmbedFilterDeps,
+): void {
+    registerFn('operon', (source: string, el: HTMLElement, _ctx: MarkdownPostProcessorContext) => {
+        const filterRef = parseFilterReference(source);
+
+        if (!filterRef) {
+            renderError(el, 'Invalid syntax. Use: filterId: "Filter Id" or filter: "Filter Name"');
+            return;
+        }
+
+        // Track this instance for live refresh
+        const instance: EmbedInstance = {
+            el,
+            filterId: filterRef.filterId,
+            filterName: filterRef.filterName,
+            lastRenderSignature: null,
+            expandedTaskIds: new Set<string>(),
+            searchQuery: '',
+            treeScopeCache: null,
+            visibleTaskLimit: FILTER_RENDER_BATCH_SIZE,
+            lastPaginationSignature: null,
+            lazyLoadObserver: null,
+        };
+        activeEmbeds.add(instance);
+
+        renderEmbed(instance, filterRef, deps);
+    });
+}
+
+/**
+ * Refresh all active embedded filter views.
+ * Call this from refreshViews() to keep embeds in sync with index.
+ */
+export function refreshEmbedFilters(deps: EmbedFilterDeps): void {
+    for (const instance of activeEmbeds) {
+        // Prune detached DOM nodes
+        if (!instance.el.isConnected) {
+            closeEmbedTransientUi(instance.el);
+            instance.lazyLoadObserver?.disconnect();
+            activeEmbeds.delete(instance);
+            continue;
+        }
+        renderEmbed(instance, {
+            filterId: instance.filterId,
+            filterName: instance.filterName,
+        }, deps);
+    }
+}
+
+function renderEmbed(
+    instance: EmbedInstance,
+    filterRef: { filterId: string | null; filterName: string | null },
+    deps: EmbedFilterDeps,
+): void {
+    const el = instance.el;
+    const filterSet = resolveFilterSet(deps.settings, filterRef);
+    const activeInput = el.querySelector<HTMLInputElement>('.operon-filter-search-input');
+    const restoreSearchFocus = getOwnerDocument(el).activeElement === activeInput;
+    const searchSelectionStart = activeInput?.selectionStart ?? null;
+    const searchSelectionEnd = activeInput?.selectionEnd ?? null;
+
+    if (!filterSet) {
+        instance.lastRenderSignature = null;
+        closeEmbedTransientUi(el);
+        el.empty();
+        const label = filterRef.filterId ?? filterRef.filterName ?? 'unknown';
+        renderError(el, `Filter "${label}" not found. Define it in Settings → Operon → Filters.`);
+        return;
+    }
+
+    const renderSignature = [
+        deps.indexer.getGeneration(),
+        deps.pinnedCache?.getGeneration() ?? 0,
+        deps.getTrackingSignature?.() ?? '',
+        filterSet.id,
+        instance.searchQuery.trim().toLocaleLowerCase(),
+        JSON.stringify(filterSet),
+        JSON.stringify(deps.settings.filterTaskCompactChips),
+        JSON.stringify(deps.settings.keyMappings.map(mapping => [
+            mapping.canonicalKey,
+            mapping.visiblePropertyName,
+            mapping.icon ?? '',
+        ])),
+    ].join('|');
+    if (instance.lastRenderSignature === renderSignature) return;
+    if (renderSignature !== instance.lastPaginationSignature) {
+        instance.visibleTaskLimit = FILTER_RENDER_BATCH_SIZE;
+        instance.lastPaginationSignature = renderSignature;
+    }
+    instance.lastRenderSignature = renderSignature;
+    instance.lazyLoadObserver?.disconnect();
+    instance.lazyLoadObserver = null;
+    closeEmbedTransientUi(el);
+    el.empty();
+
+    // Build callbacks — same interface as sidebar FilterView
+    const callbacks: FilterTaskRowCallbacks = {
+        app: deps.app,
+        getPipelines: deps.getPipelines,
+        getPriorities: deps.getPriorities,
+        getIndexedTask: (id) => deps.indexer.getTask(id),
+        getChildIds: deps.getChildIds,
+        openEditor: (operonId) => deps.openTaskEditor(operonId),
+        cycleStatus: (operonId) => { deps.cycleStatus(operonId); },
+        navigateToTask: deps.navigateToTask,
+        getSettings: deps.getSettings,
+        getAllTasks: () => deps.indexer.getAllTasks(),
+        updateField: deps.updateField,
+        updateFields: deps.updateFields,
+        updateSubtasks: deps.updateSubtasks,
+        updateDependencyField: deps.updateDependencyField,
+        requestSubtask: deps.requestSubtask,
+        onContextualAction: deps.onContextualAction,
+        isTaskPinned: deps.pinnedCache ? (taskId) => deps.pinnedCache?.isPinned(taskId) === true : undefined,
+        isTaskTracking: deps.isTaskTracking,
+        toggleTimer: deps.toggleTimer,
+    };
+    const embedSettings = deps.getSettings();
+    const embedShowSubtasks = embedSettings.filterShowSubtasks === true;
+    const embedShowOnlyOpenSubtasks = embedSettings.filterShowOnlyOpenSubtasks === true;
+    if (!embedShowSubtasks) {
+        instance.expandedTaskIds.clear();
+    }
+    const taskRowOptions = {
+        defaultExpandAll: embedShowSubtasks,
+        showOnlyOpenSubtasks: embedShowOnlyOpenSubtasks,
+        showSubtaskAction: embedSettings.filterTaskShowSubtaskAction,
+    };
+
+    // Container
+    const container = el.createDiv('operon-embed operon-filter-surface operon-filter-surface--embed');
+    const allTasks = deps.indexer.getAllTasks();
+    const priorities = deps.getPriorities();
+
+    // Render results
+    if (filterSet.groupBy) {
+        // Grouped
+        const baseGrouped = evaluateFilterSetGrouped(filterSet, allTasks, priorities, deps.pinnedCache);
+        const searchActive = isFilterSearchActive(instance.searchQuery);
+        const baseRootTasks = baseGrouped.groups.flatMap(group => group.tasks);
+        const treeScopeTasks = getEmbedTreeScope(instance, filterSet, baseRootTasks, deps, embedShowSubtasks, embedShowOnlyOpenSubtasks);
+        const searchInput = renderHeader(container, filterSet, deps, treeScopeTasks.length, instance, filterRef);
+
+        if (searchActive) {
+            const tasks = applyFilterSearch(treeScopeTasks, instance.searchQuery);
+            if (tasks.length === 0) {
+                container.createDiv({ cls: 'operon-embed-empty', text: t('filters', 'noMatches') });
+                restoreEmbedSearchFocus(searchInput, restoreSearchFocus, searchSelectionStart, searchSelectionEnd);
+                return;
+            }
+            const list = container.createDiv('operon-embed-list');
+            for (const task of getVisibleFilterTasks(tasks, instance.visibleTaskLimit)) {
+                const bar = buildFilterTaskRowElement(task, callbacks, instance.expandedTaskIds, {
+                    ...taskRowOptions,
+                    allowExpand: false,
+                }, list);
+                list.appendChild(bar);
+            }
+            attachEmbedLazyLoadSentinel(instance, list, tasks.length, filterRef, deps);
+            restoreEmbedSearchFocus(searchInput, restoreSearchFocus, searchSelectionStart, searchSelectionEnd);
+            return;
+        }
+
+        const grouped = baseGrouped;
+        if (grouped.totalCount === 0) {
+            container.createDiv({ cls: 'operon-embed-empty', text: t('filters', 'noMatches') });
+            restoreEmbedSearchFocus(searchInput, restoreSearchFocus, searchSelectionStart, searchSelectionEnd);
+            return;
+        }
+
+        const list = container.createDiv('operon-embed-list');
+
+        const visibleGrouped = getVisibleGroupedFilterResults(grouped, instance.visibleTaskLimit);
+        for (const group of visibleGrouped.groups) {
+            const label = group.key || t('filterSets', 'groupEmpty');
+            const header = list.createDiv('operon-group-header');
+            // Make date-format labels (YYYY-MM-DD) clickable → opens daily note
+            if (/^\d{4}-\d{2}-\d{2}$/.test(label)) {
+                const noteExists = deps.app.vault.getFiles().some(f => f.basename === label);
+                const linkCls = noteExists
+                    ? 'operon-group-header-label operon-group-date-link operon-group-date-exists'
+                    : 'operon-group-header-label operon-group-date-link operon-group-date-missing';
+                const linkText = noteExists ? `📅 ${label}` : `${label} (+)`;
+                const link = header.createEl('a', { cls: linkCls, text: linkText });
+                bindOperonHoverTooltip(link, {
+                    content: noteExists
+                        ? t('filterSets', 'openDailyNote', { name: label })
+                        : t('filterSets', 'createDailyNote', { name: label }),
+                    taskColor: null,
+                });
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+	                    if (deps.openDailyNote) {
+	                        runAsyncAction('embedded filter daily note open failed', async () => {
+	                            await deps.openDailyNote!(label);
+	                        });
+	                    } else {
+	                        runAsyncAction('embedded filter daily note link open failed', () => deps.app.workspace.openLinkText(label, '', 'tab'));
+	                    }
+                });
+            } else {
+                header.createSpan({ cls: 'operon-group-header-label', text: label });
+            }
+            header.createSpan({ cls: 'operon-group-header-count', text: String(group.count) });
+
+            if (group.subgroups?.length) {
+                for (const subgroup of group.subgroups) {
+                    const subgroupHeader = list.createDiv('operon-group-header operon-subgroup-header');
+                    subgroupHeader.createSpan({
+                        cls: 'operon-group-header-label',
+                        text: subgroup.key || t('filterSets', 'groupEmpty'),
+                    });
+                    subgroupHeader.createSpan({ cls: 'operon-group-header-count', text: String(subgroup.count) });
+
+                    for (const task of subgroup.tasks) {
+                        const bar = buildFilterTaskRowElement(task, callbacks, instance.expandedTaskIds, taskRowOptions, list);
+                        list.appendChild(bar);
+                    }
+                }
+            } else {
+                for (const task of group.tasks) {
+                    const bar = buildFilterTaskRowElement(task, callbacks, instance.expandedTaskIds, taskRowOptions, list);
+                    list.appendChild(bar);
+                }
+            }
+        }
+        attachEmbedLazyLoadSentinel(instance, list, grouped.totalCount, filterRef, deps);
+        restoreEmbedSearchFocus(searchInput, restoreSearchFocus, searchSelectionStart, searchSelectionEnd);
+    } else {
+        // Flat
+        const baseTasks = evaluateFilterSet(filterSet, allTasks, priorities, deps.pinnedCache);
+        const searchActive = isFilterSearchActive(instance.searchQuery);
+        const treeScopeTasks = getEmbedTreeScope(instance, filterSet, baseTasks, deps, embedShowSubtasks, embedShowOnlyOpenSubtasks);
+        const tasks = searchActive ? applyFilterSearch(treeScopeTasks, instance.searchQuery) : baseTasks;
+
+        const searchInput = renderHeader(container, filterSet, deps, treeScopeTasks.length, instance, filterRef);
+
+        if (tasks.length === 0) {
+            container.createDiv({ cls: 'operon-embed-empty', text: t('filters', 'noMatches') });
+            restoreEmbedSearchFocus(searchInput, restoreSearchFocus, searchSelectionStart, searchSelectionEnd);
+            return;
+        }
+
+        const list = container.createDiv('operon-embed-list');
+
+        for (const task of getVisibleFilterTasks(tasks, instance.visibleTaskLimit)) {
+            const bar = buildFilterTaskRowElement(task, callbacks, instance.expandedTaskIds, {
+                ...taskRowOptions,
+                allowExpand: !searchActive,
+            }, list);
+            list.appendChild(bar);
+        }
+        attachEmbedLazyLoadSentinel(instance, list, tasks.length, filterRef, deps);
+        restoreEmbedSearchFocus(searchInput, restoreSearchFocus, searchSelectionStart, searchSelectionEnd);
+    }
+}
+
+function attachEmbedLazyLoadSentinel(
+    instance: EmbedInstance,
+    list: HTMLElement,
+    totalCount: number,
+    filterRef: { filterId: string | null; filterName: string | null },
+    deps: EmbedFilterDeps,
+): void {
+    if (instance.visibleTaskLimit >= totalCount) return;
+    const sentinel = list.createDiv('operon-filter-lazy-sentinel');
+    instance.lazyLoadObserver = new IntersectionObserver((entries) => {
+        if (!entries.some(entry => entry.isIntersecting)) return;
+        instance.lazyLoadObserver?.disconnect();
+        instance.lazyLoadObserver = null;
+        instance.visibleTaskLimit = Math.min(instance.visibleTaskLimit + FILTER_RENDER_BATCH_SIZE, totalCount);
+        instance.lastRenderSignature = null;
+        renderEmbed(instance, filterRef, deps);
+    }, { root: null, rootMargin: '160px 0px' });
+    instance.lazyLoadObserver.observe(sentinel);
+}
+
+function closeEmbedTransientUi(root: HTMLElement): void {
+    closeFloatingPanelsForRoot(root);
+    closeIconOnlyChipPreviewsForRoot(root);
+}
+
+function renderHeader(
+    container: HTMLElement,
+    filterSet: FilterSet,
+    deps: EmbedFilterDeps,
+    count: number,
+    instance: EmbedInstance,
+    filterRef: { filterId: string | null; filterName: string | null },
+): HTMLInputElement {
+    const header = container.createDiv('operon-embed-header');
+    const title = header.createDiv('operon-embed-title');
+    const icon = header.createSpan('operon-embed-filter-icon');
+    setIcon(icon, filterSet.icon?.trim() || 'filter');
+    title.appendChild(icon);
+    title.createSpan({ cls: 'operon-embed-name', text: filterSet.name });
+
+    const searchWrap = header.createDiv('operon-filter-search-wrap');
+    const searchIcon = searchWrap.createSpan('operon-filter-search-icon');
+    setIcon(searchIcon, 'scan-search');
+    const searchInput = searchWrap.createEl('input', {
+        cls: 'operon-filter-search-input',
+        attr: {
+            type: 'search',
+            placeholder: formatFilterTaskCount(count),
+        },
+    });
+    setAccessibleLabelWithoutTooltip(searchInput, t('filterSets', 'searchTasksInFilter'));
+    searchInput.value = instance.searchQuery;
+    searchInput.addEventListener('input', () => {
+        instance.searchQuery = searchInput.value;
+        instance.lastRenderSignature = null;
+        renderEmbed(instance, filterRef, deps);
+    });
+
+    const cogBtn = header.createEl('button', { cls: 'operon-embed-settings-btn' });
+    setIcon(cogBtn, 'settings-2');
+    bindOperonHoverTooltip(cogBtn, {
+        content: t('filterSets', 'editFilterNamed', { name: filterSet.name }),
+        taskColor: null,
+    });
+    cogBtn.addEventListener('click', () => {
+        const clone = cloneFilterSet(filterSet);
+	        new FilterSetModal(deps.app, clone, deps.settings.keyMappings, asyncHandler('embedded filter settings save failed', async (saved) => {
+	            if (deps.saveFilterSet) {
+	                await deps.saveFilterSet(saved);
+	            } else {
+	                const idx = deps.settings.filterSets.findIndex(f => f.id === saved.id);
+	                if (idx !== -1) deps.settings.filterSets[idx] = saved;
+	                await deps.saveSettings();
+	            }
+	        }), {
+            indexer: deps.indexer,
+            getPipelines: deps.getPipelines,
+            getPriorities: deps.getPriorities,
+            openEditor: deps.openTaskEditor,
+            cycleStatus: deps.cycleStatus,
+            getChildIds: deps.getChildIds,
+            navigateToTask: deps.navigateToTask,
+            getSettings: deps.getSettings,
+            updateField: deps.updateField,
+            updateFields: deps.updateFields,
+            updateSubtasks: deps.updateSubtasks,
+            updateDependencyField: deps.updateDependencyField,
+            onContextualAction: deps.onContextualAction,
+            pinnedCache: deps.pinnedCache,
+            isTaskTracking: deps.isTaskTracking,
+            toggleTimer: deps.toggleTimer,
+        }).open();
+    });
+
+    return searchInput;
+}
+
+function formatFilterTaskCount(count: number): string {
+    return t('filterSets', count === 1 ? 'taskCountOne' : 'taskCountMany', { count: String(count) });
+}
+
+function getEmbedTreeScope(
+    instance: EmbedInstance,
+    filterSet: FilterSet,
+    rootTasks: import('../types/fields').IndexedTask[],
+    deps: EmbedFilterDeps,
+    includeSubtasks: boolean,
+    showOnlyOpenSubtasks: boolean,
+): import('../types/fields').IndexedTask[] {
+    if (!includeSubtasks) return rootTasks;
+
+    const signature = [
+        deps.indexer.getGeneration(),
+        filterSet.id,
+        showOnlyOpenSubtasks ? 'open-only' : 'all-subtasks',
+        rootTasks.map(task => task.operonId).join(','),
+    ].join('|');
+    if (instance.treeScopeCache?.signature === signature) {
+        return instance.treeScopeCache.tasks;
+    }
+
+    const tasks = buildFilterTreeScope(rootTasks, {
+        getIndexedTask: (id) => deps.indexer.getTask(id),
+        getChildIds: deps.getChildIds,
+        pipelines: deps.getPipelines(),
+        showOnlyOpenSubtasks,
+    });
+    instance.treeScopeCache = { signature, tasks };
+    return tasks;
+}
+
+function restoreEmbedSearchFocus(
+    input: HTMLInputElement,
+    shouldRestore: boolean,
+    selectionStart: number | null,
+    selectionEnd: number | null,
+): void {
+    if (!shouldRestore) return;
+    window.requestAnimationFrame(() => {
+        input.focus({ preventScroll: true });
+        if (selectionStart !== null && selectionEnd !== null) {
+            input.setSelectionRange(selectionStart, selectionEnd);
+        }
+    });
+}
+
+function renderError(el: HTMLElement, message: string): void {
+    const container = el.createDiv('operon-embed operon-embed-error');
+    container.createSpan({ text: `⚠ ${message}` });
+}

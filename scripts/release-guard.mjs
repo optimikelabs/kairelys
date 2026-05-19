@@ -1,0 +1,162 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const failures = [];
+
+function readText(relativePath) {
+	return fs.readFileSync(path.join(rootDir, relativePath), 'utf8');
+}
+
+function readJson(relativePath) {
+	return JSON.parse(readText(relativePath));
+}
+
+function fail(message) {
+	failures.push(message);
+}
+
+function flattenStringLeaves(value, prefix = '') {
+	const leaves = new Map();
+	if (typeof value === 'string') {
+		leaves.set(prefix, value);
+		return leaves;
+	}
+	if (!value || typeof value !== 'object' || Array.isArray(value)) {
+		return leaves;
+	}
+	for (const [key, child] of Object.entries(value)) {
+		const nextPrefix = prefix ? `${prefix}.${key}` : key;
+		for (const [leafKey, leafValue] of flattenStringLeaves(child, nextPrefix)) {
+			leaves.set(leafKey, leafValue);
+		}
+	}
+	return leaves;
+}
+
+function placeholders(text) {
+	return [...text.matchAll(/\{\{([A-Za-z0-9_]+)\}\}/g)]
+		.map(match => match[1])
+		.sort();
+}
+
+function assertEqual(label, left, right) {
+	if (left !== right) {
+		fail(`${label}: expected ${right}, got ${left}`);
+	}
+}
+
+function assertFileExists(relativePath) {
+	if (!fs.existsSync(path.join(rootDir, relativePath))) {
+		fail(`Missing release asset: ${relativePath}`);
+	}
+}
+
+function assertNoMatch(relativePath, pattern, label) {
+	const text = readText(relativePath);
+	if (pattern.test(text)) {
+		fail(`${relativePath}: ${label}`);
+	}
+}
+
+function assertIncludes(relativePath, needle, label) {
+	const text = readText(relativePath);
+	if (!text.includes(needle)) {
+		fail(`${relativePath}: ${label}`);
+	}
+}
+
+function compareLocaleFiles() {
+	const en = flattenStringLeaves(readJson('i18n/locales/en.json'));
+	const tr = flattenStringLeaves(readJson('i18n/locales/tr.json'));
+	const enKeys = [...en.keys()].sort();
+	const trKeys = [...tr.keys()].sort();
+
+	for (const key of enKeys) {
+		if (!tr.has(key)) fail(`Missing Turkish locale key: ${key}`);
+	}
+	for (const key of trKeys) {
+		if (!en.has(key)) fail(`Missing English locale key: ${key}`);
+	}
+	for (const key of enKeys) {
+		if (!tr.has(key)) continue;
+		const enPlaceholders = placeholders(en.get(key)).join(',');
+		const trPlaceholders = placeholders(tr.get(key)).join(',');
+		if (enPlaceholders !== trPlaceholders) {
+			fail(`Locale placeholder mismatch for ${key}: en=[${enPlaceholders}] tr=[${trPlaceholders}]`);
+		}
+	}
+}
+
+function checkVersionAndAssets() {
+	const pkg = readJson('package.json');
+	const manifest = readJson('manifest.json');
+	const versions = readJson('versions.json');
+	const lock = readJson('package-lock.json');
+	const lockRoot = lock.packages?.[''];
+
+	assertEqual('package.json and manifest.json version', pkg.version, manifest.version);
+	assertEqual('versions.json min app version', versions[pkg.version], manifest.minAppVersion);
+	assertEqual('package-lock root name', lockRoot?.name, pkg.name);
+	assertEqual('package-lock root version', lockRoot?.version, pkg.version);
+
+	for (const asset of ['main.js', 'manifest.json', 'styles.css']) {
+		assertFileExists(asset);
+	}
+}
+
+function checkReleaseWorkflow() {
+	const workflow = '.github/workflows/release.yml';
+
+	assertIncludes(workflow, 'id-token: write', 'release workflow must grant OIDC token permission for artifact attestations');
+	assertIncludes(workflow, 'attestations: write', 'release workflow must grant artifact attestation permission');
+	assertIncludes(workflow, 'uses: actions/attest@v4', 'release workflow must attest release assets');
+
+	for (const asset of ['manifest.json', 'main.js', 'styles.css']) {
+		assertIncludes(workflow, `subject-path: ${asset}`, `release workflow must attest ${asset}`);
+	}
+}
+
+function checkCssScorecard() {
+	assertNoMatch('styles.css', /!important\b/, 'future CSS changes must avoid !important');
+}
+
+function checkDocs() {
+	for (const doc of ['PHASE5-ACCEPTANCE.md', 'PHASE7-ACCEPTANCE.md']) {
+		if (!readText(doc).includes('npm run check:local')) {
+			fail(`${doc}: automated validation must reference npm run check:local`);
+		}
+	}
+}
+
+function checkAuditedRawStrings() {
+	assertNoMatch('main.ts', /name:\s*['"]Create or edit inline task['"]/, 'command label bypasses i18n');
+	assertNoMatch('main.ts', /name:\s*['"]Convert tasks emoji line to inline task['"]/i, 'Tasks emoji command label bypasses i18n');
+	assertNoMatch('main.ts', /name:\s*['"]Create file task['"]/, 'file task command label bypasses i18n');
+	assertNoMatch('main.ts', /name:\s*['"]Open calendar view['"]/, 'calendar command label bypasses i18n');
+
+	assertNoMatch('src/ui/kanban/kanban-cell-action-modal.ts', /Status:\s*\$\{/, 'Kanban status label bypasses i18n');
+	assertNoMatch('src/ui/kanban/kanban-cell-action-modal.ts', /return\s+['"](Priority|Tags|Contexts|Assignees|Due|Scheduled|Lane)['"]/, 'Kanban swimlane label bypasses i18n');
+
+	assertNoMatch('src/ui/time-session-history-view.ts', /['"]\(untitled\)['"]/, 'time history untitled label bypasses i18n');
+	assertNoMatch('src/ui/time-session-history-view.ts', /['"]Jump to source['"]/, 'time history source action label bypasses i18n');
+	assertNoMatch('src/ui/time-session-history-view.ts', /['"]Open task editor['"]/, 'time history editor action label bypasses i18n');
+}
+
+compareLocaleFiles();
+checkVersionAndAssets();
+checkReleaseWorkflow();
+checkCssScorecard();
+checkDocs();
+checkAuditedRawStrings();
+
+if (failures.length > 0) {
+	console.error('Operon release guard failed:');
+	for (const failure of failures) {
+		console.error(`- ${failure}`);
+	}
+	process.exit(1);
+}
+
+console.log('Operon release guard passed.');

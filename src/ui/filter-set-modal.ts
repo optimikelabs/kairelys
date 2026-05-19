@@ -1,0 +1,1155 @@
+/**
+ * FilterSetModal — create/edit a named filter set.
+ * Opened from the Filters settings tab.
+ */
+
+import { App, Modal, Notice, Setting, TFolder, setIcon } from 'obsidian';
+import { FilterSet, FilterSetCondition, FilterFieldType, FilterGroup, FilterGroupLogic, FilterNode, FilterSortSpec, KeyMapping } from '../types/settings';
+import { getOperatorsForType, NO_VALUE_OPERATORS, NUMERIC_INPUT_DATE_OPERATORS, evaluateFilterSet, evaluateFilterSetGrouped } from '../core/filter-evaluator';
+import { PinnedCache } from '../storage/pinned-cache';
+import { buildFilterTaskRowElement, FilterTaskRowCallbacks } from './filter-task-row';
+import { t } from '../core/i18n';
+import { OperonIndexer } from '../indexer/indexer';
+import { PriorityDefinition } from '../types/priority';
+import { Pipeline } from '../types/pipeline';
+import { showIconPicker } from './field-pickers/icon-picker';
+import type { ContextualMenuActionId } from '../core/contextual-menu-engine';
+import { bindOperonHoverTooltip } from './operon-hover-tooltip';
+import { WindowTimeoutHandle, clearWindowTimeout, createOwnerElement, getActiveWindow, getOwnerBody, getOwnerWindow, setWindowTimeout } from '../core/dom-compat';
+
+function generateConditionId(): string {
+	return 'cond_' + Math.random().toString(36).slice(2, 10);
+}
+
+function generateGroupId(): string {
+	return 'grp_' + Math.random().toString(36).slice(2, 10);
+}
+
+function isFilterGroupNode(node: FilterNode): node is FilterGroup {
+	return 'children' in node;
+}
+
+interface SelectOption {
+	value: string;
+	label: string;
+}
+
+export interface FilterModalEvalDeps {
+	indexer: OperonIndexer;
+	getPipelines: () => Pipeline[];
+	getPriorities: () => PriorityDefinition[];
+	openEditor: (operonId: string) => void;
+	cycleStatus: (operonId: string) => void;
+	getChildIds: (parentId: string) => string[];
+	navigateToTask: (task: import('../types/fields').IndexedTask) => void;
+	getSettings: () => import('../types/settings').OperonSettings;
+	updateField: (operonId: string, key: string, value: string) => void;
+	updateFields?: (operonId: string, payload: Record<string, string>) => void;
+	updateSubtasks?: (operonId: string, subtaskIds: string[]) => void;
+	updateDependencyField?: (operonId: string, field: 'blocking' | 'blockedBy', value: string) => void;
+	onContextualAction?: (taskId: string, actionId: ContextualMenuActionId) => void | Promise<void>;
+	pinnedCache?: PinnedCache;
+	isTaskTracking?: (taskId: string) => boolean;
+	toggleTimer?: (taskId: string) => void | Promise<void>;
+	getTrackingSignature?: () => string;
+}
+
+const activeFilterPreviewModals = new Set<FilterPreviewModal>();
+const activeFilterSetModals = new Set<FilterSetModal>();
+
+export function refreshFilterPreviewModals(): void {
+	for (const modal of activeFilterPreviewModals) {
+		if (!modal.modalEl.isConnected) {
+			activeFilterPreviewModals.delete(modal);
+			continue;
+		}
+		modal.refresh();
+	}
+}
+
+export function refreshFilterSetModals(): void {
+	for (const modal of activeFilterSetModals) {
+		if (!modal.modalEl.isConnected) {
+			activeFilterSetModals.delete(modal);
+			continue;
+		}
+		modal.refreshPinnedState();
+	}
+}
+
+export class FilterSetModal extends Modal {
+	private filterSet: FilterSet;
+	private keyMappings: KeyMapping[];
+	private onSave: (updated: FilterSet) => void;
+	private evalDeps: FilterModalEvalDeps | null;
+	private countBadge: HTMLElement | null = null;
+	private condObserver: MutationObserver | null = null;
+	private refreshCountBadge: (() => void) | null = null;
+	private bodyDropdowns: HTMLElement[] = [];
+
+	constructor(
+		app: App,
+		filterSet: FilterSet,
+		keyMappings: KeyMapping[],
+		onSave: (updated: FilterSet) => void,
+		evalDeps?: FilterModalEvalDeps,
+	) {
+		super(app);
+		this.filterSet = filterSet;
+		this.keyMappings = keyMappings;
+		this.onSave = onSave;
+		this.evalDeps = evalDeps ?? null;
+	}
+
+	onOpen(): void {
+		activeFilterSetModals.add(this);
+		this.renderModal();
+	}
+
+	onClose(): void {
+		activeFilterSetModals.delete(this);
+		this.condObserver?.disconnect();
+		this.refreshCountBadge = null;
+		this.cleanupBodyDropdowns();
+		this.contentEl.empty();
+	}
+
+	private renderModal(): void {
+		const { contentEl } = this;
+		this.condObserver?.disconnect();
+		this.refreshCountBadge = null;
+		this.cleanupBodyDropdowns();
+		this.modalEl.addClass('operon-filter-set-modal-shell');
+		contentEl.empty();
+		contentEl.addClass('operon-filter-set-modal');
+
+		contentEl.createEl('h3', { cls: 'operon-filter-modal-title', text: t('filterSets', 'editFilter') });
+
+		this.ensureModernSchema();
+		this.renderNameField(contentEl);
+		this.renderConditions(contentEl);
+		this.renderSort(contentEl);
+		this.renderUsageInfo(contentEl);
+		this.renderButtons(contentEl);
+	}
+
+	private ensureModernSchema(): void {
+		if (!this.filterSet.rootGroup) {
+			this.filterSet.rootGroup = {
+				id: generateGroupId(),
+				logic: this.filterSet.matchLogic ?? 'all',
+				children: (this.filterSet.conditions ?? []).map(condition => ({ ...condition })),
+			};
+		}
+		if (!Array.isArray(this.filterSet.sorts)) {
+			this.filterSet.sorts = this.filterSet.sortBy
+				? [{ field: this.filterSet.sortBy, order: this.filterSet.sortOrder ?? 'asc' }]
+				: [];
+		}
+		this.syncMirroredFilterFields();
+	}
+
+	private syncMirroredFilterFields(): void {
+		this.filterSet.matchLogic = this.filterSet.rootGroup.logic;
+		this.filterSet.conditions = this.flattenConditions(this.filterSet.rootGroup);
+		this.filterSet.subgroupBy = this.filterSet.subgroupBy && this.filterSet.subgroupBy !== this.filterSet.groupBy
+			? this.filterSet.subgroupBy
+			: undefined;
+		this.filterSet.subgroupOrder = this.filterSet.subgroupBy ? (this.filterSet.subgroupOrder ?? 'asc') : undefined;
+
+		const primarySort = this.filterSet.sorts[0];
+		this.filterSet.sortBy = primarySort?.field;
+		this.filterSet.sortOrder = primarySort?.order;
+	}
+
+	private flattenConditions(group: FilterGroup): FilterSetCondition[] {
+		const conditions: FilterSetCondition[] = [];
+		for (const child of group.children) {
+			if (isFilterGroupNode(child)) {
+				conditions.push(...this.flattenConditions(child));
+			} else {
+				conditions.push({ ...child });
+			}
+		}
+		return conditions;
+	}
+
+	private countConditions(group: FilterGroup): number {
+		return this.flattenConditions(group).length;
+	}
+
+	private countDirectConditionChildren(group: FilterGroup): number {
+		return group.children.filter(child => !isFilterGroupNode(child)).length;
+	}
+
+	private countDirectGroupChildren(group: FilterGroup): number {
+		return group.children.filter(isFilterGroupNode).length;
+	}
+
+	private addClasses(el: HTMLElement, ...classNames: string[]): void {
+		for (const className of classNames) el.addClass(className);
+	}
+
+	private createModalSelect(
+		container: HTMLElement,
+		options: SelectOption[],
+		value: string,
+		onChange: (value: string) => void,
+		variant: 'fluid' | 'order' | 'content' = 'fluid',
+	): HTMLSelectElement {
+		const wrap = container.createDiv('operon-filter-select-wrap');
+		wrap.addClass(variant === 'order' ? 'is-order' : variant === 'content' ? 'is-content' : 'is-fluid');
+		const select = wrap.createEl('select', { cls: 'operon-filter-select dropdown' });
+		for (const option of options) {
+			select.createEl('option', { value: option.value, text: option.label });
+		}
+		select.value = value;
+		const chevron = wrap.createSpan('operon-filter-select-chevron');
+		setIcon(chevron, 'chevron-down');
+		select.addEventListener('change', () => onChange(select.value));
+		return select;
+	}
+
+	private cleanupBodyDropdowns(): void {
+		for (const dropdown of this.bodyDropdowns) dropdown.remove();
+		this.bodyDropdowns = [];
+	}
+
+	private getFieldOptions(
+		includeConditionOnly = false,
+		includeHappensOn = false,
+	): Array<{ field: string; label: string; type: FilterFieldType }> {
+		const pseudoFields: Array<{ field: string; label: string; type: FilterFieldType }> = [
+			{ field: 'checkbox', label: t('filterSets', 'fieldCheckbox'), type: 'checkbox' },
+			{ field: 'tags', label: t('filterSets', 'fieldTags'), type: 'tags' },
+			{ field: 'description', label: t('filterSets', 'fieldDescription'), type: 'text' },
+			{ field: 'pinned', label: t('filterSets', 'fieldPinned'), type: 'pinned' },
+		];
+		if (includeConditionOnly || includeHappensOn) {
+			pseudoFields.push({ field: 'happensOn', label: t('filterSets', 'fieldHappensOn'), type: 'date' });
+		}
+		if (includeConditionOnly) {
+			pseudoFields.push({ field: 'projectTree', label: t('filterSets', 'fieldProjectTree'), type: 'projectTree' });
+			pseudoFields.push({ field: 'folders', label: t('filterSets', 'fieldFolders'), type: 'folders' });
+		}
+
+		const editableMappings = this.keyMappings
+			.filter(mapping => !mapping.isInternal)
+			.map(mapping => ({
+				field: mapping.canonicalKey,
+				label: mapping.visiblePropertyName,
+				type: mapping.type,
+			}));
+
+		return [...pseudoFields, ...editableMappings]
+			.sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: 'base' }));
+	}
+
+	private measureSelectContentWidth(select: HTMLSelectElement): number {
+		const selectedText = select.selectedOptions[0]?.text ?? select.value ?? '';
+		const style = getOwnerWindow(select).getComputedStyle(select);
+		const canvas = createOwnerElement(select, 'canvas');
+		const context = canvas.getContext('2d');
+		if (!context) return 220;
+		context.font = [
+			style.fontStyle,
+			style.fontVariant,
+			style.fontWeight,
+			style.fontSize,
+			style.fontFamily,
+		].filter(Boolean).join(' ');
+		const textWidth = context.measureText(selectedText).width;
+		return Math.ceil(textWidth + 44);
+	}
+
+	private prepareBodyDropdown(dropdown: HTMLElement): void {
+		getOwnerBody(dropdown).appendChild(dropdown);
+		this.bodyDropdowns.push(dropdown);
+	}
+
+	private positionBodyDropdown(dropdown: HTMLElement, anchor: HTMLElement): void {
+		const rect = anchor.getBoundingClientRect();
+		dropdown.style.left = `${rect.left}px`;
+		dropdown.style.top = `${rect.bottom + 4}px`;
+		dropdown.style.width = `${rect.width}px`;
+	}
+
+	private getFolderSuggestions(query: string): TFolder[] {
+		const normalizedQuery = query.trim().toLowerCase().replace(/\\/g, '/');
+		const folders: TFolder[] = [];
+		for (const file of this.app.vault.getAllLoadedFiles()) {
+			if (!(file instanceof TFolder) || file.path === '/') continue;
+			if (!normalizedQuery || file.path.toLowerCase().includes(normalizedQuery)) {
+				folders.push(file);
+			}
+		}
+		folders.sort((a, b) => a.path.localeCompare(b.path));
+		return folders.slice(0, 24);
+	}
+
+	private attachFolderSuggest(inputEl: HTMLInputElement, cond: FilterSetCondition): void {
+		const dropdown = createOwnerElement(inputEl, 'div');
+		dropdown.className = 'operon-filter-folder-dropdown';
+		this.prepareBodyDropdown(dropdown);
+
+		let matches: TFolder[] = [];
+		let activeIndex = 0;
+
+			const selectFolder = (folder: TFolder) => {
+				cond.value = folder.path;
+				inputEl.value = folder.path;
+				dropdown.removeClass('is-open');
+				this.syncMirroredFilterFields();
+			};
+
+		const renderDropdown = () => {
+				dropdown.empty();
+				if (matches.length === 0) {
+					dropdown.removeClass('is-open');
+					return;
+				}
+
+				matches.forEach((folder, index) => {
+					const item = dropdown.createDiv('operon-filter-folder-dropdown-item');
+					item.toggleClass('is-active', index === activeIndex);
+					item.toggleClass('is-last', index >= matches.length - 1);
+					item.setText(folder.path);
+				item.addEventListener('mousemove', () => {
+					if (activeIndex === index) return;
+					activeIndex = index;
+					renderDropdown();
+				});
+				item.addEventListener('mousedown', (evt) => {
+					evt.preventDefault();
+					selectFolder(folder);
+				});
+			});
+
+				this.positionBodyDropdown(dropdown, inputEl);
+				dropdown.addClass('is-open');
+			};
+
+		const refreshSuggestions = () => {
+			matches = this.getFolderSuggestions(inputEl.value);
+			activeIndex = 0;
+			renderDropdown();
+		};
+
+		inputEl.addEventListener('focus', refreshSuggestions);
+		inputEl.addEventListener('click', refreshSuggestions);
+			inputEl.addEventListener('input', refreshSuggestions);
+			inputEl.addEventListener('blur', () => {
+				window.setTimeout(() => { dropdown.removeClass('is-open'); }, 150);
+			});
+			inputEl.addEventListener('keydown', (evt) => {
+				const isOpen = dropdown.hasClass('is-open');
+				if (evt.key === 'Escape') {
+					dropdown.removeClass('is-open');
+					return;
+				}
+			if (!isOpen || matches.length === 0) return;
+			if (evt.key === 'ArrowDown') {
+				evt.preventDefault();
+				activeIndex = Math.min(activeIndex + 1, matches.length - 1);
+				renderDropdown();
+			} else if (evt.key === 'ArrowUp') {
+				evt.preventDefault();
+				activeIndex = Math.max(activeIndex - 1, 0);
+				renderDropdown();
+			} else if (evt.key === 'Enter') {
+				evt.preventDefault();
+				const folder = matches[activeIndex];
+				if (folder) selectFolder(folder);
+			}
+		});
+	}
+
+	private buildLogicSelector(
+		container: HTMLElement,
+		value: FilterGroupLogic,
+		onChange: (value: FilterGroupLogic) => void,
+	): void {
+		const options: Array<{ id: FilterGroupLogic; label: string }> = [
+			{ id: 'all', label: t('filterSets', 'matchAll') },
+			{ id: 'any', label: t('filterSets', 'matchAny') },
+			{ id: 'none', label: t('filterSets', 'matchNone') },
+		];
+
+		const buttons = new Map<FilterGroupLogic, HTMLButtonElement>();
+		const updateButtons = () => {
+			for (const [id, button] of buttons) {
+				const active = id === value;
+				button.toggleClass('is-active', active);
+			}
+		};
+
+		for (const option of options) {
+			const button = container.createEl('button');
+			button.type = 'button';
+			this.addClasses(button, 'operon-filter-modal-button', 'operon-filter-modal-logic-button');
+			button.setText(option.label);
+			button.addEventListener('click', () => {
+				value = option.id;
+				onChange(option.id);
+				updateButtons();
+			});
+			buttons.set(option.id, button);
+		}
+
+		updateButtons();
+	}
+
+	// --------------------------------------------------------
+	// Name field
+	// --------------------------------------------------------
+
+	private renderNameField(container: HTMLElement): void {
+		const setting = new Setting(container)
+			.setName(t('filterSets', 'filterName'))
+				.addText(text => {
+					text.setValue(this.filterSet.name);
+					text.setPlaceholder(t('filterSets', 'filterNamePlaceholder'));
+					text.onChange(val => { this.filterSet.name = val; });
+					text.inputEl.addClass('operon-filter-name-input');
+					getActiveWindow().setTimeout(() => text.inputEl.focus(), 50);
+				});
+		setting.settingEl.addClass('operon-filter-section');
+		setting.settingEl.addClass('operon-filter-name-setting');
+
+		const iconBtn = setting.controlEl.createEl('button');
+		iconBtn.type = 'button';
+		iconBtn.addClass('operon-filter-set-icon-trigger');
+		bindOperonHoverTooltip(iconBtn, { content: t('filterSets', 'filterIcon'), taskColor: null });
+		setIcon(iconBtn, this.filterSet.icon || 'filter');
+		iconBtn.addEventListener('click', (event) => {
+			event.preventDefault();
+			event.stopPropagation();
+			showIconPicker(iconBtn, {
+				value: this.filterSet.icon,
+				onSelect: (value) => {
+					this.filterSet.icon = value;
+					setIcon(iconBtn, value);
+				},
+				onClear: this.filterSet.icon
+					? () => {
+						this.filterSet.icon = undefined;
+						setIcon(iconBtn, 'filter');
+					}
+					: undefined,
+			});
+		});
+	}
+
+	// --------------------------------------------------------
+	// Conditions list
+	// --------------------------------------------------------
+
+	private renderConditions(container: HTMLElement): void {
+		const section = container.createDiv();
+		section.addClass('operon-filter-section');
+		section.addClass('operon-filter-conditions-section');
+		const listEl = section.createDiv('operon-conditions-list');
+		this.renderGroupEditor(listEl, this.filterSet.rootGroup, null, -1, true);
+	}
+
+	private renderGroupEditor(
+		container: HTMLElement,
+		group: FilterGroup,
+		parentGroup: FilterGroup | null,
+		groupIndex: number,
+		isRoot = false,
+	): void {
+		const card = container.createDiv('operon-filter-group-card');
+		card.addClass(isRoot ? 'is-root' : 'is-nested');
+
+		const header = card.createDiv('operon-filter-group-header');
+
+		const left = header.createDiv('operon-filter-group-heading');
+		left.createEl('strong', {
+			cls: 'operon-filter-group-title',
+			text: isRoot ? t('filterSets', 'logic') : t('filterSets', 'group'),
+		});
+
+		const logicWrap = left.createDiv();
+		logicWrap.addClass('operon-filter-logic-selector');
+		this.buildLogicSelector(logicWrap, group.logic, (logic) => {
+			group.logic = logic;
+			this.syncMirroredFilterFields();
+		});
+
+		if (isRoot) {
+			const mainCount = this.countDirectConditionChildren(group);
+			const groupedCount = this.countDirectGroupChildren(group);
+			left.createSpan({
+				cls: 'operon-filter-root-logic-summary',
+				text: groupedCount > 0
+					? t('filterSets', 'rootLogicSummary', {
+						main: String(mainCount),
+						grouped: String(groupedCount),
+					})
+					: t('filterSets', 'rootLogicSummaryMainOnly', {
+						main: String(mainCount),
+					}),
+			});
+		}
+
+		const actions = header.createDiv('operon-filter-group-actions');
+
+		if (!isRoot && parentGroup) {
+			this.renderNodeMoveButtons(actions, parentGroup, groupIndex);
+			const deleteBtn = actions.createEl('button');
+			deleteBtn.type = 'button';
+			this.addClasses(deleteBtn, 'operon-filter-modal-button', 'is-icon');
+			setIcon(deleteBtn, 'x');
+			bindOperonHoverTooltip(deleteBtn, { content: t('filterSets', 'deleteGroup'), taskColor: null });
+			deleteBtn.addEventListener('click', () => {
+				parentGroup.children.splice(groupIndex, 1);
+				this.syncMirroredFilterFields();
+				this.renderModal();
+			});
+		}
+
+		const body = card.createDiv();
+		body.addClass('operon-filter-group-body');
+		body.addClass(isRoot ? 'is-root' : 'is-nested');
+		for (let index = 0; index < group.children.length; index++) {
+			const child = group.children[index];
+			if (isFilterGroupNode(child)) {
+				this.renderGroupEditor(body, child, group, index);
+			} else {
+				this.renderConditionRow(body, group, child, index);
+			}
+		}
+
+		const footer = card.createDiv();
+		footer.addClass('operon-filter-group-footer');
+
+		const addConditionBtn = footer.createEl('button');
+		addConditionBtn.type = 'button';
+		addConditionBtn.addClass('operon-filter-modal-button');
+		addConditionBtn.setText(t('filterSets', 'addCondition'));
+		addConditionBtn.addEventListener('click', () => {
+			group.children.push({
+				id: generateConditionId(),
+				field: 'checkbox',
+				fieldType: 'checkbox',
+				operator: 'isOpen',
+				value: undefined,
+			});
+			this.syncMirroredFilterFields();
+			this.renderModal();
+		});
+
+		const addGroupBtn = footer.createEl('button');
+		addGroupBtn.type = 'button';
+		addGroupBtn.addClass('operon-filter-modal-button');
+		addGroupBtn.setText(t('filterSets', 'addGroup'));
+		addGroupBtn.addEventListener('click', () => {
+			group.children.push({
+				id: generateGroupId(),
+				logic: 'all',
+				children: [],
+			});
+			this.syncMirroredFilterFields();
+			this.renderModal();
+		});
+	}
+
+	private renderNodeMoveButtons(
+		container: HTMLElement,
+		parentGroup: FilterGroup,
+		index: number,
+	): void {
+		const moveUpBtn = container.createEl('button');
+		moveUpBtn.type = 'button';
+		this.addClasses(moveUpBtn, 'operon-filter-modal-button', 'is-icon');
+		setIcon(moveUpBtn, 'chevron-up');
+		bindOperonHoverTooltip(moveUpBtn, { content: t('filterSets', 'moveUp'), taskColor: null });
+		moveUpBtn.disabled = index === 0;
+		moveUpBtn.addEventListener('click', () => {
+			if (index === 0) return;
+			[parentGroup.children[index - 1], parentGroup.children[index]] = [parentGroup.children[index], parentGroup.children[index - 1]];
+			this.renderModal();
+		});
+
+		const moveDownBtn = container.createEl('button');
+		moveDownBtn.type = 'button';
+		this.addClasses(moveDownBtn, 'operon-filter-modal-button', 'is-icon');
+		setIcon(moveDownBtn, 'chevron-down');
+		bindOperonHoverTooltip(moveDownBtn, { content: t('filterSets', 'moveDown'), taskColor: null });
+		moveDownBtn.disabled = index >= parentGroup.children.length - 1;
+		moveDownBtn.addEventListener('click', () => {
+			if (index >= parentGroup.children.length - 1) return;
+			[parentGroup.children[index + 1], parentGroup.children[index]] = [parentGroup.children[index], parentGroup.children[index + 1]];
+			this.renderModal();
+		});
+	}
+
+	private renderConditionRow(
+		listEl: HTMLElement,
+		group: FilterGroup,
+		cond: FilterSetCondition,
+		index: number,
+	): void {
+		const row = listEl.createDiv('operon-condition-row');
+
+		this.renderNodeMoveButtons(row, group, index);
+		const fieldOptions = this.getFieldOptions(true);
+
+		// --- Field dropdown ---
+		const fieldSel = this.createModalSelect(
+			row,
+			fieldOptions.map(optionDef => ({ value: optionDef.field, label: optionDef.label })),
+			cond.field,
+			(value) => {
+				cond.field = value;
+				const fieldOption = fieldOptions.find(optionDef => optionDef.field === cond.field);
+				cond.fieldType = fieldOption?.type ?? 'text';
+				cond.operator = '';
+				cond.value = undefined;
+				rebuildOpSel();
+				this.syncMirroredFilterFields();
+			},
+			'content',
+		);
+
+		// --- Operator dropdown ---
+		const opSel = this.createModalSelect(row, [], cond.operator, (value) => {
+			cond.operator = value;
+			cond.value = undefined;
+			updateValueInput();
+			this.syncMirroredFilterFields();
+			syncCompactSelectWidths();
+		}, 'content');
+		opSel.parentElement?.addClass('is-operator');
+
+		// --- Value input wrapper ---
+		const valueWrapper = row.createDiv();
+		valueWrapper.addClass('operon-condition-value-wrap');
+
+		const buildValueInput = () => {
+			valueWrapper.empty();
+
+			// Determine input type: numeric date operators override date→number
+			const isNumericDateOp = NUMERIC_INPUT_DATE_OPERATORS.has(cond.operator);
+			const inputType =
+				isNumericDateOp ? 'number' :
+					cond.fieldType === 'date' ? 'date' :
+						cond.fieldType === 'datetime' ? 'datetime-local' :
+							cond.fieldType === 'number' ? 'number' : 'text';
+
+			const inp = valueWrapper.createEl('input');
+			inp.type = inputType;
+			inp.value = cond.value ?? '';
+			if (cond.fieldType === 'projectTree') {
+				inp.placeholder = t('filterSets', 'projectTreePlaceholder');
+			} else if (cond.fieldType === 'folders') {
+				inp.placeholder = t('filterSets', 'foldersPlaceholder');
+				this.attachFolderSuggest(inp, cond);
+			}
+
+			// Helpful placeholder for numeric date operators
+			if (isNumericDateOp) {
+				if (cond.operator === 'dayOfWeekIs' || cond.operator === 'dayOfWeekNot') {
+					inp.placeholder = t('filterSets', 'dayOfWeekPlaceholder');
+					inp.min = '0';
+					inp.max = '6';
+				} else if (cond.operator === 'monthIs' || cond.operator === 'monthNot') {
+					inp.placeholder = t('filterSets', 'monthPlaceholder');
+					inp.min = '1';
+					inp.max = '12';
+				} else {
+					inp.placeholder = t('filterSets', 'daysPlaceholder');
+					inp.min = '0';
+				}
+				}
+
+				inp.addClass('operon-filter-control');
+				inp.addEventListener('input', () => { cond.value = inp.value || undefined; });
+		};
+
+		const syncCompactSelectWidths = () => {
+			const fieldWrap = fieldSel.parentElement;
+			const opWrap = opSel.parentElement;
+			if (!fieldWrap || !opWrap) return;
+			const targetWidth = Math.max(
+				160,
+				Math.min(320, this.measureSelectContentWidth(fieldSel)),
+				Math.min(320, this.measureSelectContentWidth(opSel)),
+			);
+			fieldWrap.style.flexBasis = `${targetWidth}px`;
+			opWrap.style.flexBasis = `${targetWidth}px`;
+		};
+
+		const updateValueInput = () => {
+			const needsValue = !NO_VALUE_OPERATORS.has(cond.operator);
+			valueWrapper.toggleClass('is-hidden', !needsValue);
+			if (needsValue) buildValueInput();
+			syncCompactSelectWidths();
+		};
+
+		const rebuildOpSel = () => {
+			opSel.empty();
+			const ops = getOperatorsForType(cond.fieldType);
+			for (const op of ops) {
+				opSel.createEl('option', { value: op.id, text: this.getFilterOperatorLabel(op) });
+			}
+			// If current operator isn't valid for new type, reset to first
+			const valid = ops.find(o => o.id === cond.operator);
+			if (!valid) {
+				cond.operator = ops[0]?.id ?? '';
+			}
+			opSel.value = cond.operator;
+			updateValueInput();
+		};
+
+		rebuildOpSel();
+		syncCompactSelectWidths();
+
+		// --- Delete button ---
+		const delBtn = row.createEl('button');
+		delBtn.type = 'button';
+		this.addClasses(delBtn, 'operon-filter-modal-button', 'is-icon');
+		setIcon(delBtn, 'x');
+		bindOperonHoverTooltip(delBtn, { content: t('filterSets', 'deleteCondition'), taskColor: null });
+		delBtn.addEventListener('click', () => {
+			group.children.splice(index, 1);
+			this.syncMirroredFilterFields();
+			this.renderModal();
+		});
+	}
+
+	// --------------------------------------------------------
+	// Sort
+	// --------------------------------------------------------
+
+	private renderSort(container: HTMLElement): void {
+		const sep = container.createDiv('operon-filter-section operon-filter-sort-section');
+
+		const groupFieldOptions = this.getFieldOptions(false, true);
+		const sortFieldOptions = this.getFieldOptions();
+
+		const groupSetting = new Setting(sep)
+			.setName(t('filterSets', 'groupBy'))
+			.addDropdown(dd => {
+				dd.addOption('', `(${t('filterSets', 'groupNone')})`);
+				for (const optionDef of groupFieldOptions) {
+					dd.addOption(optionDef.field, optionDef.label);
+				}
+				dd.setValue(this.filterSet.groupBy ?? '');
+				dd.onChange(val => {
+					this.filterSet.groupBy = val || undefined;
+					if (this.filterSet.subgroupBy === this.filterSet.groupBy) {
+						this.filterSet.subgroupBy = undefined;
+					}
+					this.syncMirroredFilterFields();
+					this.renderModal();
+				});
+			})
+			.addDropdown(dd => {
+				dd.addOption('asc', t('filterSets', 'sortAsc'));
+				dd.addOption('desc', t('filterSets', 'sortDesc'));
+				dd.setValue(this.filterSet.groupOrder ?? 'asc');
+				dd.onChange(val => {
+					this.filterSet.groupOrder = val as 'asc' | 'desc';
+					this.syncMirroredFilterFields();
+				});
+			});
+		groupSetting.settingEl.addClass('operon-filter-section');
+
+		const subgroupSetting = new Setting(sep)
+			.setName(t('filterSets', 'subgroupBy'))
+			.addDropdown(dd => {
+				dd.addOption('', `(${t('filterSets', 'groupNone')})`);
+				for (const optionDef of groupFieldOptions) {
+					dd.addOption(optionDef.field, optionDef.label);
+				}
+				dd.setValue(this.filterSet.subgroupBy ?? '');
+				dd.onChange(val => {
+					const nextValue = val || undefined;
+					this.filterSet.subgroupBy = nextValue === this.filterSet.groupBy ? undefined : nextValue;
+					this.syncMirroredFilterFields();
+					this.renderModal();
+				});
+			})
+			.addDropdown(dd => {
+				dd.addOption('asc', t('filterSets', 'sortAsc'));
+				dd.addOption('desc', t('filterSets', 'sortDesc'));
+				dd.setValue(this.filterSet.subgroupOrder ?? 'asc');
+				dd.onChange(val => {
+					this.filterSet.subgroupOrder = val as 'asc' | 'desc';
+					this.syncMirroredFilterFields();
+				});
+			});
+		subgroupSetting.settingEl.addClass('operon-filter-section');
+		subgroupSetting.settingEl.addClass('operon-filter-subgroup-setting');
+
+		const sortSection = sep.createDiv();
+		sortSection.addClass('operon-filter-section');
+		sortSection.createEl('h4', {
+			cls: 'operon-filter-modal-section-title',
+			text: t('filterSets', 'sort'),
+		});
+
+		const sortsList = sortSection.createDiv('operon-filter-sort-list');
+		for (let index = 0; index < this.filterSet.sorts.length; index++) {
+			this.renderSortRow(sortsList, this.filterSet.sorts[index], index, sortFieldOptions);
+		}
+
+		const addSortBtn = sortSection.createEl('button');
+		addSortBtn.type = 'button';
+		addSortBtn.addClass('operon-filter-modal-button');
+		addSortBtn.setText(t('filterSets', 'addSort'));
+		addSortBtn.addEventListener('click', () => {
+			this.filterSet.sorts.push({
+				field: 'checkbox',
+				order: 'asc',
+			});
+			this.syncMirroredFilterFields();
+			this.renderModal();
+		});
+
+	}
+
+	private getFilterOperatorLabel(option: { id: string; label: string }): string {
+		const key = `operator_${option.id}`;
+		const localized = t('filterSets', key);
+		return localized === key ? option.label : localized;
+	}
+
+	private renderUsageInfo(container: HTMLElement): void {
+		const settings = this.evalDeps?.getSettings();
+		if (!settings) return;
+
+		container.createDiv('operon-filter-section-divider');
+
+		const calendarPresets = settings.calendarPresets
+			.filter(preset => preset.filterSetId === this.filterSet.id)
+			.map(preset => preset.name.trim() || preset.id);
+		const kanbanPresets = settings.kanbanPresets
+			.filter(preset => preset.filterSetId === this.filterSet.id)
+			.map(preset => preset.name.trim() || preset.id);
+
+		const section = container.createDiv('operon-filter-usage-section');
+		section.createEl('h4', {
+			cls: 'operon-filter-modal-section-title',
+			text: t('filterSets', 'usedByTitle'),
+		});
+
+		if (calendarPresets.length === 0 && kanbanPresets.length === 0) {
+			section.createDiv({
+				cls: 'operon-filter-usage-empty',
+				text: t('filterSets', 'usedByNone'),
+			});
+			return;
+		}
+
+		this.renderUsageRow(section, t('filterSets', 'usedByCalendar'), calendarPresets);
+		this.renderUsageRow(section, t('filterSets', 'usedByKanban'), kanbanPresets);
+	}
+
+	private renderUsageRow(container: HTMLElement, label: string, presetNames: string[]): void {
+		const row = container.createDiv('operon-filter-usage-row');
+		row.createSpan({ cls: 'operon-filter-usage-label', text: `${label}:` });
+		const value = row.createSpan('operon-filter-usage-value');
+		if (presetNames.length === 0) {
+			value.setText(t('filterSets', 'usedByNoneShort'));
+			value.addClass('is-empty');
+			return;
+		}
+		value.setText(presetNames.join(', '));
+	}
+
+	private renderSortRow(
+		container: HTMLElement,
+		sort: FilterSortSpec,
+		index: number,
+		fieldOptions: Array<{ field: string; label: string; type: FilterFieldType }>,
+	): void {
+		const row = container.createDiv('operon-filter-sort-row');
+
+		this.createModalSelect(
+			row,
+			fieldOptions.map(optionDef => ({ value: optionDef.field, label: optionDef.label })),
+			sort.field,
+			(value) => {
+				sort.field = value;
+				this.syncMirroredFilterFields();
+			},
+		);
+
+		this.createModalSelect(
+			row,
+			[
+				{ value: 'asc', label: t('filterSets', 'sortAsc') },
+				{ value: 'desc', label: t('filterSets', 'sortDesc') },
+			],
+			sort.order,
+			(value) => {
+				sort.order = value as 'asc' | 'desc';
+				this.syncMirroredFilterFields();
+			},
+			'order',
+		);
+
+		this.renderSortMoveButtons(row, index);
+
+		const deleteBtn = row.createEl('button');
+		deleteBtn.type = 'button';
+		this.addClasses(deleteBtn, 'operon-filter-modal-button', 'is-icon');
+		setIcon(deleteBtn, 'x');
+		bindOperonHoverTooltip(deleteBtn, { content: t('filterSets', 'deleteSort'), taskColor: null });
+		deleteBtn.addEventListener('click', () => {
+			this.filterSet.sorts.splice(index, 1);
+			this.syncMirroredFilterFields();
+			this.renderModal();
+		});
+	}
+
+	private renderSortMoveButtons(container: HTMLElement, index: number): void {
+		const moveUpBtn = container.createEl('button');
+		moveUpBtn.type = 'button';
+		this.addClasses(moveUpBtn, 'operon-filter-modal-button', 'is-icon');
+		setIcon(moveUpBtn, 'chevron-up');
+		bindOperonHoverTooltip(moveUpBtn, { content: t('filterSets', 'moveUp'), taskColor: null });
+		moveUpBtn.disabled = index === 0;
+		moveUpBtn.addEventListener('click', () => {
+			if (index === 0) return;
+			[this.filterSet.sorts[index - 1], this.filterSet.sorts[index]] = [this.filterSet.sorts[index], this.filterSet.sorts[index - 1]];
+			this.renderModal();
+		});
+
+		const moveDownBtn = container.createEl('button');
+		moveDownBtn.type = 'button';
+		this.addClasses(moveDownBtn, 'operon-filter-modal-button', 'is-icon');
+		setIcon(moveDownBtn, 'chevron-down');
+		bindOperonHoverTooltip(moveDownBtn, { content: t('filterSets', 'moveDown'), taskColor: null });
+		moveDownBtn.disabled = index >= this.filterSet.sorts.length - 1;
+		moveDownBtn.addEventListener('click', () => {
+			if (index >= this.filterSet.sorts.length - 1) return;
+			[this.filterSet.sorts[index + 1], this.filterSet.sorts[index]] = [this.filterSet.sorts[index], this.filterSet.sorts[index + 1]];
+			this.renderModal();
+		});
+	}
+
+	// --------------------------------------------------------
+	// Save / Cancel buttons
+	// --------------------------------------------------------
+
+	private renderButtons(container: HTMLElement): void {
+		const row = container.createDiv('operon-filter-footer');
+
+		// Live task count badge — left side
+		if (this.evalDeps) {
+			const deps = this.evalDeps;
+			const badge = row.createEl('button', { cls: 'operon-filter-count-badge' });
+			this.countBadge = badge;
+
+			let updating = false;
+			let debounceTimer: WindowTimeoutHandle | null = null;
+
+			const updateCount = () => {
+				if (updating) return;
+				updating = true;
+				const tasks = evaluateFilterSet(this.filterSet, deps.indexer.getAllTasks(), deps.getPriorities(), deps.pinnedCache);
+				const n = tasks.length;
+				badge.empty();
+				const icon = badge.createSpan({ cls: 'operon-count-badge-icon' });
+				setIcon(icon, 'list');
+				badge.createSpan({
+					text: t('filterSets', n === 1 ? 'taskCountWithLeadingSpaceOne' : 'taskCountWithLeadingSpaceMany', {
+						count: String(n),
+					}),
+				});
+				updating = false;
+			};
+			this.refreshCountBadge = updateCount;
+			updateCount();
+
+			// Re-run count when conditions change — debounce + guard prevents re-entrant loop
+			const observer = new MutationObserver(() => {
+				if (updating) return;
+				if (debounceTimer) clearWindowTimeout(debounceTimer);
+				debounceTimer = setWindowTimeout(() => updateCount(), 150);
+			});
+			observer.observe(container.closest('.modal-content') ?? container, { childList: true, subtree: true });
+			this.condObserver = observer;
+
+			badge.addEventListener('click', () => {
+				new FilterPreviewModal(
+					this.app,
+					this.filterSet,
+					deps,
+				).open();
+			});
+		}
+
+		const cancelBtn = row.createEl('button');
+		cancelBtn.type = 'button';
+		this.addClasses(cancelBtn, 'operon-filter-modal-button', 'operon-filter-footer-button');
+		cancelBtn.setText(t('buttons', 'cancel'));
+		cancelBtn.addEventListener('click', () => this.close());
+
+		const saveBtn = row.createEl('button');
+		saveBtn.type = 'button';
+		this.addClasses(saveBtn, 'operon-filter-modal-button', 'operon-filter-footer-button', 'is-primary', 'mod-cta');
+		saveBtn.setText(t('buttons', 'save'));
+		saveBtn.addEventListener('click', () => {
+			const name = this.filterSet.name.trim();
+			if (!name) {
+				new Notice(t('filterSets', 'nameRequired'));
+				return;
+			}
+			this.syncMirroredFilterFields();
+			this.filterSet.name = name;
+			this.onSave(this.filterSet);
+			this.close();
+		});
+	}
+
+	refreshPinnedState(): void {
+		this.refreshCountBadge?.();
+	}
+}
+
+/**
+ * Quick preview modal — shows the task list for the current filter state.
+ */
+class FilterPreviewModal extends Modal {
+	private filterSet: FilterSet;
+	private deps: FilterModalEvalDeps;
+	private lastRenderSignature: string | null = null;
+	private expandedTaskIds = new Set<string>();
+
+	constructor(
+		app: App,
+		filterSet: FilterSet,
+		deps: FilterModalEvalDeps,
+	) {
+		super(app);
+		this.filterSet = filterSet;
+		this.deps = deps;
+	}
+
+	onOpen(): void {
+		activeFilterPreviewModals.add(this);
+		this.modalEl.addClass('operon-filter-preview-modal-shell');
+		this.refresh();
+	}
+
+	refresh(): void {
+		const renderSignature = [
+			this.deps.indexer.getGeneration(),
+			this.deps.pinnedCache?.getGeneration() ?? 0,
+			this.deps.getTrackingSignature?.() ?? '',
+			JSON.stringify(this.filterSet),
+			this.deps.getSettings().filterShowSubtasks ? '1' : '0',
+			this.deps.getSettings().filterShowOnlyOpenSubtasks ? '1' : '0',
+			JSON.stringify(this.deps.getSettings().filterTaskCompactChips),
+			JSON.stringify(this.deps.getSettings().keyMappings.map(mapping => [
+				mapping.canonicalKey,
+				mapping.visiblePropertyName,
+				mapping.icon ?? '',
+			])),
+		].join('|');
+		if (this.lastRenderSignature === renderSignature) return;
+		this.lastRenderSignature = renderSignature;
+
+		const allTasks = this.deps.indexer.getAllTasks();
+		const priorities = this.deps.getPriorities();
+		const settings = this.deps.getSettings();
+		const showSubtasks = settings.filterShowSubtasks === true;
+		const showOnlyOpenSubtasks = settings.filterShowOnlyOpenSubtasks === true;
+		if (!showSubtasks) {
+			this.expandedTaskIds.clear();
+		}
+		const grouped = this.filterSet.groupBy
+			? evaluateFilterSetGrouped(this.filterSet, allTasks, priorities, this.deps.pinnedCache)
+			: null;
+		const tasks = grouped
+			? null
+			: evaluateFilterSet(this.filterSet, allTasks, priorities, this.deps.pinnedCache);
+		const callbacks: FilterTaskRowCallbacks = {
+			app: this.app,
+			getPipelines: this.deps.getPipelines,
+			getPriorities: this.deps.getPriorities,
+			getIndexedTask: (id) => this.deps.indexer.getTask(id),
+			getChildIds: this.deps.getChildIds,
+			openEditor: this.deps.openEditor,
+			cycleStatus: this.deps.cycleStatus,
+			navigateToTask: this.deps.navigateToTask,
+			getSettings: this.deps.getSettings,
+			getAllTasks: () => this.deps.indexer.getAllTasks(),
+			updateField: this.deps.updateField,
+			updateFields: this.deps.updateFields,
+			updateSubtasks: this.deps.updateSubtasks,
+			updateDependencyField: this.deps.updateDependencyField,
+			onContextualAction: this.deps.onContextualAction,
+			isTaskPinned: this.deps.pinnedCache ? (taskId) => this.deps.pinnedCache?.isPinned(taskId) === true : undefined,
+			isTaskTracking: this.deps.isTaskTracking,
+			toggleTimer: this.deps.toggleTimer,
+		};
+
+		const { contentEl } = this;
+		contentEl.empty();
+		contentEl.addClass('operon-filter-preview-modal');
+		const surface = contentEl.createDiv('operon-embed operon-filter-surface operon-filter-surface--preview');
+
+		// Header
+		const header = surface.createDiv('operon-embed-header operon-filter-preview-header');
+		header.createSpan({ cls: 'operon-embed-name', text: this.filterSet.name });
+		const count = grouped
+			? grouped.totalCount
+			: tasks!.length;
+		header.createSpan({
+			cls: 'operon-embed-count',
+			text: t('filterSets', count === 1 ? 'taskCountOne' : 'taskCountMany', { count: String(count) }),
+		});
+		const taskRowOptions = {
+			defaultExpandAll: showSubtasks,
+			showOnlyOpenSubtasks,
+		};
+
+		const list = surface.createDiv('operon-embed-list operon-filter-list');
+
+		if (count === 0) {
+			list.createDiv({ cls: 'operon-embed-empty', text: t('filters', 'noMatches') });
+			return;
+		}
+
+		if (grouped) {
+			for (const group of grouped.groups) {
+				const gh = list.createDiv('operon-group-header');
+				gh.createSpan({ cls: 'operon-group-header-label', text: group.key || t('filterSets', 'groupEmpty') });
+				gh.createSpan({ cls: 'operon-group-header-count', text: String(group.count) });
+				if (group.subgroups?.length) {
+					for (const subgroup of group.subgroups) {
+						const subgroupHeader = list.createDiv('operon-group-header operon-subgroup-header');
+						subgroupHeader.createSpan({
+							cls: 'operon-group-header-label',
+							text: subgroup.key || t('filterSets', 'groupEmpty'),
+						});
+							subgroupHeader.createSpan({ cls: 'operon-group-header-count', text: String(subgroup.count) });
+							for (const task of subgroup.tasks) {
+								list.appendChild(buildFilterTaskRowElement(task, callbacks, this.expandedTaskIds, taskRowOptions, list));
+							}
+						}
+					} else {
+						for (const task of group.tasks) {
+							list.appendChild(buildFilterTaskRowElement(task, callbacks, this.expandedTaskIds, taskRowOptions, list));
+						}
+					}
+				}
+			} else {
+				for (const task of tasks ?? []) {
+					list.appendChild(buildFilterTaskRowElement(task, callbacks, this.expandedTaskIds, taskRowOptions, list));
+				}
+			}
+	}
+
+	onClose(): void {
+		activeFilterPreviewModals.delete(this);
+		this.lastRenderSignature = null;
+		this.contentEl.empty();
+	}
+}

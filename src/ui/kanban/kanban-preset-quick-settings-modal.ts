@@ -1,0 +1,407 @@
+import { App, DropdownComponent, Modal, Setting } from 'obsidian';
+import { APPEARANCE_SCHEME_LIGHT_OPTIONS, APPEARANCE_SCHEME_DARK_OPTIONS, addAppearanceSchemeOptions } from '../appearance-schemes';
+import {
+	KANBAN_SORT_FIELD_OPTIONS,
+	KanbanAppearanceMode,
+	KanbanPreset,
+	KanbanSortDirection,
+	KanbanSortEmptyPlacement,
+	KanbanSortRule,
+	KanbanSwimlaneBy,
+} from '../../types/kanban';
+import { OperonSettings } from '../../types/settings';
+import { CalendarFilterPickerModal } from '../calendar/calendar-filter-picker-modal';
+import { bindOperonHoverTooltip } from '../operon-hover-tooltip';
+import {
+	KANBAN_TASK_COLOR_SOURCES,
+	addTaskColorSourceOptions,
+	normalizeTaskColorSource,
+} from '../../core/task-color-source';
+import { t } from '../../core/i18n';
+import { runSettingsAsync, settingsAsyncHandler } from '../settings/async-settings-action';
+import { parsePresetNumber } from '../settings/preset-control-helpers';
+
+interface KanbanPresetQuickSettingsModalOptions {
+	getSettings: () => OperonSettings;
+	presetId: string;
+	onSave: () => Promise<void>;
+}
+
+export class KanbanPresetQuickSettingsModal extends Modal {
+	private readonly options: KanbanPresetQuickSettingsModalOptions;
+
+	constructor(app: App, options: KanbanPresetQuickSettingsModalOptions) {
+		super(app);
+		this.options = options;
+	}
+
+	onOpen(): void {
+		this.modalEl.addClass('operon-kanban-preset-quick-settings-modal');
+		this.render();
+	}
+
+	private render(): void {
+		const { contentEl } = this;
+		const preset = this.getPreset();
+		contentEl.empty();
+		this.titleEl.setText(preset
+			? t('settings', 'kanbanPresetSettingsTitleForName', { name: preset.name })
+			: t('settings', 'kanbanPresetSettingsTitle'));
+
+		if (!preset) {
+			contentEl.createEl('p', { text: t('settings', 'activeKanbanPresetMissing') });
+			return;
+		}
+
+		const nameSetting = new Setting(contentEl)
+			.setName(t('settings', 'kanbanPresetName'))
+			.setDesc(t('settings', 'kanbanQuickPresetNameDesc'))
+			.addText(text => {
+				text.setValue(preset.name);
+				text.inputEl.addClass('operon-preset-name-input');
+				let lastCommittedValue = preset.name;
+				const commit = async (): Promise<void> => {
+					const nextValue = text.inputEl.value.trim() || t('settings', 'kanbanFallbackPresetName', { number: '1' });
+					if (nextValue === lastCommittedValue) return;
+					await this.updatePreset(current => {
+						current.name = nextValue;
+					});
+					lastCommittedValue = nextValue;
+					if (text.inputEl.value !== nextValue) {
+						text.setValue(nextValue);
+					}
+					this.titleEl.setText(t('settings', 'kanbanPresetSettingsTitleForName', { name: nextValue }));
+				};
+				text.inputEl.addEventListener('blur', () => {
+					runSettingsAsync('kanban preset name commit failed', commit);
+				});
+				text.inputEl.addEventListener('keydown', event => {
+					if (event.key !== 'Enter') return;
+					event.preventDefault();
+					runSettingsAsync('kanban preset name commit failed', async () => {
+						await commit();
+						text.inputEl.blur();
+					});
+				});
+			});
+		nameSetting.settingEl.addClass('operon-preset-name-setting');
+
+		const settings = this.options.getSettings();
+		new Setting(contentEl)
+			.setName(t('settings', 'kanbanPipeline'))
+			.setDesc(t('settings', 'kanbanPipelineDesc'))
+			.addDropdown(dropdown => {
+				dropdown.addOption('', t('settings', 'kanbanNoPipeline'));
+				for (const pipeline of settings.pipelines) {
+					dropdown.addOption(pipeline.id, pipeline.name);
+				}
+				dropdown.setValue(preset.pipelineId ?? '');
+				dropdown.onChange(async value => {
+					await this.updatePreset(current => {
+						current.pipelineId = value || null;
+					});
+				});
+			});
+
+		const currentFilter = settings.filterSets.find(entry => entry.id === preset.filterSetId) ?? null;
+		new Setting(contentEl)
+			.setName(t('settings', 'kanbanFilter'))
+			.setDesc(currentFilter?.name ?? t('calendar', 'noFilter'))
+			.addButton(button => {
+				button.setButtonText(t('calendar', 'chooseFilter'));
+				button.onClick(() => {
+					new CalendarFilterPickerModal(this.app, {
+						filterSets: settings.filterSets,
+						onChooseFilter: settingsAsyncHandler('kanban preset filter selection failed', async (filterSetId) => {
+							await this.updatePreset(current => {
+								current.filterSetId = filterSetId;
+							});
+							this.render();
+						}),
+					}).open();
+				});
+			})
+			.addButton(button => {
+				button.setButtonText(t('calendar', 'clearFilter'));
+				button.setDisabled(!preset.filterSetId);
+				button.onClick(settingsAsyncHandler('kanban preset filter clear failed', async () => {
+					await this.updatePreset(current => {
+						current.filterSetId = null;
+					});
+					this.render();
+				}));
+			});
+
+		new Setting(contentEl)
+			.setName(t('settings', 'kanbanSwimlaneField'))
+			.setDesc(t('settings', 'kanbanSwimlaneFieldDesc'))
+			.addDropdown(dropdown => {
+				this.addSwimlaneOptions(dropdown);
+				dropdown.setValue(preset.swimlaneBy ?? '');
+				dropdown.onChange(async value => {
+					await this.updatePreset(current => {
+						current.swimlaneBy = this.parseSwimlaneBy(value);
+					});
+				});
+			});
+
+		new Setting(contentEl)
+			.setName(t('settings', 'kanbanTaskColorSource'))
+			.setDesc(t('settings', 'kanbanTaskColorSourceDesc'))
+			.addDropdown(dropdown => {
+				addTaskColorSourceOptions(dropdown, KANBAN_TASK_COLOR_SOURCES);
+				dropdown.setValue(preset.colorSource);
+				dropdown.onChange(async value => {
+					await this.updatePreset(current => {
+						current.colorSource = normalizeTaskColorSource(value, KANBAN_TASK_COLOR_SOURCES, 'taskColor');
+					});
+				});
+			});
+
+		this.renderSortSection(contentEl, preset);
+
+		new Setting(contentEl)
+			.setName(t('calendar', 'appearanceLight'))
+			.setDesc(t('calendar', 'appearanceLightDesc'))
+			.addDropdown(dropdown => {
+				addAppearanceSchemeOptions(dropdown, APPEARANCE_SCHEME_LIGHT_OPTIONS);
+				dropdown.setValue(preset.appearanceModeLight);
+				dropdown.onChange(async value => {
+					await this.updatePreset(current => {
+						current.appearanceModeLight = value as KanbanAppearanceMode;
+					});
+				});
+			});
+
+		new Setting(contentEl)
+			.setName(t('calendar', 'appearanceDark'))
+			.setDesc(t('calendar', 'appearanceDarkDesc'))
+			.addDropdown(dropdown => {
+				addAppearanceSchemeOptions(dropdown, APPEARANCE_SCHEME_DARK_OPTIONS);
+				dropdown.setValue(preset.appearanceModeDark);
+				dropdown.onChange(async value => {
+					await this.updatePreset(current => {
+						current.appearanceModeDark = value as KanbanAppearanceMode;
+					});
+				});
+			});
+
+		new Setting(contentEl)
+			.setName(t('settings', 'kanbanCollapseEmptyColumns'))
+			.setDesc(t('settings', 'kanbanCollapseEmptyColumnsDesc'))
+			.addToggle(toggle => {
+				toggle.setValue(preset.collapseEmptyColumns);
+				toggle.onChange(async value => {
+					await this.updatePreset(current => {
+						current.collapseEmptyColumns = value;
+					});
+				});
+			});
+
+		new Setting(contentEl)
+			.setName(t('settings', 'kanbanCollapseEmptySwimlanes'))
+			.setDesc(t('settings', 'kanbanCollapseEmptySwimlanesDesc'))
+			.addToggle(toggle => {
+				toggle.setValue(preset.collapseEmptySwimlanes);
+				toggle.onChange(async value => {
+					await this.updatePreset(current => {
+						current.collapseEmptySwimlanes = value;
+					});
+				});
+			});
+
+		new Setting(contentEl)
+			.setName(t('settings', 'kanbanAutoCollapseFinishedColumns'))
+			.setDesc(t('settings', 'kanbanAutoCollapseFinishedColumnsDesc'))
+			.addToggle(toggle => {
+				toggle.setValue(preset.autoCollapseFinishedColumns);
+				toggle.onChange(async value => {
+					await this.updatePreset(current => {
+						current.autoCollapseFinishedColumns = value;
+					});
+				});
+			});
+
+	}
+
+	private renderSortSection(container: HTMLElement, preset: KanbanPreset): void {
+		container.createEl('h4', { text: t('settings', 'kanbanSorting') });
+		container.createDiv({
+			text: t('settings', 'kanbanSortingDesc'),
+			cls: 'setting-item-description',
+		});
+
+			const section = container.createDiv('operon-kanban-sort-rules');
+
+			preset.sortRules.forEach((rule, index) => {
+				const row = section.createDiv('operon-kanban-sort-row');
+
+				row.createSpan({ cls: 'operon-kanban-sort-label', text: t('settings', 'kanbanSortBy') });
+
+				const fieldSelect = row.createEl('select', { cls: 'operon-kanban-sort-select' });
+			for (const option of KANBAN_SORT_FIELD_OPTIONS) {
+				fieldSelect.add(new Option(this.getKanbanSortFieldLabel(option), option.value));
+			}
+			fieldSelect.value = rule.field;
+			fieldSelect.addEventListener('change', settingsAsyncHandler('kanban preset sort field change failed', async () => {
+				await this.updatePreset(current => {
+					current.sortRules[index].field = fieldSelect.value as KanbanSortRule['field'];
+				});
+			}));
+
+				const directionButton = row.createEl('button', { cls: 'operon-kanban-sort-toggle', text: this.formatSortDirection(rule.direction) });
+			directionButton.addEventListener('click', settingsAsyncHandler('kanban preset sort direction change failed', async () => {
+				await this.updatePreset(current => {
+					current.sortRules[index].direction = current.sortRules[index].direction === 'asc' ? 'desc' : 'asc';
+				});
+				this.render();
+			}));
+
+				const emptyButton = row.createEl('button', { cls: 'operon-kanban-sort-toggle', text: this.formatSortEmpty(rule.empty) });
+			bindOperonHoverTooltip(emptyButton, { content: t('settings', 'kanbanSortEmptyTooltip'), taskColor: null });
+			emptyButton.addEventListener('click', settingsAsyncHandler('kanban preset sort empty placement change failed', async () => {
+				await this.updatePreset(current => {
+					current.sortRules[index].empty = current.sortRules[index].empty === 'last' ? 'first' : 'last';
+				});
+				this.render();
+			}));
+
+				const upButton = row.createEl('button', { cls: 'operon-kanban-sort-icon-button', text: '↑' });
+			upButton.disabled = index === 0;
+			upButton.addEventListener('click', settingsAsyncHandler('kanban preset sort move up failed', async () => {
+				if (index === 0) return;
+				await this.updatePreset(current => {
+					const [moved] = current.sortRules.splice(index, 1);
+					current.sortRules.splice(index - 1, 0, moved);
+				});
+				this.render();
+			}));
+
+				const downButton = row.createEl('button', { cls: 'operon-kanban-sort-icon-button', text: '↓' });
+			downButton.disabled = index >= preset.sortRules.length - 1;
+			downButton.addEventListener('click', settingsAsyncHandler('kanban preset sort move down failed', async () => {
+				if (index >= preset.sortRules.length - 1) return;
+				await this.updatePreset(current => {
+					const [moved] = current.sortRules.splice(index, 1);
+					current.sortRules.splice(index + 1, 0, moved);
+				});
+				this.render();
+			}));
+
+				const removeButton = row.createEl('button', { cls: 'operon-kanban-sort-icon-button', text: '✕' });
+			removeButton.disabled = preset.sortRules.length <= 1;
+			removeButton.addEventListener('click', settingsAsyncHandler('kanban preset sort remove failed', async () => {
+				if (preset.sortRules.length <= 1) return;
+				await this.updatePreset(current => {
+					current.sortRules.splice(index, 1);
+				});
+				this.render();
+			}));
+		});
+
+			const addRow = section.createDiv('operon-kanban-sort-add-row');
+		const addButton = addRow.createEl('button', { text: t('settings', 'kanbanAddSortField') });
+		addButton.addEventListener('click', settingsAsyncHandler('kanban preset sort add failed', async () => {
+			await this.updatePreset(current => {
+				current.sortRules.push({
+					field: 'alphabetical',
+					direction: 'asc',
+					empty: 'last',
+				});
+			});
+			this.render();
+		}));
+	}
+
+	private addNumberSetting(
+		container: HTMLElement,
+		name: string,
+		description: string,
+		currentValue: number,
+		min: number,
+		max: number,
+		step: number,
+		onChange: (value: number) => Promise<void>,
+	): void {
+		new Setting(container)
+			.setName(name)
+			.setDesc(description)
+			.addText(text => {
+				text.inputEl.type = 'number';
+				text.inputEl.min = String(min);
+				text.inputEl.max = String(max);
+				text.setValue(String(currentValue));
+				let lastCommittedValue = currentValue;
+				const commit = async (): Promise<void> => {
+					const nextValue = parsePresetNumber(text.inputEl.value, lastCommittedValue, min, max, step);
+					if (text.inputEl.value !== String(nextValue)) {
+						text.setValue(String(nextValue));
+					}
+					if (nextValue === lastCommittedValue) return;
+					await onChange(nextValue);
+					lastCommittedValue = nextValue;
+				};
+				text.inputEl.addEventListener('blur', () => {
+					runSettingsAsync('kanban preset number commit failed', commit);
+				});
+				text.inputEl.addEventListener('keydown', event => {
+					if (event.key !== 'Enter') return;
+					event.preventDefault();
+					runSettingsAsync('kanban preset number commit failed', async () => {
+						await commit();
+						text.inputEl.blur();
+					});
+				});
+			});
+	}
+
+	private addSwimlaneOptions(dropdown: DropdownComponent): void {
+		dropdown.addOption('', t('settings', 'kanbanNoSwimlane'));
+		dropdown.addOption('priority', this.getSwimlaneLabel('priority'));
+		dropdown.addOption('tags', this.getSwimlaneLabel('tags'));
+		dropdown.addOption('contexts', this.getSwimlaneLabel('contexts'));
+		dropdown.addOption('assignees', this.getSwimlaneLabel('assignees'));
+		dropdown.addOption('dateDue', this.getSwimlaneLabel('dateDue'));
+		dropdown.addOption('dateScheduled', this.getSwimlaneLabel('dateScheduled'));
+	}
+
+	private getSwimlaneLabel(value: KanbanSwimlaneBy): string {
+		return t('settings', `kanbanSwimlane_${value}`);
+	}
+
+	private getKanbanSortFieldLabel(option: typeof KANBAN_SORT_FIELD_OPTIONS[number]): string {
+		const key = `kanbanSortField_${option.value}`;
+		const localized = t('settings', key);
+		return localized === key ? option.label : localized;
+	}
+
+	private parseSwimlaneBy(value: string): KanbanSwimlaneBy | null {
+		return value === 'priority'
+			|| value === 'tags'
+			|| value === 'contexts'
+			|| value === 'assignees'
+			|| value === 'dateDue'
+			|| value === 'dateScheduled'
+			? value
+			: null;
+	}
+
+	private formatSortDirection(direction: KanbanSortDirection): string {
+		return direction === 'desc' ? t('settings', 'kanbanSortDesc') : t('settings', 'kanbanSortAsc');
+	}
+
+	private formatSortEmpty(empty: KanbanSortEmptyPlacement): string {
+		return empty === 'first' ? t('settings', 'kanbanSortEmptyFirst') : t('settings', 'kanbanSortEmptyLast');
+	}
+
+	private getPreset(): KanbanPreset | null {
+		return this.options.getSettings().kanbanPresets.find(entry => entry.id === this.options.presetId) ?? null;
+	}
+
+	private async updatePreset(update: (preset: KanbanPreset) => void): Promise<void> {
+		const preset = this.getPreset();
+		if (!preset) return;
+		update(preset);
+		await this.options.onSave();
+	}
+}

@@ -1,0 +1,307 @@
+import { setIcon } from 'obsidian';
+import { t } from '../core/i18n';
+import { resolveDirectSubtaskProgressFromStats } from '../core/task-stats-read-model';
+import { IndexedTask } from '../types/fields';
+import { resolveWorkflowStatus } from '../types/pipeline';
+import { buildReadingTaskRowElement, ReadingTaskRowCallbacks } from './reading-task-row';
+import { wrapWithOperonHoverTooltip } from './operon-hover-tooltip';
+import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
+import { createOwnerElement } from '../core/dom-compat';
+
+export interface FilterTaskRowCallbacks extends ReadingTaskRowCallbacks {
+	getIndexedTask: (id: string) => IndexedTask | undefined;
+	getChildIds: (parentId: string) => string[];
+	getRenderedTask?: (task: IndexedTask) => IndexedTask;
+}
+
+interface FilterTaskRowOptions {
+	allowExpand?: boolean;
+	ancestorIds?: Set<string>;
+	defaultExpandAll?: boolean;
+	showOnlyOpenSubtasks?: boolean;
+	showSubtaskAction?: boolean;
+	visibleTaskIds?: Set<string>;
+}
+
+export function buildFilterTaskRowElement(
+	task: IndexedTask,
+	callbacks: FilterTaskRowCallbacks,
+	expandedTaskIds: Set<string>,
+	options?: FilterTaskRowOptions,
+	owner?: Node | null,
+): HTMLElement {
+	const allowExpand = options?.allowExpand !== false;
+	const ancestorIds = options?.ancestorIds ?? new Set<string>();
+	const wrapper = el('div', 'operon-filter-task-entry', owner);
+	const childIds = allowExpand
+		? sortSubtaskIds(
+			callbacks.getChildIds(task.operonId).filter(childId =>
+				childId !== task.operonId
+				&& !ancestorIds.has(childId)
+				&& (!options?.visibleTaskIds || options.visibleTaskIds.has(childId)),
+			),
+			callbacks,
+			options?.showOnlyOpenSubtasks === true,
+		)
+		: [];
+	const hasChildren = childIds.length > 0;
+	const childrenContainer = hasChildren ? el('div', 'operon-filter-task-children', wrapper) : null;
+	const branchColor = resolveBranchColor(task, callbacks);
+	const canUseDirectStats = allowExpand
+		&& !options?.visibleTaskIds
+		&& options?.showOnlyOpenSubtasks !== true;
+	const childProgress = hasChildren ? buildChildProgress(task, childIds, callbacks, canUseDirectStats) : null;
+	if (hasChildren && options?.defaultExpandAll === true) {
+		const marker = `__filter_init_${task.operonId}`;
+		if (!expandedTaskIds.has(marker)) {
+			expandedTaskIds.add(task.operonId);
+			expandedTaskIds.add(marker);
+		}
+	}
+
+	if (childrenContainer && branchColor) {
+		childrenContainer.style.setProperty('--operon-filter-branch-color', branchColor);
+	}
+
+	const renderedTask = callbacks.getRenderedTask?.(task) ?? task;
+	const row = buildReadingTaskRowElement(renderedTask, callbacks, undefined, {
+		owner: wrapper,
+		chipItems: callbacks.getSettings().filterTaskCompactChips,
+		showPlayAction: callbacks.getSettings().filterTaskShowPlayAction,
+		showPinAction: callbacks.getSettings().filterTaskShowPinAction,
+		showSubtaskAction: options?.showSubtaskAction ?? callbacks.getSettings().filterTaskShowSubtaskAction,
+		rowClassName: 'operon-filter-task-row',
+		beforeEditAction: hasChildren
+			? (actions, context) => {
+					const expandButton = el('button', 'operon-live-preview-edit operon-reading-task-edit operon-live-preview-action operon-filter-expand-action', actions);
+					expandButton.type = 'button';
+					const iconEl = el('span', 'operon-filter-expand-icon', expandButton);
+					const summary = el('span', 'operon-filter-expand-summary', expandButton);
+				expandButton.appendChild(iconEl);
+				expandButton.appendChild(summary);
+				if (context.taskColor) {
+					expandButton.style.setProperty('--operon-live-hover-border', context.taskColor);
+				} else if (branchColor) {
+					expandButton.style.setProperty('--operon-live-hover-border', branchColor);
+				}
+				if (childProgress?.allCompleted) {
+					summary.classList.add('is-complete');
+				}
+				if (context.taskColor) {
+					summary.style.setProperty('--operon-live-hover-border', context.taskColor);
+				} else if (branchColor) {
+					summary.style.setProperty('--operon-live-hover-border', branchColor);
+				}
+				const syncButton = () => {
+					const expanded = expandedTaskIds.has(task.operonId);
+					setIcon(iconEl, expanded ? 'chevron-down' : 'chevron-right');
+					expandButton.classList.toggle('is-expanded', expanded);
+					summary.textContent = childProgress ? `${childProgress.completed}/${childProgress.total}` : '';
+					setAccessibleLabelWithoutTooltip(expandButton, t('tooltips', 'expandSubtasks'));
+				};
+				syncButton();
+				expandButton.addEventListener('click', (event) => {
+					event.preventDefault();
+					event.stopPropagation();
+					if (expandedTaskIds.has(task.operonId)) {
+						expandedTaskIds.delete(task.operonId);
+						childrenContainer?.classList.add('is-collapsed');
+					} else {
+						expandedTaskIds.add(task.operonId);
+						if (childrenContainer && childrenContainer.childElementCount === 0) {
+							renderDirectChildren(
+								childrenContainer,
+								childIds,
+								callbacks,
+								expandedTaskIds,
+								new Set([...ancestorIds, task.operonId]),
+								options?.defaultExpandAll === true,
+								options?.showOnlyOpenSubtasks === true,
+								options?.visibleTaskIds,
+							);
+						}
+						childrenContainer?.classList.remove('is-collapsed');
+					}
+					syncButton();
+					window.requestAnimationFrame(() => expandButton.blur());
+				});
+				const expandControl = wrapWithOperonHoverTooltip(expandButton, {
+					title: t('tooltips', 'subtasks'),
+					content: buildSubtaskTooltipContent(childProgress),
+					taskColor: context.taskColor ?? branchColor,
+					preferredHorizontal: 'right',
+				});
+				expandControl.classList.add('operon-filter-expand-control');
+				actions.appendChild(expandControl);
+			}
+			: undefined,
+	});
+
+	wrapper.appendChild(row);
+
+	if (childrenContainer) {
+		if (!expandedTaskIds.has(task.operonId)) {
+			childrenContainer.classList.add('is-collapsed');
+		} else {
+			renderDirectChildren(
+				childrenContainer,
+				childIds,
+				callbacks,
+				expandedTaskIds,
+				new Set([...ancestorIds, task.operonId]),
+				options?.defaultExpandAll === true,
+				options?.showOnlyOpenSubtasks === true,
+				options?.visibleTaskIds,
+			);
+		}
+		wrapper.appendChild(childrenContainer);
+	}
+
+	return wrapper;
+}
+
+function renderDirectChildren(
+	container: HTMLElement,
+	childIds: string[],
+	callbacks: FilterTaskRowCallbacks,
+	expandedTaskIds: Set<string>,
+	ancestorIds: Set<string>,
+	defaultExpandAll: boolean,
+	showOnlyOpenSubtasks: boolean,
+	visibleTaskIds?: Set<string>,
+): void {
+	container.empty();
+	for (const childId of childIds) {
+		const childTask = callbacks.getIndexedTask(childId);
+		if (!childTask) continue;
+			container.appendChild(buildFilterTaskRowElement(childTask, callbacks, expandedTaskIds, {
+				allowExpand: true,
+				ancestorIds,
+				defaultExpandAll,
+				showOnlyOpenSubtasks,
+				visibleTaskIds,
+			}, container));
+	}
+}
+
+function sortSubtaskIds(
+	childIds: string[],
+	callbacks: FilterTaskRowCallbacks,
+	showOnlyOpenSubtasks: boolean,
+): string[] {
+	const priorityRankMap = new Map(
+		callbacks.getPriorities().map((priority, index) => [priority.label, index] as const),
+	);
+
+	return [...childIds].sort((leftId, rightId) => {
+		const left = callbacks.getIndexedTask(leftId);
+		const right = callbacks.getIndexedTask(rightId);
+		if (!left && !right) return leftId.localeCompare(rightId);
+		if (!left) return 1;
+		if (!right) return -1;
+
+		const bucketCompare = getSubtaskStateBucket(left, callbacks) - getSubtaskStateBucket(right, callbacks);
+		if (bucketCompare !== 0) return bucketCompare;
+
+		const leftPriority = priorityRankMap.get(left.fieldValues['priority'] ?? '') ?? Number.MAX_SAFE_INTEGER;
+		const rightPriority = priorityRankMap.get(right.fieldValues['priority'] ?? '') ?? Number.MAX_SAFE_INTEGER;
+		if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+
+		return left.description.localeCompare(right.description, undefined, { sensitivity: 'base' });
+	}).filter(childId => {
+		if (!showOnlyOpenSubtasks) return true;
+		const childTask = callbacks.getIndexedTask(childId);
+		return childTask ? isOpenSubtask(childTask, callbacks) : false;
+	});
+}
+
+function getSubtaskStateBucket(
+	task: IndexedTask,
+	callbacks: FilterTaskRowCallbacks,
+): number {
+	if (task.checkbox === 'cancelled' || !!task.fieldValues['dateCancelled']?.trim()) return 2;
+	if (task.checkbox === 'done' || !!task.fieldValues['dateCompleted']?.trim()) return 1;
+	const workflow = resolveWorkflowStatus(callbacks.getPipelines(), task.fieldValues['status']);
+	if (workflow?.definition.isCancelled === true) return 2;
+	if (workflow?.definition.isFinished === true) return 1;
+	return 0;
+}
+
+function isOpenSubtask(
+	task: IndexedTask,
+	callbacks: FilterTaskRowCallbacks,
+): boolean {
+	return getSubtaskStateBucket(task, callbacks) === 0;
+}
+
+function resolveBranchColor(task: IndexedTask, callbacks: FilterTaskRowCallbacks): string | null {
+	const taskColor = normalizeColor(task.fieldValues['taskColor']);
+	if (taskColor) return taskColor;
+
+	const priority = task.fieldValues['priority']?.trim();
+	if (!priority) return null;
+	const priorityDef = callbacks.getPriorities().find(candidate => candidate.label === priority);
+	return normalizeColor(priorityDef?.color);
+}
+
+export function buildChildProgress(
+	parentTask: IndexedTask,
+	childIds: string[],
+	callbacks: FilterTaskRowCallbacks,
+	canUseStats: boolean,
+): { completed: number; total: number; allCompleted: boolean } {
+	if (canUseStats) {
+		const statsProgress = resolveDirectSubtaskProgressFromStats(parentTask.fieldValues, childIds.length);
+		if (statsProgress) {
+			return statsProgress;
+		}
+	}
+
+	let total = 0;
+	let completed = 0;
+
+	for (const childId of childIds) {
+		const childTask = callbacks.getIndexedTask(childId);
+		if (!childTask) continue;
+		total += 1;
+		const workflow = resolveWorkflowStatus(callbacks.getPipelines(), childTask.fieldValues['status']);
+		if (childTask.checkbox === 'done' || workflow?.definition.isFinished === true) {
+			completed += 1;
+		}
+	}
+
+	return {
+		completed,
+		total,
+		allCompleted: total > 0 && completed === total,
+	};
+}
+
+function buildSubtaskTooltipContent(
+	progress: { completed: number; total: number; allCompleted: boolean } | null,
+): string {
+	if (!progress || progress.total === 0) return t('tooltips', 'noDirectSubtasks');
+	const percent = Math.round((progress.completed / progress.total) * 100);
+	return t('tooltips', 'directSubtasksProgress', {
+		completed: String(progress.completed),
+		total: String(progress.total),
+		percent: String(percent),
+	});
+}
+
+function normalizeColor(value: string | null | undefined): string | null {
+	if (!value) return null;
+	const trimmed = value.trim();
+	if (!trimmed) return null;
+	return trimmed.startsWith('#') ? trimmed : `#${trimmed}`;
+}
+
+function el<K extends keyof HTMLElementTagNameMap>(
+	tag: K,
+	className?: string,
+	owner?: Node | null,
+): HTMLElementTagNameMap[K] {
+	const element = createOwnerElement(owner, tag);
+	if (className) element.className = className;
+	return element;
+}

@@ -1,0 +1,123 @@
+import { App } from 'obsidian';
+import { clonePipeline, Pipeline } from '../types/pipeline';
+import type { OperonSettings } from '../types/settings';
+import { WriteQueue } from './write-queue';
+import { preserveInvalidJsonFile, shouldSkipStoreWrite, writeJsonSafely, type RecoveredStoreWriteOptions } from './storage-file-ops';
+
+const PIPELINES_FILE = '.operon/pipelines.json';
+const PIPELINE_STORE_VERSION = 1;
+const PIPELINE_STORE_QUEUE_KEY = `${PIPELINES_FILE}::__store__`;
+
+export type PipelineStoreSettings = Pick<OperonSettings, 'pipelines' | 'defaultPipelineName'>;
+
+interface PipelineStoreData {
+	version: number;
+	pipelines: Pipeline[];
+	defaultPipelineName: string;
+}
+
+function clonePipelines(pipelines: Pipeline[]): Pipeline[] {
+	return pipelines.map(pipeline => clonePipeline(pipeline));
+}
+
+export class PipelineStore {
+	private app: App;
+	private writeQueue: WriteQueue;
+	private settings: PipelineStoreSettings;
+	private serializedSettings: string;
+	private recoveredFromMalformed = false;
+
+	constructor(app: App, writeQueue: WriteQueue, defaults: PipelineStoreSettings) {
+		this.app = app;
+		this.writeQueue = writeQueue;
+		this.settings = cloneSettings(defaults);
+		this.serializedSettings = JSON.stringify(this.settings);
+	}
+
+	getAll(): PipelineStoreSettings {
+		return cloneSettings(this.settings);
+	}
+
+	async load(
+		legacySettings: PipelineStoreSettings | null = null,
+		defaults: PipelineStoreSettings,
+	): Promise<void> {
+		const adapter = this.app.vault.adapter;
+		if (!(await adapter.exists(PIPELINES_FILE))) {
+			this.settings = cloneSettings(legacySettings ?? defaults);
+			this.serializedSettings = JSON.stringify(this.settings);
+			this.recoveredFromMalformed = false;
+			if (legacySettings) {
+				await this.persist();
+			}
+			return;
+		}
+
+		let raw = '';
+		try {
+			raw = await adapter.read(PIPELINES_FILE);
+			const parsed = JSON.parse(raw) as Partial<PipelineStoreData>;
+			this.settings = readStoreData(parsed, legacySettings ?? defaults);
+			this.serializedSettings = JSON.stringify(this.settings);
+			this.recoveredFromMalformed = false;
+		} catch {
+			console.warn('Operon: Failed to parse pipelines store, preserving invalid file as backup and recovering from fallback settings');
+			await preserveInvalidJsonFile(adapter, PIPELINES_FILE, raw);
+			this.settings = cloneSettings(legacySettings ?? defaults);
+			this.serializedSettings = JSON.stringify(this.settings);
+			this.recoveredFromMalformed = true;
+		}
+	}
+
+	async replaceAll(settings: PipelineStoreSettings, options: RecoveredStoreWriteOptions = {}): Promise<void> {
+		const nextSettings = cloneSettings(settings);
+		const nextSerialized = JSON.stringify(nextSettings);
+		const adapter = this.app.vault.adapter;
+		if (shouldSkipStoreWrite(
+			nextSerialized === this.serializedSettings,
+			await adapter.exists(PIPELINES_FILE),
+			this.recoveredFromMalformed,
+			options,
+		)) {
+			this.settings = nextSettings;
+			return;
+		}
+		this.settings = nextSettings;
+		this.serializedSettings = nextSerialized;
+		await this.persist();
+	}
+
+	private async persist(): Promise<void> {
+		const adapter = this.app.vault.adapter;
+		const data: PipelineStoreData = {
+			version: PIPELINE_STORE_VERSION,
+			pipelines: clonePipelines(this.settings.pipelines),
+			defaultPipelineName: this.settings.defaultPipelineName,
+		};
+		await this.writeQueue.enqueue(PIPELINE_STORE_QUEUE_KEY, async () => {
+			await writeJsonSafely(adapter, PIPELINES_FILE, data);
+		});
+		this.recoveredFromMalformed = false;
+	}
+}
+
+function cloneSettings(settings: PipelineStoreSettings): PipelineStoreSettings {
+	return {
+		pipelines: clonePipelines(settings.pipelines),
+		defaultPipelineName: settings.defaultPipelineName,
+	};
+}
+
+function readStoreData(
+	raw: Partial<PipelineStoreData>,
+	fallback: PipelineStoreSettings,
+): PipelineStoreSettings {
+	return {
+		pipelines: Array.isArray(raw.pipelines)
+			? clonePipelines(raw.pipelines)
+			: clonePipelines(fallback.pipelines),
+		defaultPipelineName: typeof raw.defaultPipelineName === 'string'
+			? raw.defaultPipelineName
+			: fallback.defaultPipelineName,
+	};
+}

@@ -1,0 +1,405 @@
+import { App, Modal, Setting } from 'obsidian';
+import { t } from '../../core/i18n';
+import { CalendarAppearanceMode, CalendarPreset } from '../../types/calendar';
+import { APPEARANCE_SCHEME_LIGHT_OPTIONS, APPEARANCE_SCHEME_DARK_OPTIONS, addAppearanceSchemeOptions } from '../appearance-schemes';
+import { OperonSettings } from '../../types/settings';
+import { CalendarFilterPickerModal } from './calendar-filter-picker-modal';
+import { showTimePicker } from '../field-pickers/time-picker';
+import {
+	CALENDAR_TASK_COLOR_SOURCES,
+	addTaskColorSourceOptions,
+	normalizeTaskColorSource,
+} from '../../core/task-color-source';
+import { runSettingsAsync, settingsAsyncHandler } from '../settings/async-settings-action';
+import { parsePresetNumber } from '../settings/preset-control-helpers';
+
+interface CalendarPresetQuickSettingsModalOptions {
+	getSettings: () => OperonSettings;
+	presetId: string;
+	onSave: () => Promise<void>;
+}
+
+export class CalendarPresetQuickSettingsModal extends Modal {
+	private readonly options: CalendarPresetQuickSettingsModalOptions;
+
+	constructor(app: App, options: CalendarPresetQuickSettingsModalOptions) {
+		super(app);
+		this.options = options;
+	}
+
+	onOpen(): void {
+		this.modalEl.addClass('operon-calendar-preset-quick-settings-modal');
+		this.render();
+	}
+
+	private render(): void {
+		const { contentEl } = this;
+		const preset = this.getPreset();
+		contentEl.empty();
+		this.titleEl.setText(preset
+			? t('calendar', 'calendarPresetTitle', { name: preset.name })
+			: t('calendar', 'calendarPresetSettingsTitle'));
+
+		if (!preset) {
+			contentEl.createEl('p', { text: t('calendar', 'activeCalendarPresetMissing') });
+			return;
+		}
+
+		contentEl.createEl('p', {
+			text: t('calendar', 'calendarPresetQuickHelp'),
+			cls: 'operon-calendar-preset-quick-settings-help',
+		});
+
+		const nameSetting = new Setting(contentEl)
+			.setName(t('calendar', 'presetName'))
+			.setDesc(t('calendar', 'presetNameDesc'))
+			.addText(text => {
+				text.setValue(preset.name);
+				text.inputEl.addClass('operon-preset-name-input');
+				let lastCommittedValue = preset.name;
+				const commit = async (): Promise<void> => {
+					const rawValue = text.inputEl.value;
+					const nextValue = rawValue.trim() || t('calendar', 'defaultPresetName');
+					if (nextValue === lastCommittedValue) return;
+					await this.updatePreset(current => {
+						current.name = nextValue;
+					});
+					lastCommittedValue = nextValue;
+					if (text.inputEl.value !== nextValue) {
+						text.setValue(nextValue);
+					}
+					this.titleEl.setText(t('calendar', 'calendarPresetTitle', { name: nextValue }));
+				};
+				text.inputEl.addEventListener('input', () => {
+					const rawValue = text.inputEl.value.trim();
+					this.titleEl.setText(t('calendar', 'calendarPresetTitle', {
+						name: rawValue || lastCommittedValue || t('calendar', 'defaultPresetName'),
+					}));
+				});
+				text.inputEl.addEventListener('blur', () => {
+					runSettingsAsync('calendar preset name commit failed', commit);
+				});
+				text.inputEl.addEventListener('keydown', (event) => {
+					if (event.key !== 'Enter') return;
+					event.preventDefault();
+					runSettingsAsync('calendar preset name commit failed', async () => {
+						await commit();
+						text.inputEl.blur();
+					});
+				});
+			});
+		nameSetting.settingEl.addClass('operon-preset-name-setting');
+
+		new Setting(contentEl)
+			.setName(t('calendar', 'calendarPresetType'))
+			.setDesc(t('calendar', 'calendarPresetTypeDesc'))
+			.addDropdown(dropdown => {
+				dropdown.addOption('timeGrid', t('calendar', 'timeGrid'));
+				dropdown.addOption('multiWeek', t('calendar', 'multiWeek'));
+				dropdown.setValue(preset.surfaceType);
+				dropdown.onChange(async value => {
+					if (value !== 'timeGrid' && value !== 'multiWeek') return;
+					await this.updatePreset(current => {
+						current.surfaceType = value;
+						current.weekCount = this.normalizeWeekCount(current.weekCount);
+					});
+					this.render();
+				});
+			});
+
+		if (preset.surfaceType === 'multiWeek') {
+			new Setting(contentEl)
+				.setName(t('calendar', 'weekCount'))
+				.setDesc(t('calendar', 'weekCountDesc'))
+				.addDropdown(dropdown => {
+					dropdown.addOption('1', '1');
+					dropdown.addOption('2', '2');
+					dropdown.addOption('3', '3');
+					dropdown.addOption('4', '4');
+					dropdown.addOption('5', '5');
+					dropdown.addOption('6', '6');
+					dropdown.setValue(String(this.normalizeWeekCount(preset.weekCount)));
+					dropdown.onChange(async value => {
+						const nextValue = this.normalizeWeekCount(Number.parseInt(value, 10));
+						await this.updatePreset(current => {
+							current.weekCount = nextValue;
+						});
+						this.render();
+					});
+				});
+			new Setting(contentEl)
+				.setName(t('calendar', 'focusedWeekNumber'))
+				.setDesc(t('calendar', 'focusedWeekNumberDesc'))
+				.addDropdown(dropdown => {
+					const weekCount = this.normalizeWeekCount(preset.weekCount);
+					for (let week = 1; week <= weekCount; week++) {
+						dropdown.addOption(String(week), String(week));
+					}
+					dropdown.setValue(String(this.normalizeFocusedWeekNumber(preset.focusedWeekNumber, weekCount)));
+					dropdown.onChange(async value => {
+						const nextValue = this.normalizeFocusedWeekNumber(
+							Number.parseInt(value, 10),
+							this.normalizeWeekCount(preset.weekCount),
+						);
+						await this.updatePreset(current => {
+							current.focusedWeekNumber = nextValue;
+						});
+						this.render();
+					});
+				});
+		} else {
+			this.addNumberSetting(contentEl, t('calendar', 'visibleDayCount'), t('calendar', 'visibleDayCountDesc'), preset.dayCount, 1, 31, 1, async value => {
+				await this.updatePreset(current => {
+					current.dayCount = value;
+				});
+				this.render();
+			});
+
+			new Setting(contentEl)
+				.setName(t('calendar', 'todayPosition'))
+				.setDesc(t('calendar', 'todayPositionDesc'))
+				.addDropdown(dropdown => {
+					for (let position = 1; position <= Math.max(1, preset.dayCount); position++) {
+						dropdown.addOption(String(position), String(position));
+					}
+					dropdown.setValue(String(Math.min(preset.dayCount, preset.todayPosition)));
+					dropdown.onChange(async value => {
+						const nextValue = parsePresetNumber(value, preset.todayPosition, 1, Math.max(1, preset.dayCount), 1);
+						await this.updatePreset(current => {
+							current.todayPosition = Math.min(current.dayCount, nextValue);
+						});
+						this.render();
+					});
+				});
+
+			new Setting(contentEl)
+				.setName(t('calendar', 'slotMinutes'))
+				.setDesc(t('calendar', 'slotMinutesDesc'))
+				.addDropdown(dropdown => {
+					dropdown.addOption('15', '15');
+					dropdown.addOption('30', '30');
+					dropdown.addOption('60', '60');
+					const currentValue = ['15', '30', '60'].includes(String(preset.slotMinutes))
+						? String(preset.slotMinutes)
+						: '30';
+					dropdown.setValue(currentValue);
+					dropdown.onChange(async value => {
+						const nextValue = parsePresetNumber(value, preset.slotMinutes, 15, 60, 1);
+						await this.updatePreset(current => {
+							current.slotMinutes = nextValue <= 15 ? 15 : nextValue >= 60 ? 60 : 30;
+						});
+					});
+				});
+		}
+
+		const settings = this.options.getSettings();
+		const currentFilter = settings.filterSets.find(entry => entry.id === preset.filterSetId) ?? null;
+		new Setting(contentEl)
+			.setName(t('calendar', 'calendarFilter'))
+			.setDesc(currentFilter?.name ?? t('calendar', 'noFilter'))
+			.addButton(button => {
+				button.setButtonText(t('calendar', 'chooseFilter'));
+				button.onClick(() => {
+					new CalendarFilterPickerModal(this.app, {
+						filterSets: this.options.getSettings().filterSets,
+						onChooseFilter: settingsAsyncHandler('calendar preset filter selection failed', async (filterSetId) => {
+							await this.updatePreset(current => {
+								current.filterSetId = filterSetId;
+							});
+							this.render();
+						}),
+					}).open();
+				});
+			})
+			.addButton(button => {
+				button.setButtonText(t('calendar', 'clearFilter'));
+				button.setDisabled(!preset.filterSetId);
+				button.onClick(settingsAsyncHandler('calendar preset filter clear failed', async () => {
+					await this.updatePreset(current => {
+						current.filterSetId = null;
+					});
+					this.render();
+				}));
+			});
+
+		if (preset.surfaceType === 'timeGrid') {
+			new Setting(contentEl)
+				.setName(t('calendar', 'hiddenTime'))
+				.setDesc(t('calendar', 'hiddenTimeDesc'))
+				.addButton(button => {
+					button.setButtonText(t('calendar', 'hiddenTimeStart', { time: preset.hiddenTimeStart }));
+					button.onClick(() => {
+						showTimePicker(button.buttonEl, {
+							app: this.app,
+							settings: this.options.getSettings(),
+							value: preset.hiddenTimeStart,
+							onSelect: settingsAsyncHandler('calendar preset hidden time start change failed', async (value) => {
+								await this.updatePreset(current => {
+									current.hiddenTimeStart = value;
+								});
+								this.render();
+							}),
+						});
+					});
+				})
+				.addButton(button => {
+					button.setButtonText(t('calendar', 'hiddenTimeEnd', { time: preset.hiddenTimeEnd }));
+					button.onClick(() => {
+						showTimePicker(button.buttonEl, {
+							app: this.app,
+							settings: this.options.getSettings(),
+							value: preset.hiddenTimeEnd,
+							onSelect: settingsAsyncHandler('calendar preset hidden time end change failed', async (value) => {
+								await this.updatePreset(current => {
+									current.hiddenTimeEnd = value;
+								});
+								this.render();
+							}),
+						});
+					});
+				});
+		}
+
+		new Setting(contentEl)
+			.setName(t('calendar', 'taskColorSource'))
+			.setDesc(t('calendar', 'taskColorSourceDesc'))
+			.addDropdown(dropdown => {
+				addTaskColorSourceOptions(dropdown, CALENDAR_TASK_COLOR_SOURCES);
+				dropdown.setValue(preset.colorSource);
+				dropdown.onChange(async value => {
+					await this.updatePreset(current => {
+						current.colorSource = normalizeTaskColorSource(value, CALENDAR_TASK_COLOR_SOURCES, 'taskColor');
+					});
+				});
+			});
+
+		new Setting(contentEl)
+			.setName(t('calendar', 'appearanceLight'))
+			.setDesc(t('calendar', 'appearanceLightDesc'))
+			.addDropdown(dropdown => {
+				addAppearanceSchemeOptions(dropdown, APPEARANCE_SCHEME_LIGHT_OPTIONS);
+				dropdown.setValue(preset.appearanceModeLight);
+				dropdown.onChange(async value => {
+					await this.updatePreset(current => {
+						current.appearanceModeLight = value as CalendarAppearanceMode;
+					});
+				});
+			});
+
+		new Setting(contentEl)
+			.setName(t('calendar', 'appearanceDark'))
+			.setDesc(t('calendar', 'appearanceDarkDesc'))
+			.addDropdown(dropdown => {
+				addAppearanceSchemeOptions(dropdown, APPEARANCE_SCHEME_DARK_OPTIONS);
+				dropdown.setValue(preset.appearanceModeDark);
+				dropdown.onChange(async value => {
+					await this.updatePreset(current => {
+						current.appearanceModeDark = value as CalendarAppearanceMode;
+					});
+				});
+			});
+
+		new Setting(contentEl)
+			.setName(t('calendar', 'showWeekends'))
+			.setDesc(t('calendar', 'showWeekendsDesc'))
+			.addToggle(toggle => {
+				toggle.setValue(preset.showWeekends);
+				toggle.onChange(async value => {
+					await this.updatePreset(current => {
+						current.showWeekends = value;
+					});
+				});
+			});
+
+		const externalCalendars = this.options.getSettings().externalCalendars;
+		if (externalCalendars.length > 0) {
+			contentEl.createEl('h3', {
+				text: t('calendar', 'externalCalendarsSection'),
+				cls: 'operon-preset-settings-section-heading',
+			});
+			for (const source of externalCalendars) {
+				const isVisible = preset.externalCalendarVisibility[source.id] === true;
+				new Setting(contentEl)
+					.setName(source.name || source.url)
+					.addToggle(toggle => {
+						toggle.setValue(isVisible);
+						toggle.onChange(async value => {
+							await this.updatePreset(current => {
+								current.externalCalendarVisibility[source.id] = value;
+							});
+						});
+					});
+			}
+		}
+	}
+
+	private addNumberSetting(
+		container: HTMLElement,
+		name: string,
+		description: string,
+		currentValue: number,
+		min: number,
+		max: number,
+		step: number,
+		onChange: (value: number) => Promise<void>,
+	): void {
+		new Setting(container)
+			.setName(name)
+			.setDesc(description)
+			.addText(text => {
+				text.inputEl.type = 'number';
+				text.inputEl.min = String(min);
+				text.inputEl.max = String(max);
+				text.setValue(String(currentValue));
+				let lastCommittedValue = currentValue;
+				const commit = async (): Promise<void> => {
+					const nextValue = parsePresetNumber(text.inputEl.value, lastCommittedValue, min, max, step);
+					if (text.inputEl.value !== String(nextValue)) {
+						text.setValue(String(nextValue));
+					}
+					if (nextValue === lastCommittedValue) return;
+					await onChange(nextValue);
+					lastCommittedValue = nextValue;
+				};
+				text.inputEl.addEventListener('blur', () => {
+					runSettingsAsync('calendar preset number commit failed', commit);
+				});
+				text.inputEl.addEventListener('keydown', (event) => {
+					if (event.key !== 'Enter') return;
+					event.preventDefault();
+					runSettingsAsync('calendar preset number commit failed', async () => {
+						await commit();
+						text.inputEl.blur();
+					});
+				});
+			});
+	}
+
+	private getPreset(): CalendarPreset | null {
+		return this.options.getSettings().calendarPresets.find(entry => entry.id === this.options.presetId) ?? null;
+	}
+
+	private normalizeWeekCount(value: number | undefined): 1 | 2 | 3 | 4 | 5 | 6 {
+		if (typeof value !== 'number' || !Number.isFinite(value)) return 2;
+		return Math.max(1, Math.min(6, Math.round(value))) as 1 | 2 | 3 | 4 | 5 | 6;
+	}
+
+	private normalizeFocusedWeekNumber(
+		value: number | undefined,
+		weekCount: 1 | 2 | 3 | 4 | 5 | 6,
+	): 1 | 2 | 3 | 4 | 5 | 6 {
+		if (typeof value !== 'number' || !Number.isFinite(value)) return 1;
+		return Math.max(1, Math.min(weekCount, Math.round(value))) as 1 | 2 | 3 | 4 | 5 | 6;
+	}
+
+	private async updatePreset(update: (preset: CalendarPreset) => void): Promise<void> {
+		const preset = this.getPreset();
+		if (!preset) return;
+		update(preset);
+		preset.surfaceType = preset.surfaceType === 'multiWeek' ? 'multiWeek' : 'timeGrid';
+		preset.weekCount = this.normalizeWeekCount(preset.weekCount);
+		preset.focusedWeekNumber = this.normalizeFocusedWeekNumber(preset.focusedWeekNumber, preset.weekCount);
+		preset.todayPosition = Math.max(1, Math.min(preset.dayCount, preset.todayPosition));
+		await this.options.onSave();
+	}
+}

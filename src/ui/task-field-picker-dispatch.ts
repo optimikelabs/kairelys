@@ -1,0 +1,202 @@
+import { App, Notice } from 'obsidian';
+import { IndexedTask } from '../types/fields';
+import { OperonSettings } from '../types/settings';
+import { DEFAULT_PRIORITIES } from '../types/priority';
+import { t } from '../core/i18n';
+import { splitTaskListValue } from '../core/task-field-patch';
+import { showStatusPicker } from './field-pickers/status-picker';
+import { showPriorityPicker } from './field-pickers/priority-picker';
+import { showDatePicker } from './field-pickers/date-picker';
+import { showDatetimePicker } from './field-pickers/datetime-picker';
+import { showTagPicker } from './field-pickers/tag-picker';
+import { showContextsPicker } from './field-pickers/contexts-picker';
+import { showAssigneesPicker } from './field-pickers/assignees-picker';
+import { showRelatedPicker } from './field-pickers/related-picker';
+import { showColorPicker } from './field-pickers/color-picker';
+import { showIconPicker } from './field-pickers/icon-picker';
+import { showRepeatPicker } from './field-pickers/repeat-picker';
+import { showEstimatePicker } from './field-pickers/estimate-picker';
+import { showParentTaskPicker } from './field-pickers/parent-task-picker';
+
+export interface TaskFieldPickerDispatchOptions {
+	app: App;
+	settings: Pick<OperonSettings, 'pipelines' | 'priorities' | 'timeFormat' | 'keyMappings'>;
+	allTasks: IndexedTask[];
+	canonicalKey: string;
+	anchor: HTMLElement | DOMRect;
+	currentFieldValues: Record<string, string>;
+	currentTags: string[];
+	closeListPickerOnSelect?: boolean;
+	retainInputFocus?: boolean;
+	onCommit: (payload: Record<string, string | string[]>) => void;
+	onOpenNote?: () => void;
+	onCancel?: () => void;
+	onClose?: () => void;
+}
+
+export function openTaskFieldPicker(options: TaskFieldPickerDispatchOptions): (() => void) | null {
+	const { canonicalKey, currentFieldValues } = options;
+
+	switch (canonicalKey) {
+		case 'status':
+			return showStatusPicker(options.anchor, {
+				pipelines: options.settings.pipelines,
+				value: currentFieldValues['status'],
+				retainInputFocus: options.retainInputFocus,
+				onSelect: value => options.onCommit({ status: value }),
+				onClear: () => options.onCommit({ status: '' }),
+				onClose: options.onClose,
+			});
+		case 'priority':
+			return showPriorityPicker(options.anchor, {
+				priorities: options.settings.priorities ?? DEFAULT_PRIORITIES,
+				value: currentFieldValues['priority'],
+				retainInputFocus: options.retainInputFocus,
+				onSelect: value => options.onCommit({ priority: value }),
+				onClear: () => options.onCommit({ priority: '' }),
+				onClose: options.onClose,
+			});
+		case 'estimate':
+			return showEstimatePicker(options.anchor, {
+				value: currentFieldValues['estimate'],
+				onSelect: value => options.onCommit({ estimate: value }),
+				canRemove: !!currentFieldValues['estimate'],
+				onRemove: () => options.onCommit({ estimate: '' }),
+				onCancel: options.onCancel,
+				onClose: options.onClose,
+			});
+		case 'dateDue':
+		case 'dateScheduled':
+		case 'dateStarted':
+		case 'dateCompleted':
+		case 'dateCancelled':
+			return showDatePicker(options.anchor, {
+				app: options.app,
+				fieldKey: canonicalKey,
+				value: currentFieldValues[canonicalKey],
+				retainInputFocus: options.retainInputFocus,
+				onSelect: value => options.onCommit({ [canonicalKey]: value }),
+				canRemove: !!currentFieldValues[canonicalKey],
+				onRemove: () => options.onCommit({ [canonicalKey]: '' }),
+				onCancel: options.onCancel,
+				onClose: options.onClose,
+			});
+		case 'datetimeCreated':
+		case 'datetimeStart':
+		case 'datetimeEnd':
+		case 'datetimeRepeatEnd':
+			if (canonicalKey === 'datetimeEnd' && !(currentFieldValues['datetimeStart'] ?? '').trim()) {
+				new Notice(t('taskEditor', 'datetimeEndRequiresStart'));
+				options.onCancel?.();
+				return null;
+			}
+			return showDatetimePicker(options.anchor, {
+				app: options.app,
+				settings: { timeFormat: options.settings.timeFormat },
+				fieldKey: canonicalKey,
+				value: currentFieldValues[canonicalKey],
+				retainInputFocus: options.retainInputFocus,
+				onSelect: value => options.onCommit({ [canonicalKey]: value }),
+				canRemove: !!currentFieldValues[canonicalKey],
+				onRemove: () => options.onCommit({ [canonicalKey]: '' }),
+				onCancel: options.onCancel,
+				onClose: options.onClose,
+			});
+		case 'repeat':
+			return showRepeatPicker(options.anchor, {
+				value: currentFieldValues['repeat'],
+				repeatEnd: currentFieldValues['datetimeRepeatEnd'],
+				repeatSeriesId: currentFieldValues['repeatSeriesId'],
+				taskColor: currentFieldValues['taskColor'],
+				dateScheduled: currentFieldValues['dateScheduled'],
+				dateDue: currentFieldValues['dateDue'],
+				onSave: payload => {
+					options.onCommit({
+						repeat: payload.repeat,
+						datetimeRepeatEnd: payload.datetimeRepeatEnd,
+						...(payload.dateScheduled ? { dateScheduled: payload.dateScheduled } : {}),
+					});
+				},
+				onClear: () => {
+					options.onCommit({
+						repeat: '',
+						datetimeRepeatEnd: '',
+						repeatSeriesId: '',
+						repeatOccurrenceDate: '',
+					});
+				},
+				onCancel: options.onCancel,
+				onClose: options.onClose,
+			});
+		case 'taskIcon':
+			return showIconPicker(options.anchor, {
+				value: currentFieldValues['taskIcon'],
+				retainInputFocus: options.retainInputFocus,
+				onSelect: value => options.onCommit({ taskIcon: value }),
+				onClear: () => options.onCommit({ taskIcon: '' }),
+				onClose: options.onClose,
+			});
+		case 'taskColor':
+			return showColorPicker(options.anchor, {
+				value: currentFieldValues['taskColor'],
+				onSelect: value => options.onCommit({ taskColor: value }),
+				onClear: () => options.onCommit({ taskColor: '' }),
+				onClose: options.onClose,
+			});
+		case 'parentTask':
+			return showParentTaskPicker(options.anchor, {
+				value: currentFieldValues['parentTask'],
+				allTasks: options.allTasks,
+				retainInputFocus: options.retainInputFocus,
+				onSelect: operonId => options.onCommit({ parentTask: operonId }),
+				onClear: () => options.onCommit({ parentTask: '' }),
+				onClose: options.onClose,
+			});
+		case 'tags':
+			return showTagPicker(options.anchor, {
+				app: options.app,
+				value: options.currentTags,
+				closeOnSelect: options.closeListPickerOnSelect,
+				retainInputFocus: options.retainInputFocus,
+				onSave: values => options.onCommit({ tags: values }),
+				onClose: options.onClose,
+			});
+		case 'contexts':
+			return showContextsPicker(options.anchor, {
+				app: options.app,
+				settingsKeyMappings: options.settings.keyMappings,
+				allTasks: options.allTasks,
+				value: splitTaskListValue(currentFieldValues['contexts']),
+				closeOnSelect: options.closeListPickerOnSelect,
+				retainInputFocus: options.retainInputFocus,
+				onSave: values => options.onCommit({ contexts: values.join('; ') }),
+				onClose: options.onClose,
+			});
+		case 'assignees':
+			return showAssigneesPicker(options.anchor, {
+				app: options.app,
+				settingsKeyMappings: options.settings.keyMappings,
+				allTasks: options.allTasks,
+				value: splitTaskListValue(currentFieldValues['assignees']),
+				closeOnSelect: options.closeListPickerOnSelect,
+				retainInputFocus: options.retainInputFocus,
+				onSave: values => options.onCommit({ assignees: values.join('; ') }),
+				onClose: options.onClose,
+			});
+		case 'related':
+			return showRelatedPicker(options.anchor, {
+				app: options.app,
+				allTasks: options.allTasks,
+				value: splitTaskListValue(currentFieldValues['related']),
+				retainInputFocus: options.retainInputFocus,
+				onSave: values => options.onCommit({ related: values.join('; ') }),
+				onClose: options.onClose,
+			});
+		case 'note':
+			options.onOpenNote?.();
+			return null;
+		default:
+			options.onCancel?.();
+			return null;
+	}
+}

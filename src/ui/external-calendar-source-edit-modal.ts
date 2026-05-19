@@ -1,0 +1,161 @@
+import { App, Modal, Notice, Setting } from 'obsidian';
+import { ExternalCalendarSource } from '../types/settings';
+import { t } from '../core/i18n';
+import { bindOperonHoverTooltip } from './operon-hover-tooltip';
+import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
+
+export interface ExternalCalendarSourceEditModalOptions {
+	app: App;
+	source: ExternalCalendarSource;
+	isNew: boolean;
+	onSave: (updated: ExternalCalendarSource) => void | Promise<void>;
+	onCancel?: () => void | Promise<void>;
+	onSyncNow?: () => void | Promise<void>;
+}
+
+const HEX_COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;
+const MIN_REFRESH_HOURS = 1;
+const MAX_REFRESH_HOURS = 720;
+
+export class ExternalCalendarSourceEditModal extends Modal {
+	private readonly source: ExternalCalendarSource;
+	private readonly opts: ExternalCalendarSourceEditModalOptions;
+	private didSave = false;
+
+	constructor(opts: ExternalCalendarSourceEditModalOptions) {
+		super(opts.app);
+		this.opts = opts;
+		this.source = opts.source;
+	}
+
+	onOpen(): void {
+		this.modalEl.addClass('operon-external-calendar-edit-modal-shell');
+		this.contentEl.addClass('operon-external-calendar-edit-modal');
+		this.renderModal();
+	}
+
+	onClose(): void {
+		if (!this.didSave && this.opts.isNew) {
+			void this.opts.onCancel?.();
+		}
+		this.contentEl.empty();
+	}
+
+	private renderModal(): void {
+		const c = this.contentEl;
+		c.empty();
+		c.createEl('h3', {
+			cls: 'operon-external-calendar-edit-modal-title',
+			text: t('settings', 'externalCalendarEditTitle'),
+		});
+
+		new Setting(c)
+			.setName(t('settings', 'externalCalendarEnabled'))
+			.setDesc(t('settings', 'externalCalendarEnabledDesc'))
+			.addToggle(toggle => {
+				toggle.setValue(this.source.enabled);
+				toggle.onChange(value => { this.source.enabled = value; });
+			});
+
+		new Setting(c)
+			.setName(t('settings', 'externalCalendarName'))
+			.setDesc(t('settings', 'externalCalendarNameDesc'))
+			.addText(text => {
+				text.inputEl.addClass('operon-external-calendar-name-input');
+				text.setValue(this.source.name);
+				text.onChange(value => { this.source.name = value; });
+			})
+			.settingEl.addClass('operon-external-calendar-name-setting');
+
+		const urlSetting = new Setting(c)
+			.setName(t('settings', 'externalCalendarUrl'))
+			.setDesc(t('settings', 'externalCalendarUrlDesc'))
+			.addText(text => {
+				text.inputEl.addClass('operon-external-calendar-url-input');
+				text.setValue(this.source.url);
+				text.setPlaceholder(t('settings', 'externalCalendarUrlPlaceholder'));
+				text.onChange(value => { this.source.url = value; });
+			});
+		urlSetting.settingEl.addClass('operon-external-calendar-url-setting');
+
+		new Setting(c)
+			.setName(t('settings', 'externalCalendarHideCreatedEvents'))
+			.setDesc(t('settings', 'externalCalendarHideCreatedEventsDesc'))
+			.addToggle(toggle => {
+				toggle.setValue(this.source.hideCreatedEvents);
+				toggle.onChange(value => { this.source.hideCreatedEvents = value; });
+			});
+
+		new Setting(c)
+			.setName(t('settings', 'externalCalendarColor'))
+			.setDesc(t('settings', 'externalCalendarColorDesc'))
+			.addText(text => {
+				text.inputEl.type = 'color';
+				text.setValue(this.source.color);
+				text.onChange(value => {
+					if (HEX_COLOR_REGEX.test(value)) this.source.color = value;
+				});
+			});
+
+		new Setting(c)
+			.setName(t('settings', 'externalCalendarRefreshHours'))
+			.setDesc(t('settings', 'externalCalendarRefreshHoursDesc'))
+			.addText(text => {
+				text.inputEl.type = 'number';
+				text.inputEl.min = String(MIN_REFRESH_HOURS);
+				text.inputEl.max = String(MAX_REFRESH_HOURS);
+				text.setValue(String(this.source.refreshIntervalHours));
+				text.onChange(value => {
+					const parsed = Number.parseInt(value, 10);
+					if (Number.isFinite(parsed)) {
+						this.source.refreshIntervalHours = Math.min(MAX_REFRESH_HOURS, Math.max(MIN_REFRESH_HOURS, parsed));
+					}
+				});
+			})
+			.addExtraButton(button => {
+				button.setIcon('refresh-cw');
+				if (button.extraSettingsEl) {
+					const label = t('settings', 'externalCalendarSyncNow');
+					setAccessibleLabelWithoutTooltip(button.extraSettingsEl, label);
+					bindOperonHoverTooltip(button.extraSettingsEl, {
+						content: label,
+						taskColor: null,
+					});
+				}
+				const canSync = this.source.url.trim().length > 0 && !!this.opts.onSyncNow;
+				button.setDisabled(!canSync);
+				button.onClick(async () => {
+					if (!this.opts.onSyncNow) return;
+					if (this.source.url.trim().length === 0) return;
+					await this.opts.onSyncNow();
+				});
+			});
+
+		this.renderFooter(c);
+	}
+
+	private renderFooter(container: HTMLElement): void {
+		const row = container.createDiv('operon-external-calendar-edit-modal-footer');
+
+		const cancelBtn = row.createEl('button', { text: t('buttons', 'cancel') });
+		cancelBtn.addEventListener('click', () => this.close());
+
+		const saveBtn = row.createEl('button', { cls: 'mod-cta', text: t('buttons', 'save') });
+		saveBtn.addEventListener('click', () => {
+			void this.handleSaveClick();
+		});
+	}
+
+	private async handleSaveClick(): Promise<void> {
+		const url = this.source.url.trim();
+		if (!url) {
+			new Notice(t('settings', 'externalCalendarUrlRequired'));
+			return;
+		}
+		this.source.url = url;
+		this.source.name = this.source.name.trim();
+		this.didSave = true;
+		await this.opts.onSave(this.source);
+		this.close();
+	}
+}

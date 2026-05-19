@@ -1,0 +1,40 @@
+{
+	"name": "operon",
+	"version": "1.0.0",
+	"description": "Task management system for humans and agents with inline tasks, file tasks, filters, pipelines, pinned tasks, calendar views, Kanban views, recurrence, and time tracking.",
+	"main": "main.js",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"lint": "eslint . --quiet",
+		"lint:report": "eslint .",
+		"lint:strict": "eslint . --max-warnings 0",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"check": "npm run lint:strict && npm run build",
+		"release:guard": "node scripts/release-guard.mjs",
+		"check:local": "npm run check && npm run release:guard && npm run phase5:regression",
+		"phase5:regression": "node scripts/run-phase5-regression.mjs"
+	},
+	"keywords": [],
+	"author": "Hasan Yılmaz",
+	"license": "GPL-3.0-or-later",
+	"devDependencies": {
+		"@eslint/js": "^10.0.1",
+		"@eslint/json": "^1.2.0",
+		"@types/node": "^16.11.6",
+		"@typescript-eslint/parser": "^8.59.2",
+		"esbuild": "^0.28.0",
+		"eslint": "^10.3.0",
+		"eslint-plugin-depend": "^1.3.1",
+		"eslint-plugin-obsidianmd": "^0.3.0",
+		"obsidian": "latest",
+		"tslib": "2.4.0",
+		"typescript": "^5.4.5",
+		"typescript-eslint": "^8.59.2"
+	},
+	"dependencies": {
+		"@codemirror/language": "^6.12.2",
+		"@codemirror/state": "^6.5.0",
+		"@codemirror/view": "^6.38.6",
+		"ical.js": "^2.2.1"
+	}
+}

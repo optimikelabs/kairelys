@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "*.*.*"
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run validation
+        run: npm run check
+
+      - name: Verify tag and manifest metadata
+        run: |
+          node - <<'NODE'
+          const fs = require("fs");
+
+          const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
+          const versions = JSON.parse(fs.readFileSync("versions.json", "utf8"));
+          const tag = process.env.GITHUB_REF_NAME;
+
+          if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(tag)) {
+            console.error(`Release tag ${tag} must be a semver tag without v, for example 1.0.0.`);
+            process.exit(1);
+          }
+
+          if (tag !== manifest.version) {
+            console.error(`Release tag ${tag} does not match manifest version ${manifest.version}.`);
+            process.exit(1);
+          }
+
+          if (tag.startsWith("v")) {
+            console.error("Release tag must not start with v.");
+            process.exit(1);
+          }
+
+          if (versions[tag] !== manifest.minAppVersion) {
+            console.error(`versions.json maps ${tag} to ${versions[tag]}, expected ${manifest.minAppVersion}.`);
+            process.exit(1);
+          }
+          NODE
+
+      - name: Verify release assets
+        run: test -f main.js && test -f manifest.json && test -f styles.css
+
+      - name: Attest manifest
+        uses: actions/attest@v4
+        with:
+          subject-path: manifest.json
+
+      - name: Attest plugin bundle
+        uses: actions/attest@v4
+        with:
+          subject-path: main.js
+
+      - name: Attest styles
+        uses: actions/attest@v4
+        with:
+          subject-path: styles.css
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" main.js manifest.json styles.css --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" main.js manifest.json styles.css --title "$GITHUB_REF_NAME" --notes "Operon $GITHUB_REF_NAME"
+          fi
