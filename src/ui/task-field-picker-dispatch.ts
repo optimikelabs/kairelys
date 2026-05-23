@@ -10,6 +10,7 @@ import { showDatePicker } from './field-pickers/date-picker';
 import { showDatetimePicker } from './field-pickers/datetime-picker';
 import { showTagPicker } from './field-pickers/tag-picker';
 import { showContextsPicker } from './field-pickers/contexts-picker';
+import { showLinksPicker } from './field-pickers/links-picker';
 import { showAssigneesPicker } from './field-pickers/assignees-picker';
 import { showRelatedPicker } from './field-pickers/related-picker';
 import { showColorPicker } from './field-pickers/color-picker';
@@ -170,6 +171,17 @@ export function openTaskFieldPicker(options: TaskFieldPickerDispatchOptions): ((
 				closeOnSelect: options.closeListPickerOnSelect,
 				retainInputFocus: options.retainInputFocus,
 				onSave: values => options.onCommit({ contexts: values.join('; ') }),
+				onClose: options.onClose,
+			});
+		case 'links':
+			return showLinksPicker(options.anchor, {
+				app: options.app,
+				settingsKeyMappings: options.settings.keyMappings,
+				allTasks: options.allTasks,
+				value: splitTaskListValue(currentFieldValues['links']),
+				closeOnSelect: options.closeListPickerOnSelect,
+				retainInputFocus: options.retainInputFocus,
+				onSave: values => options.onCommit({ links: values.join('; ') }),
 				onClose: options.onClose,
 			});
 		case 'assignees':

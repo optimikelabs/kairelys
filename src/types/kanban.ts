@@ -27,6 +27,7 @@ export type KanbanSortField =
 	| 'totalEstimate';
 export type KanbanSortDirection = 'asc' | 'desc';
 export type KanbanSortEmptyPlacement = 'first' | 'last';
+export type KanbanSortMode = 'automatic' | 'manual';
 
 export interface KanbanSortRule {
 	field: KanbanSortField;
@@ -46,6 +47,7 @@ export interface KanbanPreset {
 	collapseEmptyColumns: boolean;
 	collapseEmptySwimlanes: boolean;
 	autoCollapseFinishedColumns: boolean;
+	sortMode: KanbanSortMode;
 	sortRules: KanbanSortRule[];
 }
 
@@ -77,6 +79,7 @@ export interface KanbanDropContext {
 	targetStatusId: string;
 	targetLaneKey: string;
 	swimlaneBy: KanbanSwimlaneBy | null;
+	targetBeforeTaskId: string | null;
 }
 
 export type KanbanCellActionId = 'pickTask' | 'createFileTask' | 'createInlineTask';
@@ -91,6 +94,7 @@ export interface KanbanCellActionContext {
 }
 
 export interface KanbanViewCallbacks {
+	getManualOrder?: (presetId: string) => Record<string, string[]>;
 	onCardDrop?: (context: KanbanDropContext) => void | Promise<void>;
 	onItemAction?: (
 		taskId: string,
@@ -114,6 +118,7 @@ export const DEFAULT_KANBAN_PRESETS: KanbanPreset[] = [
 		collapseEmptyColumns: true,
 		collapseEmptySwimlanes: true,
 		autoCollapseFinishedColumns: false,
+		sortMode: 'automatic',
 		sortRules: createDefaultKanbanSortRules(),
 	},
 ];
@@ -123,6 +128,7 @@ export const KANBAN_COLLAPSED_COLUMN_WIDTH_PX = 56;
 export function cloneDefaultKanbanPresets(): KanbanPreset[] {
 	return DEFAULT_KANBAN_PRESETS.map(preset => ({
 		...preset,
+		sortMode: preset.sortMode ?? 'automatic',
 		sortRules: preset.sortRules.map(rule => ({ ...rule })),
 	}));
 }
@@ -143,6 +149,7 @@ export function normalizeBuiltInKanbanPreset(preset: KanbanPreset): KanbanPreset
 	if (!isLegacyDefaultKanbanPreset(preset)) {
 		return {
 			...preset,
+			sortMode: preset.sortMode ?? 'automatic',
 			sortRules: preset.sortRules.map(rule => ({ ...rule })),
 		};
 	}
@@ -165,6 +172,7 @@ function isLegacyDefaultKanbanPreset(preset: KanbanPreset): boolean {
 		&& preset.collapseEmptyColumns === true
 		&& preset.collapseEmptySwimlanes === true
 		&& preset.autoCollapseFinishedColumns === true
+		&& (preset.sortMode === undefined || preset.sortMode === 'automatic')
 		&& preset.sortRules.length === 1
 		&& preset.sortRules[0]?.field === 'alphabetical'
 		&& preset.sortRules[0]?.direction === 'asc'

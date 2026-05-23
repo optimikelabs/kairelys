@@ -7,6 +7,7 @@ import { isInternalCanonicalKey } from '../types/keys';
 import { IndexedTask } from '../types/fields';
 import { formatAssigneeDisplay } from './field-pickers/assignees-picker';
 import { formatContextDisplay } from './field-pickers/contexts-picker';
+import { parseExternalLinkValue } from './field-pickers/links-utils';
 import { normalizeTagValue } from './field-pickers/tag-picker';
 import { t } from '../core/i18n';
 
@@ -19,8 +20,11 @@ export const COMPACT_VISIBLE_CHIP_KEYS = [
 	'dateDue',
 	'dateCompleted',
 	'dateCancelled',
+	'datetimeStart',
+	'datetimeEnd',
 	'totalDuration',
 	'totalEstimate',
+	'links',
 ] as const;
 
 const COMPACT_INTERNAL_VISIBLE_KEYS = ['operonId', 'datetimeModified', 'taskColor', 'taskIcon'] as const;
@@ -34,6 +38,8 @@ export interface InlineTaskCompactChipEntry {
 	colorRole: 'default' | 'priority' | 'status';
 	iconTone?: 'default' | 'today' | 'overdue';
 	linkTarget: string | null;
+	externalUrl?: string | null;
+	externalRawValue?: string | null;
 	tooltipTitle?: string;
 	tooltipContent?: string;
 }
@@ -127,6 +133,13 @@ export function buildInlineTaskCompactChipEntries(
 				entries.push(createEntry(settings, key, value, item?.iconOnly === true));
 				break;
 			}
+			case 'datetimeStart':
+			case 'datetimeEnd': {
+				const value = fieldValues[key]?.trim();
+				if (!value) break;
+				entries.push(createEntry(settings, key, formatCompactDatetimeTime(value, settings), item?.iconOnly === true));
+				break;
+			}
 			case 'assignees': {
 				for (const rawValue of splitTaskListValue(fieldValues['assignees'])) {
 					entries.push(createEntry(
@@ -152,6 +165,30 @@ export function buildInlineTaskCompactChipEntries(
 						!!extractWikiLinkTarget(rawValue),
 						extractWikiLinkTarget(rawValue),
 					));
+				}
+				break;
+			}
+			case 'links': {
+				for (const rawValue of splitTaskListValue(fieldValues['links'])) {
+					const parsed = parseExternalLinkValue(rawValue);
+					if (!parsed) continue;
+					const label = truncateCompactLabel(parsed.displayValue);
+					const entry = createEntry(
+						settings,
+						key,
+						label,
+						item?.iconOnly === true,
+						'default',
+						true,
+						null,
+						parsed.url,
+						parsed.rawValue,
+					);
+					if (label !== parsed.displayValue || parsed.isMarkdown) {
+						entry.tooltipTitle = t('taskEditor', 'links');
+						entry.tooltipContent = parsed.url;
+					}
+					entries.push(entry);
 				}
 				break;
 			}
@@ -252,6 +289,8 @@ function isSuppressedByTerminalDate(
 		|| key === 'dateScheduled'
 		|| key === 'dateDue'
 		|| key === 'dateStarted'
+		|| key === 'datetimeStart'
+		|| key === 'datetimeEnd'
 		|| key === 'estimate';
 }
 
@@ -270,7 +309,7 @@ export function createInlineTaskCompactChipElement(
 		'operon-chip',
 		'operon-live-preview-chip',
 		'operon-inline-compact-chip',
-		entry.linkTarget ? 'is-linked' : '',
+		entry.linkTarget || entry.externalUrl ? 'is-linked' : '',
 		iconOnly ? 'is-icon-only' : '',
 		entry.key === 'priority' ? 'operon-chip-priority' : 'operon-chip-date',
 		entry.interactive ? 'operon-chip-clickable' : 'operon-chip-readonly',
@@ -298,6 +337,8 @@ function createEntry(
 	colorRole: InlineTaskCompactChipEntry['colorRole'] = 'default',
 	interactive = true,
 	linkTarget: string | null = null,
+	externalUrl: string | null = null,
+	externalRawValue: string | null = null,
 ): InlineTaskCompactChipEntry {
 	return {
 		key,
@@ -307,6 +348,8 @@ function createEntry(
 		interactive,
 		colorRole,
 		linkTarget,
+		externalUrl,
+		externalRawValue,
 	};
 }
 
@@ -320,6 +363,8 @@ function hasCompactValue(
 		case 'assignees':
 		case 'contexts':
 			return splitTaskListValue(fieldValues[key]).length > 0;
+		case 'links':
+			return splitTaskListValue(fieldValues['links']).some(value => !!parseExternalLinkValue(value));
 		case 'tags':
 			return tags.map(normalizeTagValue).filter(Boolean).length > 0;
 		case 'duration':
@@ -354,6 +399,21 @@ function formatDuration(totalSeconds: number): string {
 	if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
 	if (hours > 0) return `${hours}h`;
 	return `${Math.max(1, minutes)}m`;
+}
+
+function formatCompactDatetimeTime(value: string, settings: Pick<OperonSettings, 'timeFormat'>): string {
+	const match = /(?:^|T)(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(value.trim());
+	if (!match) return value;
+	const hour = Number.parseInt(match[1], 10);
+	const minute = match[2];
+	if (!Number.isFinite(hour) || hour < 0 || hour > 24) return value;
+	if (settings.timeFormat !== '12h') {
+		return `${String(hour).padStart(2, '0')}:${minute}`;
+	}
+	const normalizedHour = hour % 24;
+	const displayHour = normalizedHour % 12 || 12;
+	const suffix = normalizedHour >= 12 ? 'PM' : 'AM';
+	return `${displayHour}:${minute} ${suffix}`;
 }
 
 function extractWikiLinkTarget(rawValue: string): string | null {

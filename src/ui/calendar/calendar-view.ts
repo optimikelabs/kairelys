@@ -1500,7 +1500,7 @@ export class CalendarView extends ItemView {
 		);
 		this.createToolbarButton(
 			navRow,
-			this.formatTodayButtonLabel(),
+			this.formatFocusedDateButtonLabel(state.anchorDate),
 			() => {
 				void this.handleTodayButtonClick(state, preset);
 			},
@@ -2495,7 +2495,7 @@ export class CalendarView extends ItemView {
 			this.createToolbarIconButton(navGroup, ['step-back'], () => {
 				void this.shiftCalendarAnchorByDays(-1);
 			}, t('calendar', 'previousDay'), t('calendar', 'previousDayTooltip'));
-		this.createToolbarButton(navGroup, this.formatTodayButtonLabel(), () => {
+		this.createToolbarButton(navGroup, this.formatFocusedDateButtonLabel(state.anchorDate), () => {
 			void this.handleTodayButtonClick(state, preset);
 		});
 			this.createToolbarIconButton(navGroup, ['step-forward'], () => {
@@ -4704,11 +4704,12 @@ export class CalendarView extends ItemView {
 		return null;
 	}
 
-	private formatTodayButtonLabel(): string {
+	private formatFocusedDateButtonLabel(dateKey: string): string {
+		const date = this.parseDateKey(dateKey) ?? this.parseDateKey(localToday()) ?? new Date();
 		return new Intl.DateTimeFormat(undefined, {
 			day: 'numeric',
 			month: 'long',
-		}).format(new Date());
+		}).format(date);
 	}
 
 	private formatWeekdayLabel(dateKey: string): string {
@@ -4730,7 +4731,7 @@ export class CalendarView extends ItemView {
 
 	private buildTimedMetrics(preset: CalendarPreset, isHiddenExpanded: boolean): CalendarTimedMetrics {
 		const hiddenRange = this.resolveHiddenTimeRange(preset);
-		const scale = Math.max(1.5, Math.min(4, this.getSettings().calendarTimeGridScale || 2));
+		const scale = Math.max(0.5, Math.min(4, this.getSettings().calendarTimeGridScale || 2));
 		const collapsedBandHeight = hiddenRange.enabled && !isHiddenExpanded
 			? Math.max(16, Math.round(32 * scale))
 			: 0;

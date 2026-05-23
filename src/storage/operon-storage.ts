@@ -15,6 +15,7 @@ import { FilterStore } from './filter-store';
 import { PipelineStore, PipelineStoreSettings } from './pipeline-store';
 import { CalendarPresetStore, CalendarPresetStoreSettings } from './calendar-preset-store';
 import { KanbanPresetStore, KanbanPresetStoreSettings } from './kanban-preset-store';
+import { KanbanOrderStore } from './kanban-order-store';
 import { KeyMappingStore } from './key-mapping-store';
 import { PriorityStore, PriorityStoreSettings } from './priority-store';
 import { ExternalCalendarSourceStore } from './external-calendar-source-store';
@@ -218,6 +219,7 @@ export class OperonStorage {
 	private pipelineStore: PipelineStore;
 	private calendarPresetStore: CalendarPresetStore;
 	private kanbanPresetStore: KanbanPresetStore;
+	private kanbanOrderStore: KanbanOrderStore;
 	private keyMappingStore: KeyMappingStore;
 	private priorityStore: PriorityStore;
 	private externalCalendarSourceStore: ExternalCalendarSourceStore;
@@ -250,6 +252,7 @@ export class OperonStorage {
 			this.writeQueue,
 			pickKanbanPresetStoreSettings(DEFAULT_SETTINGS),
 		);
+		this.kanbanOrderStore = new KanbanOrderStore(app, this.writeQueue);
 		this.keyMappingStore = new KeyMappingStore(app, this.writeQueue);
 		this.priorityStore = new PriorityStore(
 			app,
@@ -285,6 +288,7 @@ export class OperonStorage {
 	 */
 	async initialize(): Promise<void> {
 		await this.ensureDataFolder();
+		const hadSettingsFile = await this.app.vault.adapter.exists(SETTINGS_FILE);
 		await this.loadSettings();
 		const hadPersistedKeyMappings = Array.isArray(this.loadedSettingsSource.keyMappings);
 		const hadPersistedFilters = Array.isArray(this.loadedSettingsSource.filterSets);
@@ -302,6 +306,9 @@ export class OperonStorage {
 			|| (hasLegacyTaskBarChipSettings(this.loadedSettingsSource) && !(await this.taskUiPreferenceStore.exists()));
 		await this.keyMappingStore.load(hadPersistedKeyMappings ? this.settings.keyMappings : null, DEFAULT_SETTINGS.keyMappings);
 		await this.filterStore.load(hadPersistedFilters ? this.settings.filterSets : []);
+		if (!hadSettingsFile && !hadPersistedFilters && this.filterStore.getAll().length === 0) {
+			await this.filterStore.replaceAll(DEFAULT_SETTINGS.filterSets);
+		}
 		await this.pipelineStore.load(
 			hadPersistedPipelines ? pickPipelineStoreSettings(this.settings) : null,
 			pickPipelineStoreSettings(DEFAULT_SETTINGS),
@@ -378,6 +385,7 @@ export class OperonStorage {
 		await this.activeTrackerStore.load();
 		await this.repeatSeriesStore.load();
 		await this.externalCalendarCache.load();
+		await this.kanbanOrderStore.load();
 	}
 
 	/**
@@ -612,6 +620,7 @@ export class OperonStorage {
 	get pipelines(): PipelineStore { return this.pipelineStore; }
 	get calendarPresets(): CalendarPresetStore { return this.calendarPresetStore; }
 	get kanbanPresets(): KanbanPresetStore { return this.kanbanPresetStore; }
+	get kanbanOrder(): KanbanOrderStore { return this.kanbanOrderStore; }
 	get keyMappings(): KeyMappingStore { return this.keyMappingStore; }
 	get priorities(): PriorityStore { return this.priorityStore; }
 

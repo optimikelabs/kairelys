@@ -6,6 +6,7 @@ import {
 	KanbanPreset,
 	KanbanSortDirection,
 	KanbanSortEmptyPlacement,
+	KanbanSortMode,
 	KanbanSortRule,
 	KanbanSwimlaneBy,
 } from '../../types/kanban';
@@ -25,6 +26,7 @@ interface KanbanPresetQuickSettingsModalOptions {
 	getSettings: () => OperonSettings;
 	presetId: string;
 	onSave: () => Promise<void>;
+	onSortModeChange?: (presetId: string, sortMode: KanbanSortMode) => Promise<void>;
 }
 
 export class KanbanPresetQuickSettingsModal extends Modal {
@@ -230,6 +232,11 @@ export class KanbanPresetQuickSettingsModal extends Modal {
 			text: t('settings', 'kanbanSortingDesc'),
 			cls: 'setting-item-description',
 		});
+		this.renderSortModeControl(container, preset);
+		if (preset.sortMode === 'manual') {
+			this.renderManualSortMessage(container);
+			return;
+		}
 
 			const section = container.createDiv('operon-kanban-sort-rules');
 
@@ -311,6 +318,40 @@ export class KanbanPresetQuickSettingsModal extends Modal {
 			});
 			this.render();
 		}));
+	}
+
+	private renderSortModeControl(container: HTMLElement, preset: KanbanPreset): void {
+		const row = container.createDiv('operon-kanban-sort-mode-row');
+		row.createSpan({ text: t('settings', 'kanbanSortMode'), cls: 'operon-kanban-sort-label' });
+		const controls = row.createDiv('operon-kanban-sort-mode-control');
+		this.renderSortModeButton(controls, preset, 'automatic');
+		this.renderSortModeButton(controls, preset, 'manual');
+	}
+
+	private renderSortModeButton(container: HTMLElement, preset: KanbanPreset, sortMode: KanbanSortMode): void {
+		const button = container.createEl('button', {
+			text: t('settings', sortMode === 'manual' ? 'kanbanSortModeManual' : 'kanbanSortModeAutomatic'),
+			cls: 'operon-kanban-sort-mode-button',
+			attr: {
+				type: 'button',
+				'aria-pressed': preset.sortMode === sortMode ? 'true' : 'false',
+			},
+		});
+		button.classList.toggle('is-active', preset.sortMode === sortMode);
+		button.addEventListener('click', settingsAsyncHandler('kanban preset sort mode change failed', async () => {
+			if (preset.sortMode === sortMode) return;
+			await this.updatePreset(current => {
+				current.sortMode = sortMode;
+			});
+			await this.options.onSortModeChange?.(preset.id, sortMode);
+			this.render();
+		}));
+	}
+
+	private renderManualSortMessage(container: HTMLElement): void {
+		const message = container.createDiv('operon-kanban-manual-sort-message');
+		message.createDiv({ text: t('settings', 'kanbanManualOrderingActive') });
+		message.createDiv({ text: t('settings', 'kanbanManualOrderingDesc') });
 	}
 
 	private addNumberSetting(

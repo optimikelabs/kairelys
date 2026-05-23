@@ -81,6 +81,7 @@ export function buildKanbanOptimisticStatusMovePlan(options: {
 			targetStatusId: targetStatus.id,
 			targetLaneKey: sourceLaneKey ?? sourceLaneKeys[0],
 			targetLaneKeys: sourceLaneKeys,
+			targetBeforeTaskId: null,
 			swimlaneBy: preset.swimlaneBy,
 			statusValue: optimistic.nextStatus,
 			checkbox: optimistic.nextCheckbox,
@@ -125,6 +126,7 @@ export function applyKanbanOptimisticMovesToBoard(
 	priorities: PriorityDefinition[],
 	moves: Iterable<KanbanOptimisticMove>,
 ): void {
+	const isManualOrder = board.preset.sortMode === 'manual';
 	const comparator = buildKanbanTaskComparator({
 		preset: board.preset,
 		priorities,
@@ -140,39 +142,65 @@ export function applyKanbanOptimisticMovesToBoard(
 			? sourceLaneKeys.map(laneKey => buildKanbanCellKey(move.sourceStatusId!, laneKey))
 			: [];
 		const targetKeys = targetLaneKeys.map(laneKey => buildKanbanCellKey(move.targetStatusId, laneKey));
-		if (sourceKeys.length === targetKeys.length && sourceKeys.every((key, index) => key === targetKeys[index])) continue;
+		const sameCells = sourceKeys.length === targetKeys.length && sourceKeys.every((key, index) => key === targetKeys[index]);
+		if (sameCells && !isManualOrder) continue;
 
 		for (const sourceKey of sourceKeys) {
 			removeTaskFromBoardCell(board, sourceKey, move.taskId);
-			incrementCellCount(board, sourceKey, -1);
+			if (!sameCells) incrementCellCount(board, sourceKey, -1);
 		}
-		for (const targetKey of targetKeys) {
-			incrementCellCount(board, targetKey, 1);
+		if (!sameCells) {
+			for (const targetKey of targetKeys) {
+				incrementCellCount(board, targetKey, 1);
+			}
 		}
 
-		if (move.sourceStatusId && move.sourceStatusId !== move.targetStatusId) {
+		if (!sameCells && move.sourceStatusId && move.sourceStatusId !== move.targetStatusId) {
 			incrementColumnCount(board, move.sourceStatusId, -1);
 			incrementColumnCount(board, move.targetStatusId, 1);
 		}
 
-		for (const laneKey of sourceLaneKeys) {
-			if (!targetLaneKeys.includes(laneKey)) incrementLaneCount(board, laneKey, -1);
-		}
-		for (const laneKey of targetLaneKeys) {
-			if (!sourceLaneKeys.includes(laneKey)) incrementLaneCount(board, laneKey, 1);
+		if (!sameCells) {
+			for (const laneKey of sourceLaneKeys) {
+				if (!targetLaneKeys.includes(laneKey)) incrementLaneCount(board, laneKey, -1);
+			}
+			for (const laneKey of targetLaneKeys) {
+				if (!sourceLaneKeys.includes(laneKey)) incrementLaneCount(board, laneKey, 1);
+			}
 		}
 
 		for (const targetLaneKey of targetLaneKeys) {
 			const targetKey = buildKanbanCellKey(move.targetStatusId, targetLaneKey);
 			const targetTask = buildOptimisticMovedTask(task, move, board, targetLaneKey);
 			const targetTasks = board.cellMap.get(targetKey) ?? [];
-			if (!targetTasks.some(entry => entry.operonId === targetTask.operonId)) {
-				targetTasks.push(targetTask);
+			if (isManualOrder) {
+				insertManualOptimisticTask(targetTasks, targetTask, move.targetBeforeTaskId);
+			} else {
+				if (!targetTasks.some(entry => entry.operonId === targetTask.operonId)) {
+					targetTasks.push(targetTask);
+				}
+				targetTasks.sort(comparator);
 			}
-			targetTasks.sort(comparator);
 			board.cellMap.set(targetKey, targetTasks);
 		}
 	}
+}
+
+function insertManualOptimisticTask(
+	tasks: IndexedTask[],
+	task: IndexedTask,
+	beforeTaskId: string | null,
+): void {
+	const nextTasks = tasks.filter(entry => entry.operonId !== task.operonId);
+	const beforeIndex = beforeTaskId
+		? nextTasks.findIndex(entry => entry.operonId === beforeTaskId)
+		: -1;
+	if (beforeIndex >= 0) {
+		nextTasks.splice(beforeIndex, 0, task);
+	} else {
+		nextTasks.push(task);
+	}
+	tasks.splice(0, tasks.length, ...nextTasks);
 }
 
 function buildOptimisticMovedTask(

@@ -3,6 +3,7 @@ import { t } from '../../core/i18n';
 import { getAppLocale } from '../../core/obsidian-app';
 import { OperonSettings } from '../../types/settings';
 import { createButton, createFloatingPanel, focusFloatingInput, resolvePickerApp, scrollChildIntoView } from './common';
+import { appendDatePickerCandidateRow } from './date-picker-row';
 import {
 	buildDatePickerCandidates,
 	DateParseCandidate,
@@ -304,14 +305,7 @@ export function showDatetimePicker(anchor: HTMLElement | DOMRect, options: Datet
 			button.type = 'button';
 			button.className = 'operon-field-menu-item operon-date-picker-item';
 			if (index === activeDateIndex) button.classList.add('is-active');
-
-			const primary = button.createSpan('operon-date-picker-item-primary');
-			primary.textContent = candidate.primaryLabel;
-
-			if (candidate.secondaryLabel) {
-				const secondary = button.createSpan('operon-date-picker-item-secondary');
-				secondary.textContent = candidate.secondaryLabel;
-			}
+			appendDatePickerCandidateRow(button, candidate, language);
 
 			button.addEventListener('mousemove', () => {
 				if (activeDateIndex === index) return;

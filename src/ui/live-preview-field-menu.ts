@@ -11,6 +11,7 @@ import { showDatePicker } from './field-pickers/date-picker';
 import { showDatetimePicker } from './field-pickers/datetime-picker';
 import { showTagPicker } from './field-pickers/tag-picker';
 import { showContextsPicker } from './field-pickers/contexts-picker';
+import { showLinksPicker } from './field-pickers/links-picker';
 import { showAssigneesPicker } from './field-pickers/assignees-picker';
 import { showColorPicker } from './field-pickers/color-picker';
 import { showRepeatPicker } from './field-pickers/repeat-picker';
@@ -88,7 +89,7 @@ export function showLivePreviewFieldMenu(anchor: HTMLElement | DOMRect, options:
 	const addHeader = panel.createDiv('operon-floating-subtitle');
 	addHeader.textContent = t('taskEditor', 'fieldMenuAddField');
 
-	for (const key of ['status', 'priority', 'dateDue', 'dateScheduled', 'dateStarted', 'datetimeCreated', 'dateCompleted', 'dateCancelled', 'datetimeStart', 'datetimeEnd', 'repeat', 'tags', 'contexts', 'assignees', 'taskColor', 'subtasks', 'blocking', 'blockedBy']) {
+	for (const key of ['status', 'priority', 'dateDue', 'dateScheduled', 'dateStarted', 'datetimeCreated', 'dateCompleted', 'dateCancelled', 'datetimeStart', 'datetimeEnd', 'repeat', 'tags', 'contexts', 'links', 'assignees', 'taskColor', 'subtasks', 'blocking', 'blockedBy']) {
 		panel.appendChild(buildItem(getDisplayName(key, forwardMap), () => {
 			const pickerAnchor = snapshotFloatingAnchor(anchor);
 			close();
@@ -253,6 +254,17 @@ function openPicker(key: string, anchor: HTMLElement | DOMRect, options: LivePre
 				closeOnSelect: true,
 				retainInputFocus: true,
 				onSave: values => options.updateField('contexts', values.join('; '), restoreCursor),
+			});
+			return;
+		case 'links':
+			showLinksPicker(anchor, {
+				app: options.app,
+				settingsKeyMappings: options.settings.keyMappings,
+				allTasks: options.allTasks,
+				value: splitList(fieldValues['links']),
+				closeOnSelect: !!options.editorView,
+				retainInputFocus: true,
+				onSave: values => options.updateField('links', values.join('; '), restoreCursor),
 			});
 			return;
 		case 'assignees':

@@ -935,9 +935,18 @@ export class TaskFinderModal extends Modal {
 				iconOnly: false,
 				interactive: false,
 				linkTarget: null,
+				externalUrl: null,
+				externalRawValue: null,
 			};
 			const chip = createInlineTaskCompactChipElement(visualEntry, 'operon-task-finder-chip', { forceFull: true });
 			this.applyChipVisualStyles(chip, visualEntry, task);
+			if (visualEntry.tooltipContent) {
+				bindOperonHoverTooltip(chip, {
+					title: visualEntry.tooltipTitle ?? t('taskEditor', 'details'),
+					content: visualEntry.tooltipContent,
+					taskColor: null,
+				});
+			}
 			container.appendChild(chip);
 		}
 	}

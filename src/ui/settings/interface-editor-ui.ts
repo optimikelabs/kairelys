@@ -109,6 +109,50 @@ function moveInterfaceItem<TItem extends object>(
 	return next;
 }
 
+interface ScrollSnapshot {
+	element: Element;
+	scrollLeft: number;
+	scrollTop: number;
+}
+
+function captureScrollSnapshot(anchorEl: HTMLElement): ScrollSnapshot | null {
+	const scrollEl = findScrollableAncestor(anchorEl);
+	if (!scrollEl) return null;
+	return {
+		element: scrollEl,
+		scrollLeft: scrollEl.scrollLeft,
+		scrollTop: scrollEl.scrollTop,
+	};
+}
+
+function findScrollableAncestor(anchorEl: HTMLElement): Element | null {
+	let current: HTMLElement | null = anchorEl;
+	while (current) {
+		const style = getComputedStyle(current);
+		if (current.scrollHeight > current.clientHeight && /auto|scroll|overlay/u.test(style.overflowY)) {
+			return current;
+		}
+		current = current.parentElement;
+	}
+	return anchorEl.ownerDocument.scrollingElement;
+}
+
+function restoreScrollSnapshot(snapshot: ScrollSnapshot | null): void {
+	if (!snapshot) return;
+	const restore = (): void => {
+		snapshot.element.scrollTop = snapshot.scrollTop;
+		snapshot.element.scrollLeft = snapshot.scrollLeft;
+	};
+	restore();
+	snapshot.element.ownerDocument.defaultView?.requestAnimationFrame(restore);
+}
+
+function rerenderRowsPreservingScroll(anchorEl: HTMLElement, renderRows: () => void): void {
+	const snapshot = captureScrollSnapshot(anchorEl);
+	renderRows();
+	restoreScrollSnapshot(snapshot);
+}
+
 export function createInterfaceIconToggleButton(options: InterfaceIconToggleButtonOptions): HTMLButtonElement {
 	const buttonEl = options.containerEl.createEl('button', {
 		cls: `operon-interface-icon-toggle-button ${options.className}`.trim(),
@@ -201,7 +245,7 @@ export function renderInterfaceIconToggleSection<
 						entryIndex === index ? { ...entry, visible: !entry.visible } : entry,
 					));
 					await options.save();
-					renderRows();
+					rerenderRowsPreservingScroll(section, renderRows);
 				},
 			});
 
@@ -221,7 +265,7 @@ export function renderInterfaceIconToggleSection<
 							entryIndex === index ? { ...entry, iconOnly: !entry.iconOnly } : entry,
 						));
 						await options.save();
-						renderRows();
+						rerenderRowsPreservingScroll(section, renderRows);
 					},
 				});
 			}
@@ -238,7 +282,7 @@ export function renderInterfaceIconToggleSection<
 					if (index === 0) return;
 					options.setItems(moveInterfaceItem(items, index, index - 1));
 					await options.save();
-					renderRows();
+					rerenderRowsPreservingScroll(section, renderRows);
 				});
 			});
 
@@ -250,7 +294,7 @@ export function renderInterfaceIconToggleSection<
 					if (index >= items.length - 1) return;
 					options.setItems(moveInterfaceItem(items, index, index + 1));
 					await options.save();
-					renderRows();
+					rerenderRowsPreservingScroll(section, renderRows);
 				});
 			});
 		});
@@ -266,7 +310,7 @@ export function renderInterfaceIconToggleSection<
 				errorContext: options.actionErrorContext,
 				onClick: async () => {
 					await action.onToggle();
-					renderRows();
+					rerenderRowsPreservingScroll(section, renderRows);
 				},
 			});
 		}
@@ -325,7 +369,7 @@ function renderInterfaceIconRowListSection<
 					if (index === 0) return;
 					options.setItems(moveInterfaceItem(items, index, index - 1));
 					await options.save();
-					renderRows();
+					rerenderRowsPreservingScroll(sectionEl, renderRows);
 				},
 			});
 
@@ -340,7 +384,7 @@ function renderInterfaceIconRowListSection<
 					if (index >= items.length - 1) return;
 					options.setItems(moveInterfaceItem(items, index, index + 1));
 					await options.save();
-					renderRows();
+					rerenderRowsPreservingScroll(sectionEl, renderRows);
 				},
 			});
 
@@ -362,7 +406,7 @@ function renderInterfaceIconRowListSection<
 							entryIndex === index ? { ...entry, iconOnly: !entry.iconOnly } : entry,
 						));
 						await options.save();
-						renderRows();
+						rerenderRowsPreservingScroll(sectionEl, renderRows);
 					},
 				});
 			}
@@ -381,7 +425,7 @@ function renderInterfaceIconRowListSection<
 						entryIndex === index ? { ...entry, visible: !entry.visible } : entry,
 					));
 					await options.save();
-					renderRows();
+					rerenderRowsPreservingScroll(sectionEl, renderRows);
 				},
 			});
 		});
@@ -412,7 +456,7 @@ function renderInterfaceIconRowListSection<
 				errorContext: options.actionErrorContext,
 				onClick: async () => {
 					await action.onToggle();
-					renderRows();
+					rerenderRowsPreservingScroll(sectionEl, renderRows);
 				},
 			});
 		}

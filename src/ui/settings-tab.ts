@@ -31,6 +31,7 @@ import {
 	KanbanPreset,
 	KanbanSortDirection,
 	KanbanSortEmptyPlacement,
+	KanbanSortMode,
 	KanbanSortRule,
 	KanbanSwimlaneBy,
 	createDefaultKanbanSortRules,
@@ -105,10 +106,14 @@ import {
 	sanitizeExcludedFoldersForFileTasksFolder,
 } from '../core/settings-folder-rules';
 import { renderCompactChipSettingsSection } from './settings/compact-chip-settings-renderer';
-import { settingsAsyncHandler } from './settings/async-settings-action';
+import { runSettingsAsync, settingsAsyncHandler } from './settings/async-settings-action';
 import { parsePresetNumber } from './settings/preset-control-helpers';
 import { shouldRenderRepeatSeriesYamlRemovalRow } from './settings/repeat-yaml-removal-visibility';
 import { renderSettingsTabFramework, type SettingsTabDefinition } from './settings/settings-tab-framework';
+import {
+	maybeCopyKanbanManualOrderForPresetDuplicate,
+	removeKanbanManualOrderForPresetDelete,
+} from '../systems/kanban-manual-order-runtime';
 import { createSettingsCollapsibleCard } from './settings/collapsible-card';
 import {
 	createWorkflowActionButton,
@@ -333,6 +338,10 @@ export class OperonSettingsTab extends PluginSettingTab {
 	private applyPipelineRenameMigration: (preview: PipelineRenamePreview) => Promise<PipelineRenameExecutionResult>;
 	private applyPriorityRenameMigration: (preview: PriorityRenamePreview) => Promise<PriorityRenameExecutionResult>;
 	private syncExternalCalendarSourceNow: (sourceId: string) => Promise<void>;
+	private handleKanbanSortModeChange: (presetId: string, sortMode: KanbanSortMode) => Promise<void>;
+	private copyKanbanManualOrder: (sourcePresetId: string, targetPresetId: string) => Promise<void>;
+	private removeKanbanManualOrder: (presetId: string) => Promise<void>;
+	private createBasicsWorkspace: () => Promise<void>;
 
 	constructor(
 		app: App,
@@ -358,6 +367,10 @@ export class OperonSettingsTab extends PluginSettingTab {
 		applyPipelineRenameMigration?: (preview: PipelineRenamePreview) => Promise<PipelineRenameExecutionResult>,
 		applyPriorityRenameMigration?: (preview: PriorityRenamePreview) => Promise<PriorityRenameExecutionResult>,
 		syncExternalCalendarSourceNow?: (sourceId: string) => Promise<void>,
+		handleKanbanSortModeChange?: (presetId: string, sortMode: KanbanSortMode) => Promise<void>,
+		copyKanbanManualOrder?: (sourcePresetId: string, targetPresetId: string) => Promise<void>,
+		removeKanbanManualOrder?: (presetId: string) => Promise<void>,
+		createBasicsWorkspace?: () => Promise<void>,
 	) {
 		super(app, plugin);
 		this.settings = settings;
@@ -399,6 +412,10 @@ export class OperonSettingsTab extends PluginSettingTab {
 				touchedFileCount: 0,
 			}));
 		this.syncExternalCalendarSourceNow = syncExternalCalendarSourceNow ?? (async () => { });
+		this.handleKanbanSortModeChange = handleKanbanSortModeChange ?? (async () => { });
+		this.copyKanbanManualOrder = copyKanbanManualOrder ?? (async () => { });
+		this.removeKanbanManualOrder = removeKanbanManualOrder ?? (async () => { });
+		this.createBasicsWorkspace = createBasicsWorkspace ?? (async () => { });
 	}
 
 	private makeEvalDeps(): FilterModalEvalDeps | null {
@@ -551,6 +568,18 @@ export class OperonSettingsTab extends PluginSettingTab {
 				this.display();
 			},
 		});
+
+		new Setting(containerEl)
+			.setName(t('settings', 'demoWorkspace'))
+			.setDesc(t('settings', 'demoWorkspaceDesc'))
+			.addButton(button => {
+				button
+					.setButtonText(t('settings', 'demoWorkspaceCreate'))
+					.setCta()
+					.onClick(settingsAsyncHandler('settings create demo workspace failed', async () => {
+						await this.createBasicsWorkspace();
+					}));
+			});
 	}
 
 	private renderInterfaceContextMenuTab(containerEl: HTMLElement): void {
@@ -1681,7 +1710,6 @@ export class OperonSettingsTab extends PluginSettingTab {
 			min: 0,
 			max: 2000,
 			fallback: DEFAULT_SETTINGS.contextualMenuOpenDelayMs,
-			syncInput: true,
 		});
 		const enabledActionIds = this.settings.contextualMenuActionAllowlist
 			.filter(id => CONFIGURABLE_CONTEXTUAL_MENU_ACTIONS.some(action => action.id === id));
@@ -1950,7 +1978,6 @@ export class OperonSettingsTab extends PluginSettingTab {
 				min: 0,
 				max: 23,
 				fallback: DEFAULT_SETTINGS.calendarDefaultScrollHour,
-				syncInput: true,
 			});
 		}
 
@@ -2026,7 +2053,6 @@ export class OperonSettingsTab extends PluginSettingTab {
 			max: CALENDAR_SIDEBAR_WIDTH_MAX,
 			fallback: DEFAULT_SETTINGS.calendarSidebarWidthPx,
 			step: '1',
-			syncInput: true,
 		});
 		this.renderBoundDropdownSetting(sidebarBody, t('settings', 'calendarSidebarCalendarsDefaultState'), t('settings', 'calendarSidebarCalendarsDefaultStateDesc'), 'calendarSidebarCalendarsDefaultExpanded', {
 			value: this.settings.calendarSidebarCalendarsDefaultExpanded ? 'expanded' : 'collapsed',
@@ -2265,7 +2291,6 @@ export class OperonSettingsTab extends PluginSettingTab {
 			max: KANBAN_EXPANDED_COLUMN_WIDTH_MAX,
 			fallback: DEFAULT_SETTINGS.kanbanExpandedColumnWidthPx,
 			step: '1',
-			syncInput: true,
 		});
 
 		this.renderBoundClampedNumericSetting(containerEl, t('settings', 'kanbanSwimlaneMaxHeight'), t('settings', 'kanbanSwimlaneMaxHeightDesc'), 'kanbanMaxVisibleTasksPerCell', {
@@ -2273,7 +2298,6 @@ export class OperonSettingsTab extends PluginSettingTab {
 			max: KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MAX,
 			fallback: DEFAULT_SETTINGS.kanbanMaxVisibleTasksPerCell,
 			step: '1',
-			syncInput: true,
 		});
 
 		renderSettingsHeading(containerEl, t('settings', 'kanbanPresets'));
@@ -2301,6 +2325,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 				collapseEmptyColumns: true,
 				collapseEmptySwimlanes: true,
 				autoCollapseFinishedColumns: true,
+				sortMode: 'automatic',
 				sortRules: createDefaultKanbanSortRules(),
 			};
 			this.settings.kanbanPresets.push(preset);
@@ -2405,6 +2430,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 				};
 				this.settings.kanbanPresets.splice(index + 1, 0, copy);
 				await this.saveSettings();
+				await maybeCopyKanbanManualOrderForPresetDuplicate(preset, copy.id, this.copyKanbanManualOrder);
 				this.display();
 			},
 		});
@@ -2429,6 +2455,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 					this.settings.kanbanDefaultPresetId = this.settings.kanbanPresets[0]?.id ?? null;
 				}
 				await this.saveSettings();
+				await removeKanbanManualOrderForPresetDelete(preset.id, this.removeKanbanManualOrder);
 				this.display();
 			},
 		});
@@ -2438,6 +2465,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 		new KanbanPresetQuickSettingsModal(this.app, {
 			getSettings: () => this.settings,
 			presetId,
+			onSortModeChange: (nextPresetId, sortMode) => this.handleKanbanSortModeChange(nextPresetId, sortMode),
 			onSave: async () => {
 				await this.saveSettings();
 				refresh();
@@ -2666,6 +2694,11 @@ export class OperonSettingsTab extends PluginSettingTab {
 			text: t('settings', 'kanbanSortingDesc'),
 			cls: 'setting-item-description',
 		});
+		this.renderKanbanSortModeControl(container, preset);
+		if (preset.sortMode === 'manual') {
+			this.renderKanbanManualSortMessage(container);
+			return;
+		}
 
 		const section = container.createDiv('operon-kanban-sort-rules');
 
@@ -2811,6 +2844,44 @@ export class OperonSettingsTab extends PluginSettingTab {
 			});
 			this.display();
 		}));
+	}
+
+	private renderKanbanSortModeControl(container: HTMLElement, preset: KanbanPreset): void {
+		const row = container.createDiv('operon-kanban-sort-mode-row');
+		row.createSpan({ text: t('settings', 'kanbanSortMode'), cls: 'operon-kanban-sort-label' });
+		const controls = row.createDiv('operon-kanban-sort-mode-control');
+		this.renderKanbanSortModeButton(controls, preset, 'automatic');
+		this.renderKanbanSortModeButton(controls, preset, 'manual');
+	}
+
+	private renderKanbanSortModeButton(
+		container: HTMLElement,
+		preset: KanbanPreset,
+		sortMode: KanbanSortMode,
+	): void {
+		const button = container.createEl('button', {
+			text: t('settings', sortMode === 'manual' ? 'kanbanSortModeManual' : 'kanbanSortModeAutomatic'),
+			cls: 'operon-kanban-sort-mode-button',
+			attr: {
+				type: 'button',
+				'aria-pressed': preset.sortMode === sortMode ? 'true' : 'false',
+			},
+		});
+		button.classList.toggle('is-active', preset.sortMode === sortMode);
+		button.addEventListener('click', settingsAsyncHandler('settings kanban sort mode change failed', async () => {
+			if (preset.sortMode === sortMode) return;
+			await this.updateKanbanPreset(preset.id, current => {
+				current.sortMode = sortMode;
+			});
+			await this.handleKanbanSortModeChange(preset.id, sortMode);
+			this.display();
+		}));
+	}
+
+	private renderKanbanManualSortMessage(container: HTMLElement): void {
+		const message = container.createDiv('operon-kanban-manual-sort-message');
+		message.createDiv({ text: t('settings', 'kanbanManualOrderingActive') });
+		message.createDiv({ text: t('settings', 'kanbanManualOrderingDesc') });
 	}
 
 	private formatKanbanSortDirection(direction: KanbanSortDirection): string {
@@ -3256,6 +3327,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 
 	private formatCalendarTimeGridScaleLabel(scale: number): string {
 		const normalized = scale / 2;
+		if (normalized < 1) return normalized.toFixed(2);
 		return normalized.toFixed(2).replace(/\.?0+$/u, '');
 	}
 
@@ -4973,31 +5045,45 @@ export class OperonSettingsTab extends PluginSettingTab {
 			max: number;
 			fallback: number;
 			step?: string;
-			syncInput?: boolean;
 			onAfterChange?: (value: number) => void | Promise<void>;
 		},
 	): Setting {
-		return renderTextSetting({
-			containerEl,
-			name,
-			desc,
-			value: String(this.settings[key]),
-			configure: text => {
+		return new Setting(containerEl)
+			.setName(name)
+			.setDesc(desc)
+			.addText(text => {
+				text.setValue(String(this.settings[key]));
 				text.inputEl.type = 'number';
 				text.inputEl.min = String(options.min);
 				text.inputEl.max = String(options.max);
 				if (options.step) text.inputEl.step = options.step;
-			},
-			onChange: async (value, text) => {
-				const nextValue = this.parseCalendarPresetNumber(value, options.fallback, options.min, options.max);
-				this.settings[key] = nextValue;
-				if (options.syncInput === true && text.inputEl.value !== String(nextValue)) {
-					text.setValue(String(nextValue));
-				}
-				await this.saveSettings();
-				await options.onAfterChange?.(nextValue);
-			},
-		});
+
+				let lastCommittedValue = this.settings[key];
+				const commit = async (): Promise<void> => {
+					const nextValue = this.parseCalendarPresetNumber(text.inputEl.value, options.fallback, options.min, options.max);
+					if (text.inputEl.value !== String(nextValue)) {
+						text.setValue(String(nextValue));
+					}
+					if (nextValue === lastCommittedValue) return;
+
+					this.settings[key] = nextValue;
+					await this.saveSettings();
+					lastCommittedValue = nextValue;
+					await options.onAfterChange?.(nextValue);
+				};
+
+				text.inputEl.addEventListener('blur', () => {
+					runSettingsAsync('settings numeric value commit failed', commit);
+				});
+				text.inputEl.addEventListener('keydown', event => {
+					if (event.key !== 'Enter') return;
+					event.preventDefault();
+					runSettingsAsync('settings numeric value commit failed', async () => {
+						await commit();
+						text.inputEl.blur();
+					});
+				});
+			});
 	}
 
 	private addNumericSetting(

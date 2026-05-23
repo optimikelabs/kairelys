@@ -152,6 +152,8 @@ import { resolveOperonIdPlaceholders, resolveOperonIdPlaceholdersInTaskBlock } f
 import { isOperonExcludedPath } from './src/core/operon-path-exclusions';
 import { normalizeRepeatIdentityPayload } from './src/core/repeat-identity';
 import { shouldAutoUnpinTerminalTask } from './src/core/pinned-task-rules';
+import { DemoWorkspaceFilterInvalidError, OPERON_DEMO_AGGREGATE_PARENT_IDS, createOrRepairBasicsWorkspace, hasBasicsWorkspaceArtifact } from './src/core/demo-project';
+import { DEFAULT_DAILY_NOTE_FORMAT, resolveDailyNotePathFromDateKey } from './src/core/daily-note-path';
 import { resolveDailyNoteParentRealignmentTargetDate } from './src/core/daily-note-parent-realignment';
 import {
 	calculateRepeatEndFromCount,
@@ -211,6 +213,7 @@ import {
 	KanbanCellActionContext,
 	KanbanCellActionId,
 	KanbanLeafState,
+	KanbanPreset,
 	normalizeKanbanLeafState,
 } from './src/types/kanban';
 import { DuplicateRegistrySnapshot, IndexedTask, IndexedTaskInstance, OperonField, ParsedTask } from './src/types/fields';
@@ -269,8 +272,10 @@ import { KanbanPresetQuickSettingsModal } from './src/ui/kanban/kanban-preset-qu
 import { KanbanCellActionModal } from './src/ui/kanban/kanban-cell-action-modal';
 import { buildKanbanWritebackPlan } from './src/systems/kanban-writeback';
 import {
+	buildKanbanCellKey,
 	extractLaneKeys,
 	KANBAN_NO_VALUE_KEY,
+	queryKanbanBoard,
 	resolveTaskStatusDefinition,
 } from './src/systems/kanban-query';
 import {
@@ -390,6 +395,12 @@ function getWorkspaceEventFilePath(info: unknown): string {
 interface LoadedFileTaskTemplateResult {
 	'document': ParsedFrontmatterDocument | null;
 	resolvedOperonIdSeed: string | null;
+}
+
+interface DailyNotesPluginConfig {
+	folder: string;
+	template: string;
+	format: string;
 }
 
 interface FileTaskToInlineCursorTarget {
@@ -523,6 +534,61 @@ export default class OperonPlugin extends Plugin {
 		await this.storage.filters.upsert(filterSet);
 		this.syncFilterSetsFromStore();
 		this.refreshViews();
+	}
+
+	private async createOrRepairBasicsWorkspaceFromUi(): Promise<void> {
+		try {
+			const result = await createOrRepairBasicsWorkspace(this.app, this.storage, this.settings);
+			this.syncFilterSetsFromStore();
+			await this.app.workspace.getLeaf(false).openFile(result.file);
+			await this.indexer.reindexFilePath(result.file.path, { notify: false });
+			await this.indexer.reindexFilePath(result.setupProjectFile.path, { notify: false });
+			await this.aggregateCoordinator.refreshAfterTaskIds(OPERON_DEMO_AGGREGATE_PARENT_IDS);
+			this.refreshViews();
+			new Notice(t('notifications', 'demoWorkspaceReady', {
+				path: result.file.path,
+			}));
+		} catch (error) {
+			if (error instanceof DemoWorkspaceFilterInvalidError) {
+				new Notice(t('notifications', 'demoWorkspaceFilterInvalid', {
+					path: error.filterPath,
+				}));
+			} else {
+				new Notice(t('notifications', 'demoWorkspaceCreateFailed'));
+			}
+			throw error;
+		}
+	}
+
+	private async markDemoWorkspacePromptDismissed(): Promise<void> {
+		if (this.settings.demoWorkspacePromptDismissed) return;
+		this.settings.demoWorkspacePromptDismissed = true;
+		await this.storage.saveSettings();
+	}
+
+	private async maybeShowDemoWorkspacePrompt(): Promise<void> {
+		if (this.settings.demoWorkspacePromptDismissed) return;
+		if (await hasBasicsWorkspaceArtifact(this.app, this.storage)) {
+			await this.markDemoWorkspacePromptDismissed();
+			return;
+		}
+
+		new ConfirmActionModal(this.app, {
+			title: t('settings', 'demoWorkspacePromptTitle'),
+			message: t('settings', 'demoWorkspacePromptMessage'),
+			confirmText: t('settings', 'demoWorkspacePromptCreate'),
+			cancelText: t('settings', 'demoWorkspacePromptSkip'),
+		}, (confirmed) => {
+			runAsyncAction('demo workspace prompt action failed', async () => {
+				try {
+					if (confirmed) {
+						await this.createOrRepairBasicsWorkspaceFromUi();
+					}
+				} finally {
+					await this.markDemoWorkspacePromptDismissed();
+				}
+			});
+		}).open();
 	}
 
 	private resolvePreferredFilterSetId(filterSetId: string | null | undefined): string | null {
@@ -1041,22 +1107,26 @@ export default class OperonPlugin extends Plugin {
 			() => this.pinnedDock?.refreshLayout(),
 			this.storage.pinned,
 			(operonId) => this.openEditorForId(operonId),
-			(operonId) => { void this.cycleTaskStatusById(operonId); },
-			(task) => { this.navigateToTask(task); },
-			(operonId, key, value) => { void this.updateTaskFieldAndRefresh(operonId, key, value); },
+				(operonId) => { void this.cycleTaskStatusById(operonId); },
+				(task) => { this.navigateToTask(task); },
+				(operonId, key, value) => { void this.updateTaskFieldAndRefresh(operonId, key, value); },
 				(taskId, actionId) => this.handleContextualMenuAction(taskId, actionId),
 				(taskId) => this.timeTracker.isTimerRunning(taskId),
 				async (taskId) => {
 					await this.toggleTimerForTask(taskId, 'command');
 				},
-			() => this.timeTracker.getActiveOperonId() ?? '',
-			(operonId, payload) => { void this.updateTaskFieldsAndRefresh(operonId, payload); },
-			(operonId, subtaskIds) => { void this.syncExistingSubtasksForParent(operonId, subtaskIds); },
-			(operonId, field, value) => { void this.updateTaskDependencyFieldAndRefresh(operonId, field, value); },
-			(preview) => this.applyPipelineRenameMigration(preview),
-			(preview) => this.applyPriorityRenameMigration(preview),
-			(sourceId) => this.syncExternalCalendarSourceNow(sourceId),
-		));
+				() => this.timeTracker.getActiveOperonId() ?? '',
+				(operonId, payload) => { void this.updateTaskFieldsAndRefresh(operonId, payload); },
+				(operonId, subtaskIds) => { void this.syncExistingSubtasksForParent(operonId, subtaskIds); },
+				(operonId, field, value) => { void this.updateTaskDependencyFieldAndRefresh(operonId, field, value); },
+				(preview) => this.applyPipelineRenameMigration(preview),
+				(preview) => this.applyPriorityRenameMigration(preview),
+				(sourceId) => this.syncExternalCalendarSourceNow(sourceId),
+				(presetId, sortMode) => this.handleKanbanSortModeChange(presetId, sortMode),
+				(sourcePresetId, targetPresetId) => this.copyKanbanManualOrder(sourcePresetId, targetPresetId),
+				(presetId) => this.removeKanbanManualOrder(presetId),
+				() => this.createOrRepairBasicsWorkspaceFromUi(),
+			));
 
 		const statusBarItem = this.addStatusBarItem();
 		this.trackerStatusBar = new TimeTrackerStatusBar(
@@ -1127,6 +1197,7 @@ export default class OperonPlugin extends Plugin {
 				await this.timeTracker.resumeFromIndex({ migrateLegacy: true });
 				this.refreshViews();
 				this.syncDuplicateConflictUi(true);
+				await this.maybeShowDemoWorkspacePrompt();
 			});
 			});
 		}
@@ -1360,6 +1431,7 @@ export default class OperonPlugin extends Plugin {
 				() => this.settings,
 				() => this.pinnedCache,
 				{
+					getManualOrder: (presetId) => this.storage.kanbanOrder.getBoard(presetId),
 					onCardDrop: (context) => this.handleKanbanCardDrop(leaf, context),
 					onCellAction: (context) => this.handleKanbanCellAction(leaf, context),
 					onItemAction: (taskId, actionId) => this.handleContextualMenuAction(taskId, actionId),
@@ -1368,6 +1440,7 @@ export default class OperonPlugin extends Plugin {
 						new KanbanPresetQuickSettingsModal(this.app, {
 							getSettings: () => this.settings,
 							presetId,
+							onSortModeChange: (presetId, sortMode) => this.handleKanbanSortModeChange(presetId, sortMode),
 							onSave: async () => {
 								await this.storage.saveSettings();
 								this.refreshViews();
@@ -2082,6 +2155,115 @@ export default class OperonPlugin extends Plugin {
 		});
 	}
 
+	private async handleKanbanSortModeChange(
+		presetId: string,
+		sortMode: KanbanPreset['sortMode'],
+	): Promise<void> {
+		if (sortMode !== 'manual' || this.storage.kanbanOrder.hasBoard(presetId)) return;
+		const preset = this.settings.kanbanPresets.find(entry => entry.id === presetId) ?? null;
+		if (!preset) return;
+		await this.storage.kanbanOrder.replaceBoard(presetId, this.buildKanbanManualOrderSnapshot(preset));
+	}
+
+	private async copyKanbanManualOrder(sourcePresetId: string, targetPresetId: string): Promise<void> {
+		await this.storage.kanbanOrder.replaceBoard(targetPresetId, this.storage.kanbanOrder.getBoard(sourcePresetId));
+	}
+
+	private async removeKanbanManualOrder(presetId: string): Promise<void> {
+		await this.storage.kanbanOrder.removeBoard(presetId);
+	}
+
+	private buildKanbanManualOrderSnapshot(preset: KanbanPreset): Record<string, string[]> {
+		const board = this.queryKanbanBoardForOrder({
+			...preset,
+			sortMode: 'automatic',
+			sortRules: preset.sortRules.map(rule => ({ ...rule })),
+		});
+		return board ? this.extractKanbanBoardOrder(board.cellMap) : {};
+	}
+
+	private queryKanbanBoardForOrder(
+		preset: KanbanPreset,
+		manualOrder?: Record<string, string[]>,
+	): ReturnType<typeof queryKanbanBoard> | null {
+		if (!preset.pipelineId) return null;
+		const pipeline = this.settings.pipelines.find(entry => entry.id === preset.pipelineId) ?? null;
+		if (!pipeline) return null;
+		const filterSet = preset.filterSetId
+			? this.settings.filterSets.find(entry => entry.id === preset.filterSetId) ?? null
+			: null;
+		return queryKanbanBoard({
+			preset,
+			pipeline,
+			filterSet,
+			tasks: this.indexer.getAllTasks(),
+			priorities: this.settings.priorities,
+			pinnedCache: this.pinnedCache,
+			manualOrder,
+		});
+	}
+
+	private extractKanbanBoardOrder(cellMap: Map<string, IndexedTask[]>): Record<string, string[]> {
+		const order: Record<string, string[]> = {};
+		for (const [cellKey, tasks] of cellMap.entries()) {
+			if (tasks.length > 0) {
+				order[cellKey] = tasks.map(task => task.operonId);
+			}
+		}
+		return order;
+	}
+
+	private buildKanbanManualDropOrderCells(
+		preset: KanbanPreset,
+		context: KanbanDropContext,
+	): Record<string, string[]> {
+		const currentOrder = this.storage.kanbanOrder.getBoard(preset.id);
+		const board = this.queryKanbanBoardForOrder(preset, currentOrder);
+		const sourceCellKey = context.sourceStatusId
+			? buildKanbanCellKey(context.sourceStatusId, context.sourceLaneKey)
+			: null;
+		const targetCellKey = buildKanbanCellKey(context.targetStatusId, context.targetLaneKey);
+		const cells: Record<string, string[]> = {};
+		const sourceIds = sourceCellKey
+			? (board?.cellMap.get(sourceCellKey) ?? []).map(task => task.operonId)
+			: [];
+		const targetIds = (board?.cellMap.get(targetCellKey) ?? []).map(task => task.operonId);
+
+		if (sourceCellKey && sourceCellKey === targetCellKey) {
+			cells[targetCellKey] = this.insertKanbanTaskIdBefore(sourceIds, context.taskId, context.targetBeforeTaskId);
+			return cells;
+		}
+
+		if (sourceCellKey) {
+			cells[sourceCellKey] = sourceIds.filter(taskId => taskId !== context.taskId);
+		}
+		cells[targetCellKey] = this.insertKanbanTaskIdBefore(targetIds, context.taskId, context.targetBeforeTaskId);
+		return cells;
+	}
+
+	private insertKanbanTaskIdBefore(taskIds: string[], taskId: string, beforeTaskId: string | null): string[] {
+		const next = taskIds.filter(entry => entry !== taskId);
+		const beforeIndex = beforeTaskId ? next.indexOf(beforeTaskId) : -1;
+		if (beforeIndex >= 0) {
+			next.splice(beforeIndex, 0, taskId);
+		} else {
+			next.push(taskId);
+		}
+		return next;
+	}
+
+	private getKanbanManualOrderCells(
+		presetId: string,
+		cellKeys: string[],
+	): Record<string, string[]> {
+		const board = this.storage.kanbanOrder.getBoard(presetId);
+		const cells: Record<string, string[]> = {};
+		for (const cellKey of cellKeys) {
+			cells[cellKey] = board[cellKey] ?? [];
+		}
+		return cells;
+	}
+
 	private async handleKanbanCardDrop(
 		leaf: import('obsidian').WorkspaceLeaf,
 		context: KanbanDropContext,
@@ -2095,6 +2277,15 @@ export default class OperonPlugin extends Plugin {
 		if (!pipeline) throw new Error(`Kanban drop failed: pipeline not found (${preset.pipelineId})`);
 		const targetStatus = pipeline.statuses.find(status => status.id === context.targetStatusId) ?? null;
 		if (!targetStatus) throw new Error(`Kanban drop failed: target status not found (${context.targetStatusId})`);
+		const manualOrderCells = preset.sortMode === 'manual'
+			? this.buildKanbanManualDropOrderCells(preset, context)
+			: null;
+		const previousManualOrderCells = manualOrderCells
+			? this.getKanbanManualOrderCells(preset.id, Object.keys(manualOrderCells))
+			: null;
+		if (manualOrderCells) {
+			await this.storage.kanbanOrder.replaceCells(preset.id, manualOrderCells);
+		}
 
 		const plan = buildKanbanWritebackPlan({
 			task,
@@ -2105,15 +2296,30 @@ export default class OperonPlugin extends Plugin {
 			swimlaneBy: context.swimlaneBy ?? preset.swimlaneBy,
 		});
 		if (plan.changedKeys.length === 0) {
-			if (this.isKanbanTaskAtDropTarget(task, pipeline, preset.swimlaneBy, context)) return;
+			if (this.isKanbanTaskAtDropTarget(task, pipeline, preset.swimlaneBy, context)) {
+				this.refreshViews();
+				return;
+			}
+			if (previousManualOrderCells) {
+				await this.storage.kanbanOrder.replaceCells(preset.id, previousManualOrderCells);
+			}
 			throw new Error(`Kanban drop failed: no writeback changes for ${context.taskId}`);
 		}
 
-		await this.updateTaskFieldsAndRefresh(task.operonId, plan.payload, {
+		const wrote = await this.updateTaskFieldsAndRefresh(task.operonId, plan.payload, {
 			changedKeys: plan.changedKeys,
 		});
+		if (!wrote) {
+			if (previousManualOrderCells) {
+				await this.storage.kanbanOrder.replaceCells(preset.id, previousManualOrderCells);
+			}
+			throw new Error(`Kanban drop failed: task write failed (${context.taskId})`);
+		}
 		const freshTask = this.indexer.getTask(context.taskId);
 		if (!freshTask || !this.isKanbanTaskAtDropTarget(freshTask, pipeline, preset.swimlaneBy, context)) {
+			if (previousManualOrderCells) {
+				await this.storage.kanbanOrder.replaceCells(preset.id, previousManualOrderCells);
+			}
 			throw new Error(`Kanban drop failed: persisted task did not reach target cell (${context.taskId})`);
 		}
 		this.refreshViews();
@@ -2365,6 +2571,9 @@ export default class OperonPlugin extends Plugin {
 	}
 
 	private getKanbanInlineTaskAvailability(): { enabled: boolean; reason?: string } {
+		if (!this.settings.inlineTaskUseDailyNote) {
+			return { enabled: true };
+		}
 		if (isDailyNotesCoreAvailable(this.app)) {
 			return { enabled: true };
 		}
@@ -2555,38 +2764,13 @@ export default class OperonPlugin extends Plugin {
 		context: KanbanCellActionContext,
 		draft: TaskCreatorDraft,
 	): Promise<boolean> {
-		if (!isDailyNotesCoreAvailable(this.app)) {
-			new Notice(t('notifications', 'dailyNoteUnavailable'));
-			return false;
-		}
+		const created = await this.createInlineTaskFromCreatorDraftResult(draft);
+		if (!created) return false;
 
-		const dailyNote = await this.resolveOrCreateCalendarDailyNoteResult(localToday());
-		if (!(dailyNote.file instanceof TFile)) {
-			new Notice(t('notifications', 'dailyNoteResolveFailed'));
-			return false;
-		}
-
-		const created = await this.insertTaskCreatorInlineTaskIntoFile(dailyNote.file, draft, {
-			fallbackParentTaskId: dailyNote.wasCreated ? dailyNote.operonParentTaskId : null,
-			fallbackParentFieldValues: dailyNote.wasCreated ? dailyNote.operonParentFieldValues : null,
-			autoParentEnabled: true,
-		});
-		if (!created) {
-			new Notice(t('notifications', 'dailyNoteInlineCreateFailed'));
-			return false;
-		}
-
-		this.showTaskNotice('inline-created', {
-			description: draft.description,
-			operonId: created.operonId,
-		});
-		await this.indexer.reindexFilePath(dailyNote.file.path);
-		await this.finalizeTaskCreatorCreatedTask(created.operonId, draft);
 		this.maybeNoticeKanbanCreatorFilterMismatch(
 			leaf,
 			this.getCreatedInlineTaskFilterDraft(created.operonId, draft, this.resolveKanbanSeedCheckbox(context, leaf)),
 		);
-		this.refreshViews();
 		return true;
 	}
 
@@ -2929,8 +3113,15 @@ export default class OperonPlugin extends Plugin {
 		operonParentFieldValues: Record<string, string> | null;
 	}> {
 		const config = await this.loadDailyNotesPluginConfig();
-		const folder = config.folder.trim();
-		const filePath = folder ? `${folder}/${dateKey}.md` : `${dateKey}.md`;
+		const filePath = resolveDailyNotePathFromDateKey(dateKey, config);
+		if (!filePath) {
+			return {
+				file: null,
+				wasCreated: false,
+				operonParentTaskId: null,
+				operonParentFieldValues: null,
+			};
+		}
 		const existing = this.app.vault.getAbstractFileByPath(filePath);
 		if (existing instanceof TFile) {
 			return {
@@ -2949,7 +3140,7 @@ export default class OperonPlugin extends Plugin {
 			};
 		}
 
-		await this.ensureFolderPathExists(folder);
+		await this.ensureParentFolderPathExists(filePath);
 		const template = await this.loadDailyNoteTemplateSource(config.template);
 		await this.app.vault.create(filePath, template.content);
 
@@ -3044,6 +3235,7 @@ export default class OperonPlugin extends Plugin {
 			patch: payload,
 			currentParentTask: this.indexer.getTask(parentTaskId),
 			dailyNotesFolder: config.folder,
+			dailyNotesFormat: config.format,
 			mode: options.mode ?? 'merge',
 		});
 		if (!targetDateKey) return null;
@@ -3055,20 +3247,30 @@ export default class OperonPlugin extends Plugin {
 		return nextParentTaskId;
 	}
 
-	private async loadDailyNotesPluginConfig(): Promise<{ folder: string; template: string }> {
+	private async loadDailyNotesPluginConfig(): Promise<DailyNotesPluginConfig> {
 		try {
 			const raw = await this.app.vault.adapter.read(`${this.app.vault.configDir}/daily-notes.json`);
-			const parsed = JSON.parse(raw) as { folder?: unknown; template?: unknown };
+			const parsed = JSON.parse(raw) as { folder?: unknown; template?: unknown; format?: unknown };
 			return {
 				folder: typeof parsed.folder === 'string' ? parsed.folder.trim() : '',
 				template: typeof parsed.template === 'string' ? parsed.template.trim() : '',
+				format: typeof parsed.format === 'string' && parsed.format.trim()
+					? parsed.format.trim()
+					: DEFAULT_DAILY_NOTE_FORMAT,
 			};
 		} catch {
 			return {
 				folder: '',
 				template: '',
+				format: DEFAULT_DAILY_NOTE_FORMAT,
 			};
 		}
+	}
+
+	private async ensureParentFolderPathExists(filePath: string): Promise<void> {
+		const lastSlash = filePath.lastIndexOf('/');
+		if (lastSlash < 0) return;
+		await this.ensureFolderPathExists(filePath.slice(0, lastSlash));
 	}
 
 	private async ensureFolderPathExists(folderPath: string): Promise<void> {
@@ -8405,7 +8607,9 @@ export default class OperonPlugin extends Plugin {
 			return;
 		}
 
-		const conversion = convertTasksEmojiLineToOperon(line);
+		const conversion = convertTasksEmojiLineToOperon(line, {
+			priorities: this.settings.priorities ?? DEFAULT_PRIORITIES,
+		});
 		if (conversion.kind === 'already_operon') {
 			new Notice(t('notifications', 'currentLineAlreadyOperonInlineTask'));
 			return;

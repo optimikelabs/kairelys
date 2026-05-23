@@ -24,7 +24,6 @@ import { applyFieldRules } from '../core/field-rules';
 import { t } from '../core/i18n';
 import { formatTaskNotice } from '../core/task-notice';
 import { localNow, localToday } from '../core/local-time';
-import { getAppLocale } from '../core/obsidian-app';
 import {
 	calculateRepeatEndFromCount,
 	parseRepeatRule,
@@ -199,19 +198,11 @@ function formatDuration(seconds: number): string {
 function formatTaskEditorDate(value: string): string {
 	const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
 	if (!match) return value;
-	const [, yearText, monthText, dayText] = match;
-	return `${dayText}/${monthText}/${yearText}`;
+	return value.trim();
 }
 
 function formatTaskEditorDatetime(app: App, settings: OperonSettings, value: string): string {
-	const date = parseLocalDatetime(value);
-	if (!date) return value;
-	const datePart = new Intl.DateTimeFormat(getAppLocale(app), {
-		day: '2-digit',
-		month: 'short',
-	}).format(date);
-	const timePart = formatUiTime(app, settings, value);
-	return `${datePart}, ${timePart}`;
+	return formatUiTime(app, settings, value);
 }
 
 function normalizeListValues(values: string[]): string[] {
@@ -530,10 +521,11 @@ export class TaskEditorContent {
 			canonicalKey: string;
 			text: string;
 			isEmpty: boolean;
+			showIcon?: boolean;
 		},
 	): void {
 		button.empty();
-		if (options.isEmpty) {
+		if (options.isEmpty || options.showIcon === true) {
 			const iconId = this.getCoreFieldIcon(options.canonicalKey);
 			if (iconId) {
 				const iconWrap = button.createSpan('operon-editor-picker-button-leading-icon');
@@ -1933,6 +1925,7 @@ export class TaskEditorContent {
 			this.setPickerButtonContent(button, {
 				canonicalKey: key,
 				isEmpty: !value,
+				showIcon: true,
 				text: value ? formatTaskEditorDate(value) : placeholderText,
 			});
 		};
@@ -1982,6 +1975,7 @@ export class TaskEditorContent {
 			this.setPickerButtonContent(button, {
 				canonicalKey: key,
 				isEmpty: !value,
+				showIcon: true,
 				text: value
 					? formatTaskEditorDatetime(this.app, this.settings, value)
 					: label,

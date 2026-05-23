@@ -34,6 +34,7 @@ import type { ContextualMenuActionId } from '../core/contextual-menu-engine';
 import { getConfiguredKeyMappingIcon } from '../core/key-mapping-icons';
 import { openObsidianTagSearch } from './tag-search';
 import { bindCompactChipLinkPreview } from './compact-chip-link-preview';
+import { bindExternalLinkContextMenu, openExternalUrl } from './external-link-actions';
 import {
 	bindAdaptiveIconOnlyExpansion,
 	bindIconOnlyChipPreview,
@@ -267,6 +268,9 @@ class MetadataTailWidget extends WidgetType {
 			applyLivePreviewChipVisualStyles(chip, entry, fieldValues, taskColor, this.callbacks);
 			if (entry.iconOnly) {
 				bindAdaptiveIconOnlyExpansion(chip, entry.label, taskColor ?? null);
+				if (entry.externalUrl) {
+					bindExternalLinkContextMenu(chip, entry.externalUrl, entry.externalRawValue);
+				}
 				if (entry.tooltipContent) {
 					bindOperonHoverTooltip(chip, {
 						title: entry.tooltipTitle ?? t('taskEditor', 'details'),
@@ -315,6 +319,9 @@ class MetadataTailWidget extends WidgetType {
 					taskColor,
 				})
 				: chip;
+			if (entry.externalUrl) {
+				bindExternalLinkContextMenu(chip, entry.externalUrl, entry.externalRawValue);
+			}
 			if (entry.linkTarget) {
 				bindCompactChipLinkPreview(this.callbacks.app, chip, entry.linkTarget, this.callbacks.getFilePath(view));
 			}
@@ -682,6 +689,8 @@ export function buildMetadataTailRenderSignature(
 			entry.colorRole,
 			entry.iconTone ?? '',
 			entry.linkTarget ?? '',
+			entry.externalUrl ?? '',
+			entry.externalRawValue ?? '',
 			entry.tooltipTitle ?? '',
 			entry.tooltipContent ?? '',
 		]);
@@ -842,6 +851,10 @@ function attachLivePreviewChipAction(
 				break;
 			case 'tags':
 				void openObsidianTagSearch(callbacks.app, entry.label);
+				onCommit?.();
+				break;
+			case 'links':
+				openExternalUrl(entry.externalUrl);
 				onCommit?.();
 				break;
 			case 'estimate':

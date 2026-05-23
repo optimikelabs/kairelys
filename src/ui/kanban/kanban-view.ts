@@ -336,6 +336,9 @@ export class KanbanView extends ItemView {
 			optimisticMoves: Array.from(this.optimisticMoves.entries())
 				.map(([taskId, move]) => ({ taskId, move }))
 				.sort((left, right) => left.taskId.localeCompare(right.taskId)),
+			manualOrder: preset?.sortMode === 'manual' && preset.id
+				? this.callbacks.getManualOrder?.(preset.id) ?? {}
+				: null,
 			tasks: taskSignature,
 		});
 	}
@@ -423,6 +426,7 @@ export class KanbanView extends ItemView {
 		const searchActive = !!activeSearchQuery
 			|| !!parentSearchUi?.selectedParentId
 			|| this.hasKanbanSearchScopeFilters(this.searchScope);
+		const hasVisibleSwimlanes = preset.swimlaneBy !== null;
 		const skippedStatusIds = searchActive
 			? new Set<string>()
 			: this.resolveSkippedStatusMaterializationIds(pipeline, preset, state);
@@ -434,10 +438,13 @@ export class KanbanView extends ItemView {
 			priorities: settings.priorities,
 			searchQuery: activeSearchQuery,
 			taskIdFilter,
-			skippedStatusIds,
-			skippedLaneKeys: searchActive ? undefined : state.collapsedLaneKeys,
-			pinnedCache: this.getPinnedCache(),
-			});
+				skippedStatusIds,
+				skippedLaneKeys: searchActive || !hasVisibleSwimlanes ? undefined : state.collapsedLaneKeys,
+				pinnedCache: this.getPinnedCache(),
+				manualOrder: preset.sortMode === 'manual'
+					? this.callbacks.getManualOrder?.(preset.id) ?? {}
+					: undefined,
+				});
 			this.reconcileOptimisticMoves(board, pipeline, preset);
 			this.applyOptimisticMoves(board, settings);
 			if (board.columns.length === 0) {
@@ -833,6 +840,9 @@ export class KanbanView extends ItemView {
 	private renderBoard(container: HTMLElement, board: KanbanBoardData, searchActive: boolean): void {
 		const boardEl = container.createDiv('operon-kanban-board');
 		this.bindBoardDelegatedCardEvents(boardEl);
+		const hasSwimlanes = board.preset.swimlaneBy !== null;
+		boardEl.toggleClass('is-no-swimlanes', !hasSwimlanes);
+		boardEl.toggleClass('is-manual-order', board.preset.sortMode === 'manual');
 		boardEl.style.setProperty('--operon-kanban-column-width', `${this.getSettings().kanbanExpandedColumnWidthPx}px`);
 		boardEl.style.setProperty('--operon-kanban-collapsed-width', `${KANBAN_COLLAPSED_COLUMN_WIDTH_PX}px`);
 		boardEl.style.setProperty('--operon-kanban-lane-column-width', `${this.lastLaneColumnWidthPx ?? 96}px`);
@@ -844,11 +854,15 @@ export class KanbanView extends ItemView {
 
 		const gridViewport = boardEl.createDiv('operon-kanban-grid-viewport');
 		const gridContent = gridViewport.createDiv('operon-kanban-grid-content');
-		const fullColumnTemplate = `var(--operon-kanban-lane-column-width, 96px) ${columnTemplate}`;
+		const fullColumnTemplate = hasSwimlanes
+			? `var(--operon-kanban-lane-column-width, 96px) ${columnTemplate}`
+			: columnTemplate;
 		const headerRow = gridContent.createDiv('operon-kanban-header-row');
 		headerRow.style.gridTemplateColumns = fullColumnTemplate;
-		const corner = headerRow.createDiv('operon-kanban-corner-cell');
-		this.renderCornerSummary(corner, board.relevantTasks.length);
+		if (hasSwimlanes) {
+			const corner = headerRow.createDiv('operon-kanban-corner-cell');
+			this.renderCornerSummary(corner, board.relevantTasks.length);
+		}
 
 		for (const column of columns) {
 			const header = headerRow.createDiv('operon-kanban-column-header');
@@ -913,15 +927,17 @@ export class KanbanView extends ItemView {
 		for (const lane of board.lanes) {
 			const row = gridContent.createDiv('operon-kanban-row');
 			row.style.gridTemplateColumns = fullColumnTemplate;
-			const isLaneCollapsed = collapsedLaneKeys.has(lane.key);
+			const isLaneCollapsed = hasSwimlanes && collapsedLaneKeys.has(lane.key);
 			row.classList.toggle('is-collapsed', isLaneCollapsed);
-			const laneLabel = row.createDiv('operon-kanban-lane-label');
-			laneLabel.classList.toggle('is-collapsed', isLaneCollapsed);
-			laneLabel.classList.toggle('is-no-value', lane.isNoValue);
-			if (lane.color) {
-				laneLabel.style.setProperty('--operon-kanban-lane-color', lane.color);
-			}
-			const laneTitle = laneLabel.createDiv({ text: lane.label, cls: 'operon-kanban-lane-title' });
+			let laneLabel: HTMLElement | null = null;
+			if (hasSwimlanes) {
+				laneLabel = row.createDiv('operon-kanban-lane-label');
+				laneLabel.classList.toggle('is-collapsed', isLaneCollapsed);
+				laneLabel.classList.toggle('is-no-value', lane.isNoValue);
+				if (lane.color) {
+					laneLabel.style.setProperty('--operon-kanban-lane-color', lane.color);
+				}
+				const laneTitle = laneLabel.createDiv({ text: lane.label, cls: 'operon-kanban-lane-title' });
 				const laneToggle = laneLabel.createEl('button', {
 					cls: 'operon-kanban-lane-count-button',
 					text: String(lane.count),
@@ -933,41 +949,42 @@ export class KanbanView extends ItemView {
 					? t('tooltips', 'expandKanbanSwimlane', { name: lane.label })
 					: t('tooltips', 'collapseKanbanSwimlane', { name: lane.label }));
 				bindOperonHoverTooltip(laneToggle, { content: lane.label, taskColor: lane.color || null });
-			laneTitleEls.push(laneTitle);
-			laneToggle.addEventListener('click', () => {
-				if (this.isLaneAutoCollapsed(board, lane)) {
-					const state = this.ensureState();
-					const isTemporarilyExpanded = this.temporarilyExpandedAutoCollapsedLaneKeys.has(lane.key);
-					const isManuallyCollapsed = state.collapsedLaneKeys.includes(lane.key);
-					if (collapsedLaneKeys.has(lane.key)) {
-						this.temporarilyExpandedAutoCollapsedLaneKeys.add(lane.key);
-						if (isManuallyCollapsed) {
-							const nextCollapsed = new Set(state.collapsedLaneKeys);
-							nextCollapsed.delete(lane.key);
-							void this.updateLeafState(this.withCurrentPresetCollapseState({
-								collapsedLaneKeys: Array.from(nextCollapsed),
-							}));
+				laneTitleEls.push(laneTitle);
+				laneToggle.addEventListener('click', () => {
+					if (this.isLaneAutoCollapsed(board, lane)) {
+						const state = this.ensureState();
+						const isTemporarilyExpanded = this.temporarilyExpandedAutoCollapsedLaneKeys.has(lane.key);
+						const isManuallyCollapsed = state.collapsedLaneKeys.includes(lane.key);
+						if (collapsedLaneKeys.has(lane.key)) {
+							this.temporarilyExpandedAutoCollapsedLaneKeys.add(lane.key);
+							if (isManuallyCollapsed) {
+								const nextCollapsed = new Set(state.collapsedLaneKeys);
+								nextCollapsed.delete(lane.key);
+								void this.updateLeafState(this.withCurrentPresetCollapseState({
+									collapsedLaneKeys: Array.from(nextCollapsed),
+								}));
+								return;
+							}
+							this.render();
 							return;
 						}
-						this.render();
-						return;
+						if (isTemporarilyExpanded) {
+							this.temporarilyExpandedAutoCollapsedLaneKeys.delete(lane.key);
+							this.render();
+							return;
+						}
 					}
-					if (isTemporarilyExpanded) {
-						this.temporarilyExpandedAutoCollapsedLaneKeys.delete(lane.key);
-						this.render();
-						return;
+					const nextCollapsed = new Set(this.ensureState().collapsedLaneKeys);
+					if (nextCollapsed.has(lane.key)) {
+						nextCollapsed.delete(lane.key);
+					} else {
+						nextCollapsed.add(lane.key);
 					}
-				}
-				const nextCollapsed = new Set(this.ensureState().collapsedLaneKeys);
-				if (nextCollapsed.has(lane.key)) {
-					nextCollapsed.delete(lane.key);
-				} else {
-					nextCollapsed.add(lane.key);
-				}
-				void this.updateLeafState(this.withCurrentPresetCollapseState({
-					collapsedLaneKeys: Array.from(nextCollapsed),
-				}));
-			});
+					void this.updateLeafState(this.withCurrentPresetCollapseState({
+						collapsedLaneKeys: Array.from(nextCollapsed),
+					}));
+				});
+			}
 
 			for (const column of columns) {
 				const cell = row.createDiv('operon-kanban-cell');
@@ -993,16 +1010,18 @@ export class KanbanView extends ItemView {
 				this.renderInitialCellTasks(cell, tasks, taskCount, board.pipeline, board.preset, column.statusId, lane.key);
 			}
 
-			laneLabelEls.push(laneLabel);
+			if (laneLabel) laneLabelEls.push(laneLabel);
 			gridRowEls.push(row);
 		}
 
 		this.bindBoardScrollStateTracking(gridViewport);
 		this.restoreBoardScrollState(gridViewport);
 		this.syncRowCellHeights(gridRowEls);
-		this.syncLaneHeights(laneLabelEls, gridRowEls);
-		this.refreshLaneColumnWidth(boardEl, laneTitleEls);
-		this.bindBoardLayoutRefresh(boardEl, laneLabelEls, gridRowEls, laneTitleEls);
+		if (hasSwimlanes) {
+			this.syncLaneHeights(laneLabelEls, gridRowEls);
+			this.refreshLaneColumnWidth(boardEl, laneTitleEls);
+		}
+		this.bindBoardLayoutRefresh(boardEl, laneLabelEls, gridRowEls, laneTitleEls, hasSwimlanes);
 	}
 
 	private renderInitialCellTasks(
@@ -1055,6 +1074,15 @@ export class KanbanView extends ItemView {
 	): void {
 		const sentinel = cell.createDiv('operon-kanban-lazy-sentinel');
 		sentinel.setAttr('aria-hidden', 'true');
+		const setSentinelNextTaskId = (visibleCount: number): void => {
+			const nextTaskId = tasks[visibleCount]?.operonId ?? '';
+			if (nextTaskId) {
+				sentinel.dataset.kanbanNextTaskId = nextTaskId;
+			} else {
+				delete sentinel.dataset.kanbanNextTaskId;
+			}
+		};
+		setSentinelNextTaskId(Number(cell.dataset.kanbanVisibleCount ?? '0') || 0);
 		let observer: IntersectionObserver;
 		observer = new IntersectionObserver((entries) => {
 			if (!entries.some(entry => entry.isIntersecting)) return;
@@ -1067,6 +1095,7 @@ export class KanbanView extends ItemView {
 			const nextVisible = Math.min(tasks.length, currentVisible + KANBAN_CARD_RENDER_BATCH_SIZE);
 			this.renderTaskCardBatch(cell, tasks, currentVisible, nextVisible, pipeline, preset, statusId, laneKey, sentinel);
 			cell.dataset.kanbanVisibleCount = String(nextVisible);
+			setSentinelNextTaskId(nextVisible);
 			this.applyCellHeightLimit(cell, maxVisibleTasks, tasks.length);
 			this.scheduleBoardLayoutRefreshFromCell(cell);
 			if (nextVisible >= tasks.length) {
@@ -1126,6 +1155,7 @@ export class KanbanView extends ItemView {
 			const target = asHTMLElement(event.target, boardEl);
 			const card = target?.closest<HTMLElement>('.operon-kanban-card');
 			this.draggedCardContext = null;
+			this.clearManualDropIndicators(boardEl);
 			card?.removeClass('is-dragging');
 		});
 	}
@@ -1306,6 +1336,7 @@ export class KanbanView extends ItemView {
 			event.preventDefault();
 			this.hideCellQuickAdd(cell);
 			cell.addClass('is-drop-target');
+			this.updateManualDropIndicator(cell, event, preset);
 		});
 		cell.addEventListener('dragover', event => {
 			if (!this.draggedCardContext) return;
@@ -1313,11 +1344,13 @@ export class KanbanView extends ItemView {
 			event.dataTransfer!.dropEffect = 'move';
 			this.hideCellQuickAdd(cell);
 			cell.addClass('is-drop-target');
+			this.updateManualDropIndicator(cell, event, preset);
 		});
 		cell.addEventListener('dragleave', event => {
 			const related = event.relatedTarget;
 			if (related instanceof Node && cell.contains(related)) return;
 			cell.removeClass('is-drop-target');
+			this.clearManualDropIndicator(cell);
 		});
 		cell.addEventListener('drop', event => {
 			if (!this.draggedCardContext || !this.callbacks.onCardDrop) return;
@@ -1325,6 +1358,9 @@ export class KanbanView extends ItemView {
 			this.hideCellQuickAdd(cell);
 			cell.removeClass('is-drop-target');
 			const dragged = this.draggedCardContext;
+			const targetBeforeTaskId = preset.sortMode === 'manual'
+				? this.resolveManualDropBeforeTaskId(cell, event, preset)
+				: null;
 			const context: KanbanDropContext = {
 				taskId: dragged.taskId,
 				sourceStatusId: dragged.sourceStatusId,
@@ -1332,15 +1368,21 @@ export class KanbanView extends ItemView {
 				targetStatusId: column.statusId,
 				targetLaneKey: lane.key,
 				swimlaneBy: preset.swimlaneBy,
+				targetBeforeTaskId,
 			};
 			this.draggedCardContext = null;
-			if (context.sourceStatusId === context.targetStatusId && context.sourceLaneKey === context.targetLaneKey) {
+			this.clearManualDropIndicator(cell);
+			if (
+				preset.sortMode !== 'manual'
+				&& context.sourceStatusId === context.targetStatusId
+				&& context.sourceLaneKey === context.targetLaneKey
+			) {
 				return;
 			}
 
 			this.registerOptimisticMove(context);
 			if (shouldApplyImmediateKanbanCardDrop(cell.classList.contains('is-collapsed'))) {
-				this.applyImmediateCardDrop(cell, dragged.cardEl);
+				this.applyImmediateCardDrop(cell, dragged.cardEl, targetBeforeTaskId);
 			} else {
 				dragged.cardEl.removeClass('is-dragging');
 				this.render();
@@ -1358,12 +1400,75 @@ export class KanbanView extends ItemView {
 		});
 	}
 
-	private applyImmediateCardDrop(targetCell: HTMLElement, cardEl: HTMLElement): void {
+	private updateManualDropIndicator(cell: HTMLElement, event: DragEvent, preset: KanbanPreset): void {
+		if (preset.sortMode !== 'manual' || cell.classList.contains('is-collapsed')) {
+			this.clearManualDropIndicator(cell);
+			return;
+		}
+		const beforeCard = this.findManualDropBeforeCard(cell, event.clientY);
+		const indicator = this.ensureManualDropIndicator(cell);
+		let beforeTaskId = beforeCard?.dataset.operonTaskId ?? '';
+		if (beforeCard) {
+			cell.insertBefore(indicator, beforeCard);
+		} else {
+			const sentinel = cell.querySelector<HTMLElement>(':scope > .operon-kanban-lazy-sentinel');
+			if (sentinel) {
+				cell.insertBefore(indicator, sentinel);
+				beforeTaskId = sentinel.dataset.kanbanNextTaskId ?? '';
+			} else {
+				cell.appendChild(indicator);
+			}
+		}
+		cell.dataset.kanbanDropBeforeTaskId = beforeTaskId;
+	}
+
+	private resolveManualDropBeforeTaskId(cell: HTMLElement, event: DragEvent, preset: KanbanPreset): string | null {
+		this.updateManualDropIndicator(cell, event, preset);
+		const beforeTaskId = cell.dataset.kanbanDropBeforeTaskId ?? '';
+		return beforeTaskId || null;
+	}
+
+	private ensureManualDropIndicator(cell: HTMLElement): HTMLElement {
+		const existing = cell.querySelector<HTMLElement>(':scope > .operon-kanban-drop-indicator');
+		if (existing) return existing;
+		const indicator = cell.createDiv('operon-kanban-drop-indicator');
+		indicator.setAttr('aria-hidden', 'true');
+		return indicator;
+	}
+
+	private findManualDropBeforeCard(cell: HTMLElement, pointerY: number): HTMLElement | null {
+		const cards = Array.from(cell.querySelectorAll<HTMLElement>(':scope > .operon-kanban-card'))
+			.filter(card => card.dataset.kanbanPreview !== 'true')
+			.filter(card => !card.classList.contains('is-dragging'));
+		return cards.find(card => {
+			const rect = card.getBoundingClientRect();
+			return pointerY < rect.top + rect.height / 2;
+		}) ?? null;
+	}
+
+	private clearManualDropIndicators(root: HTMLElement): void {
+		for (const cell of Array.from(root.querySelectorAll<HTMLElement>('.operon-kanban-cell'))) {
+			this.clearManualDropIndicator(cell);
+		}
+	}
+
+	private clearManualDropIndicator(cell: HTMLElement): void {
+		cell.querySelector<HTMLElement>(':scope > .operon-kanban-drop-indicator')?.remove();
+		delete cell.dataset.kanbanDropBeforeTaskId;
+	}
+
+	private applyImmediateCardDrop(targetCell: HTMLElement, cardEl: HTMLElement, beforeTaskId: string | null): void {
 		if (!cardEl.isConnected) return;
 		cardEl.removeClass('is-dragging');
 		cardEl.addClass('is-optimistic-move');
+		const beforeCard = beforeTaskId
+			? Array.from(targetCell.querySelectorAll<HTMLElement>(':scope > .operon-kanban-card'))
+				.find(card => card.dataset.operonTaskId === beforeTaskId && card !== cardEl) ?? null
+			: null;
 		const sentinel = targetCell.querySelector<HTMLElement>(':scope > .operon-kanban-lazy-sentinel');
-		if (sentinel) {
+		if (beforeCard) {
+			targetCell.insertBefore(cardEl, beforeCard);
+		} else if (sentinel) {
 			targetCell.insertBefore(cardEl, sentinel);
 		} else {
 			targetCell.appendChild(cardEl);
@@ -1401,10 +1506,14 @@ export class KanbanView extends ItemView {
 			if (!button.querySelector('svg')) {
 				setIcon(button, 'list');
 			}
-			setAccessibleLabelWithoutTooltip(button, t('tooltips', 'addTaskToKanbanCell', {
-				status: column.statusLabel,
-				lane: lane.label,
-			}));
+			setAccessibleLabelWithoutTooltip(button, preset.swimlaneBy
+				? t('tooltips', 'addTaskToKanbanCell', {
+					status: column.statusLabel,
+					lane: lane.label,
+				})
+				: t('tooltips', 'addTaskToKanbanStatus', {
+					status: column.statusLabel,
+				}));
 		const actionContext: KanbanCellActionContext = {
 			targetStatusId: column.statusId,
 			targetStatusLabel: column.statusLabel,
@@ -1745,12 +1854,15 @@ export class KanbanView extends ItemView {
 		laneLabels: HTMLElement[],
 		gridRows: HTMLElement[],
 		laneTitles: HTMLElement[],
+		hasSwimlanes: boolean,
 	): void {
 		const refresh = (): void => {
 			if (!boardEl.isConnected || boardEl.getBoundingClientRect().width <= 0) return;
 			this.syncRowCellHeights(gridRows);
-			this.syncLaneHeights(laneLabels, gridRows);
-			this.scheduleLaneColumnWidthRefresh(boardEl, laneTitles);
+			if (hasSwimlanes) {
+				this.syncLaneHeights(laneLabels, gridRows);
+				this.scheduleLaneColumnWidthRefresh(boardEl, laneTitles);
+			}
 		};
 		const scheduleRefresh = (): void => {
 			if (this.boardLayoutRefreshFrame !== null) return;
@@ -1795,8 +1907,10 @@ export class KanbanView extends ItemView {
 			const gridRows = Array.from(boardEl.querySelectorAll<HTMLElement>('.operon-kanban-row'));
 			const laneTitles = Array.from(boardEl.querySelectorAll<HTMLElement>('.operon-kanban-lane-title'));
 			this.syncRowCellHeights(gridRows);
-			this.syncLaneHeights(laneLabels, gridRows);
-			this.scheduleLaneColumnWidthRefresh(boardEl, laneTitles);
+			if (!boardEl.classList.contains('is-no-swimlanes')) {
+				this.syncLaneHeights(laneLabels, gridRows);
+				this.scheduleLaneColumnWidthRefresh(boardEl, laneTitles);
+			}
 		});
 	}
 

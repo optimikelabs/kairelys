@@ -25,6 +25,7 @@ import {
 	KanbanAppearanceMode,
 	KanbanPreset,
 	KanbanSortField,
+	KanbanSortMode,
 	KanbanSortRule,
 	cloneDefaultKanbanPresets,
 	createDefaultKanbanSortRules,
@@ -45,7 +46,7 @@ import {
 	sanitizeExcludedFoldersForFileTasksFolder,
 } from '../core/settings-folder-rules';
 
-export const CURRENT_SETTINGS_VERSION = 74;
+export const CURRENT_SETTINGS_VERSION = 75;
 export const CURRENT_TASK_STATS_BACKFILL_VERSION = 1;
 
 const DEFAULT_CALENDAR_DEFAULT_PRESET_ID = 'calendar-preset-3day';
@@ -109,7 +110,7 @@ const V70_FALLBACK_STATE_ICONS = {
 	done: 'obsidian-new',
 	cancelled: 'square-x',
 } as const;
-export const CALENDAR_TIME_GRID_SCALE_OPTIONS = [1.5, 2, 2.5, 3, 3.5, 4] as const;
+export const CALENDAR_TIME_GRID_SCALE_OPTIONS = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4] as const;
 export const CALENDAR_AUTO_SCROLL_POSITION_OPTIONS = [0.1, 0.2, 0.3, 0.4, 0.5] as const;
 export const CALENDAR_SIDEBAR_WIDTH_MIN = 240;
 export const CALENDAR_SIDEBAR_WIDTH_MAX = 720;
@@ -270,6 +271,7 @@ export const TASK_CREATOR_TOOLBAR_FIELD_ORDER = [
 	'dateDue',
 	'pinned',
 	'datetimeStart',
+	'datetimeEnd',
 	'estimate',
 	'repeat',
 	'note',
@@ -279,6 +281,7 @@ export const TASK_CREATOR_TOOLBAR_FIELD_ORDER = [
 	'assignees',
 	'tags',
 	'contexts',
+	'links',
 ] as const;
 
 export type TaskCreatorToolbarFieldKey = typeof TASK_CREATOR_TOOLBAR_FIELD_ORDER[number];
@@ -292,8 +295,11 @@ export const INLINE_TASK_COMPACT_CHIP_ORDER = [
 	'dateStarted',
 	'dateCompleted',
 	'dateCancelled',
+	'datetimeStart',
+	'datetimeEnd',
 	'assignees',
 	'contexts',
+	'links',
 	'duration',
 	'totalDuration',
 	'estimate',
@@ -312,8 +318,11 @@ export const INLINE_TASK_COMPACT_FALLBACK_ICONS: Record<InlineTaskCompactChipKey
 	dateStarted: 'play',
 	dateCompleted: 'calendar-check',
 	dateCancelled: 'calendar-x',
+	datetimeStart: 'between-horizontal-start',
+	datetimeEnd: 'between-horizontal-end',
 	assignees: 'users',
 	contexts: 'map-pinned',
+	links: 'link',
 	duration: 'timer',
 	totalDuration: 'timer-reset',
 	estimate: 'hourglass',
@@ -332,6 +341,7 @@ export const TASK_CREATOR_FALLBACK_FIELD_ICONS: Record<TaskCreatorToolbarFieldKe
 	dateDue: 'calendar',
 	pinned: 'pin',
 	datetimeStart: 'clock-3',
+	datetimeEnd: 'clock-9',
 	estimate: 'hourglass',
 	repeat: 'repeat-2',
 	note: 'notebook-pen',
@@ -341,6 +351,7 @@ export const TASK_CREATOR_FALLBACK_FIELD_ICONS: Record<TaskCreatorToolbarFieldKe
 	assignees: 'users',
 	tags: 'tags',
 	contexts: 'map-pinned',
+	links: 'link',
 };
 
 export interface TaskCreatorToolbarItem {
@@ -422,8 +433,11 @@ function buildDefaultInlineTaskCompactChipItems(): InlineTaskCompactChipItem[] {
 		{ key: 'dateStarted', visible: true, iconOnly: true },
 		{ key: 'dateScheduled', visible: true, iconOnly: true },
 		{ key: 'dateDue', visible: true, iconOnly: true },
+		{ key: 'datetimeStart', visible: false, iconOnly: false },
+		{ key: 'datetimeEnd', visible: false, iconOnly: false },
 		{ key: 'assignees', visible: true, iconOnly: false },
 		{ key: 'contexts', visible: true, iconOnly: false },
+		{ key: 'links', visible: false, iconOnly: false },
 		{ key: 'tags', visible: true, iconOnly: false },
 		{ key: 'estimate', visible: true, iconOnly: false },
 		{ key: 'duration', visible: true, iconOnly: false },
@@ -442,11 +456,13 @@ function buildDefaultTaskCreatorToolbarItems(): TaskCreatorToolbarItem[] {
 		{ key: 'status', visible: true },
 		{ key: 'parentTask', visible: true },
 		{ key: 'contexts', visible: true },
+		{ key: 'links', visible: false },
 		{ key: 'dateStarted', visible: false },
 		{ key: 'dateScheduled', visible: true },
 		{ key: 'dateDue', visible: true },
 		{ key: 'pinned', visible: true },
 		{ key: 'datetimeStart', visible: false },
+		{ key: 'datetimeEnd', visible: false },
 		{ key: 'estimate', visible: true },
 		{ key: 'repeat', visible: true },
 		{ key: 'subtasks', visible: false },
@@ -468,8 +484,11 @@ function buildDefaultFilterTaskCompactChipItems(): InlineTaskCompactChipItem[] {
 		{ key: 'dateStarted', visible: true, iconOnly: true },
 		{ key: 'dateCompleted', visible: true, iconOnly: true },
 		{ key: 'dateCancelled', visible: true, iconOnly: true },
+		{ key: 'datetimeStart', visible: false, iconOnly: false },
+		{ key: 'datetimeEnd', visible: false, iconOnly: false },
 		{ key: 'assignees', visible: true, iconOnly: false },
 		{ key: 'contexts', visible: true, iconOnly: false },
+		{ key: 'links', visible: false, iconOnly: false },
 		{ key: 'duration', visible: true, iconOnly: false },
 		{ key: 'estimate', visible: true, iconOnly: true },
 		{ key: 'tags', visible: false, iconOnly: false },
@@ -488,8 +507,11 @@ function buildDefaultTaskFinderCompactChipItems(): InlineTaskCompactChipItem[] {
 		{ key: 'dateStarted', visible: false, iconOnly: false },
 		{ key: 'dateCompleted', visible: false, iconOnly: false },
 		{ key: 'dateCancelled', visible: false, iconOnly: false },
+		{ key: 'datetimeStart', visible: false, iconOnly: false },
+		{ key: 'datetimeEnd', visible: false, iconOnly: false },
 		{ key: 'assignees', visible: false, iconOnly: false },
 		{ key: 'contexts', visible: true, iconOnly: false },
+		{ key: 'links', visible: false, iconOnly: false },
 		{ key: 'duration', visible: false, iconOnly: false },
 		{ key: 'totalDuration', visible: false, iconOnly: false },
 		{ key: 'estimate', visible: false, iconOnly: false },
@@ -508,8 +530,11 @@ function buildDefaultOverlayTaskCompactChipItems(): InlineTaskCompactChipItem[] 
 		{ key: 'dateStarted', visible: false, iconOnly: false },
 		{ key: 'dateCompleted', visible: false, iconOnly: false },
 		{ key: 'dateCancelled', visible: false, iconOnly: false },
+		{ key: 'datetimeStart', visible: false, iconOnly: false },
+		{ key: 'datetimeEnd', visible: false, iconOnly: false },
 		{ key: 'assignees', visible: true, iconOnly: true },
 		{ key: 'contexts', visible: false, iconOnly: false },
+		{ key: 'links', visible: false, iconOnly: false },
 		{ key: 'duration', visible: true, iconOnly: true },
 		{ key: 'totalDuration', visible: true, iconOnly: false },
 		{ key: 'estimate', visible: false, iconOnly: false },
@@ -576,6 +601,7 @@ const DEFAULT_KEY_MAPPING_ICONS: Record<string, string> = {
 	taskIcon: 'shapes',
 	taskColor: 'palette',
 	note: 'notebook-pen',
+	links: 'link',
 	datetimeModified: 'file-cog',
 };
 
@@ -583,11 +609,19 @@ function getDefaultKeyMappingIcon(canonicalKey: string): string {
 	return normalizeTaskIconValue(DEFAULT_KEY_MAPPING_ICONS[canonicalKey] ?? '');
 }
 
+const DEFAULT_KEY_MAPPING_VISIBLE_NAMES: Record<string, string> = {
+	links: 'Links',
+};
+
+function getDefaultKeyMappingVisibleName(canonicalKey: string): string {
+	return DEFAULT_KEY_MAPPING_VISIBLE_NAMES[canonicalKey] ?? canonicalKey;
+}
+
 /** Generate default key mappings from all canonical keys */
 function buildDefaultKeyMappings(): KeyMapping[] {
 	return CANONICAL_KEYS.map(k => ({
 		canonicalKey: k.name,
-		visiblePropertyName: k.name,
+		visiblePropertyName: getDefaultKeyMappingVisibleName(k.name),
 		type: k.type,
 		sync: k.sync,
 		enabled: true,
@@ -625,6 +659,7 @@ export interface OperonSettings {
 	/** UI language override. 'auto' = detect from Obsidian locale. */
 	language: 'auto' | 'en' | 'tr';
 	timeFormat: '24h' | '12h';
+	demoWorkspacePromptDismissed: boolean;
 
 	// Task creation
 	taskCreateDebounceMs: number;
@@ -867,6 +902,111 @@ export function normalizeInlineTaskParentFileHeadingKeyword(raw: string): string
 	return normalizeMarkdownHeadingKeyword(raw, DEFAULT_INLINE_TASK_PARENT_FILE_HEADING_KEYWORD);
 }
 
+function cloneDefaultFilterSets(): FilterSet[] {
+	const filterSets: FilterSet[] = [
+		{
+			id: 'fs_3n8dail',
+			name: 'Daily ToDo',
+			icon: 'calendar-day',
+			rootGroup: {
+				id: 'fg_fs_3n8dail',
+				logic: 'all',
+				children: [
+					{
+						id: 'cond_4h2today',
+						field: 'dateScheduled',
+						fieldType: 'date',
+						operator: 'isToday',
+					},
+					{
+						id: 'grp_j7nolog',
+						logic: 'all',
+						children: [
+							{
+								id: 'cond_9z8nolog',
+								field: 'status',
+								fieldType: 'text',
+								operator: 'notContains',
+								value: 'log',
+							},
+						],
+					},
+				],
+			},
+			sorts: [
+				{ field: 'checkbox', order: 'asc' },
+				{ field: 'priority', order: 'asc' },
+			],
+			matchLogic: 'all',
+			conditions: [
+				{
+					id: 'cond_4h2today',
+					field: 'dateScheduled',
+					fieldType: 'date',
+					operator: 'isToday',
+				},
+				{
+					id: 'cond_9z8nolog',
+					field: 'status',
+					fieldType: 'text',
+					operator: 'notContains',
+					value: 'log',
+				},
+			],
+			sortBy: 'checkbox',
+			sortOrder: 'asc',
+			groupBy: 'dateScheduled',
+			groupOrder: 'desc',
+		},
+		{
+			id: 'fs_7dopen',
+			name: 'Last Seven Days Open',
+			icon: 'calendar-week',
+			rootGroup: {
+				id: 'fg_fs_7dopen',
+				logic: 'all',
+				children: [
+					{
+						id: 'cond_2xisopen',
+						field: 'checkbox',
+						fieldType: 'checkbox',
+						operator: 'isOpen',
+					},
+					{
+						id: 'cond_7daysago',
+						field: 'dateScheduled',
+						fieldType: 'date',
+						operator: 'underDaysAgo',
+						value: '7',
+					},
+				],
+			},
+			sorts: [{ field: 'priority', order: 'asc' }],
+			matchLogic: 'all',
+			conditions: [
+				{
+					id: 'cond_2xisopen',
+					field: 'checkbox',
+					fieldType: 'checkbox',
+					operator: 'isOpen',
+				},
+				{
+					id: 'cond_7daysago',
+					field: 'dateScheduled',
+					fieldType: 'date',
+					operator: 'underDaysAgo',
+					value: '7',
+				},
+			],
+			sortBy: 'priority',
+			sortOrder: 'asc',
+			groupBy: 'happensOn',
+			groupOrder: 'desc',
+		},
+	];
+	return filterSets.map(cloneFilterSet);
+}
+
 export const DEFAULT_SETTINGS: OperonSettings = {
 	settingsVersion: CURRENT_SETTINGS_VERSION,
 
@@ -875,13 +1015,14 @@ export const DEFAULT_SETTINGS: OperonSettings = {
 	priorities: cloneDefaultPriorities(),
 	defaultPriority: 'C',
 	keyMappings: buildDefaultKeyMappings(),
-	filterSets: [],
+	filterSets: cloneDefaultFilterSets(),
 
 	filterShowSubtasks: true,
 	filterShowOnlyOpenSubtasks: false,
 
 	language: 'auto',
 	timeFormat: '24h',
+	demoWorkspacePromptDismissed: false,
 
 	taskCreateDebounceMs: 750,
 	taskDescriptionRequired: true,
@@ -1258,7 +1399,8 @@ function normalizeKanbanPresetDefinition(raw: unknown): KanbanPreset | null {
 		? src.autoCollapseFinishedColumns
 		: typeof src.autoHideFinishedTasks === 'boolean'
 			? src.autoHideFinishedTasks
-		: true;
+			: true;
+	const sortMode = normalizeKanbanSortMode(src.sortMode);
 	const sortRules = normalizeKanbanSortRules(src.sortRules);
 
 	return {
@@ -1273,8 +1415,13 @@ function normalizeKanbanPresetDefinition(raw: unknown): KanbanPreset | null {
 		collapseEmptyColumns,
 		collapseEmptySwimlanes,
 		autoCollapseFinishedColumns,
+		sortMode,
 		sortRules,
 	};
+}
+
+function normalizeKanbanSortMode(raw: unknown): KanbanSortMode {
+	return raw === 'manual' ? 'manual' : 'automatic';
 }
 
 function normalizeKanbanSortRules(raw: unknown): KanbanSortRule[] {
@@ -1895,6 +2042,10 @@ export function migrateSettings(raw: unknown): OperonSettings {
 		// Invalid type → keep default (already set)
 	}
 
+	if (!Array.isArray(src.filterSets) && 'leftRailDefaultFilterViewId' in src) {
+		out.filterSets = [];
+	}
+
 	// Validate enum fields
 	if (!['auto', 'en', 'tr'].includes(out.language)) {
 		out.language = DEFAULT_SETTINGS.language;
@@ -2245,7 +2396,7 @@ export function migrateSettings(raw: unknown): OperonSettings {
 			if (!out.keyMappings.some(m => m.canonicalKey === k.name)) {
 				out.keyMappings.push({
 					canonicalKey: k.name,
-					visiblePropertyName: k.name,
+					visiblePropertyName: getDefaultKeyMappingVisibleName(k.name),
 					type: k.type,
 					sync: k.sync,
 					enabled: true,
@@ -2303,7 +2454,8 @@ function normalizeTaskCreatorToolbar(raw: unknown): TaskCreatorToolbarItem[] {
 
 	for (const key of TASK_CREATOR_TOOLBAR_FIELD_ORDER) {
 		if (seen.has(key)) continue;
-		normalized.push(defaults.find(item => item.key === key) ?? { key, visible: true });
+		const item = defaults.find(candidate => candidate.key === key) ?? { key, visible: true };
+		insertMissingOrderedItem(normalized, item, TASK_CREATOR_TOOLBAR_FIELD_ORDER);
 	}
 
 	return normalized;
@@ -2344,7 +2496,7 @@ function normalizeCompactChipItems(
 
 	for (const item of defaults) {
 		if (seen.has(item.key)) continue;
-		normalized.push({ ...item });
+		insertMissingOrderedItem(normalized, { ...item }, INLINE_TASK_COMPACT_CHIP_ORDER);
 	}
 
 	return normalized;
@@ -2514,10 +2666,31 @@ function normalizeOverlayTaskCompactChips(raw: unknown): InlineTaskCompactChipIt
 
 	for (const item of defaults) {
 		if (seen.has(item.key)) continue;
-		normalized.push(item);
+		insertMissingOrderedItem(normalized, item, INLINE_TASK_COMPACT_CHIP_ORDER);
 	}
 
 	return normalized;
+}
+
+function insertMissingOrderedItem<T extends { key: string }>(
+	items: T[],
+	item: T,
+	order: readonly string[],
+): void {
+	const targetOrderIndex = order.indexOf(item.key);
+	if (targetOrderIndex < 0) {
+		items.push(item);
+		return;
+	}
+	for (let orderIndex = targetOrderIndex - 1; orderIndex >= 0; orderIndex--) {
+		const previousKey = order[orderIndex];
+		const existingIndex = items.findIndex(candidate => candidate.key === previousKey);
+		if (existingIndex >= 0) {
+			items.splice(existingIndex + 1, 0, item);
+			return;
+		}
+	}
+	items.unshift(item);
 }
 
 export function getFallbackStateIcon(

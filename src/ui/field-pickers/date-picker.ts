@@ -1,6 +1,7 @@
 import { App } from 'obsidian';
 import { t } from '../../core/i18n';
 import { createButton, createFloatingPanel, focusFloatingInput, resolvePickerApp } from './common';
+import { appendDatePickerCandidateRow } from './date-picker-row';
 import {
 	buildDatePickerCandidates,
 	DateParseCandidate,
@@ -107,14 +108,7 @@ export function showDatePicker(anchor: HTMLElement | DOMRect, options: DatePicke
 			button.type = 'button';
 			button.className = 'operon-field-menu-item operon-date-picker-item';
 			if (index === activeIndex) button.classList.add('is-active');
-
-			const primary = button.createSpan('operon-date-picker-item-primary');
-			primary.textContent = candidate.primaryLabel;
-
-			if (candidate.secondaryLabel) {
-				const secondary = button.createSpan('operon-date-picker-item-secondary');
-				secondary.textContent = candidate.secondaryLabel;
-			}
+			appendDatePickerCandidateRow(button, candidate, language);
 
 			button.addEventListener('mousemove', () => {
 				if (activeIndex === index) return;

@@ -940,19 +940,19 @@ export class TaskCreatorModal extends Modal {
 			app: this.app,
 			settings: this.options.settings,
 			allTasks: this.options.allTasks,
-			canonicalKey,
-			anchor,
-			currentFieldValues: { ...this.draft.fieldValues },
-			currentTags: [...this.draft.tags],
-			closeListPickerOnSelect: canonicalKey === 'assignees' || canonicalKey === 'tags' || canonicalKey === 'contexts',
-			onCommit: payload => {
-				this.applyPayloadToDraft(payload);
-				if (canonicalKey === 'assignees' || canonicalKey === 'tags' || canonicalKey === 'contexts') {
-					return;
-				}
-				this.closeActivePicker();
-				window.setTimeout(() => this.focusDescription(this.descriptionEl.selectionStart ?? this.descriptionEl.value.length), 0);
-			},
+				canonicalKey,
+				anchor,
+				currentFieldValues: { ...this.draft.fieldValues },
+				currentTags: [...this.draft.tags],
+				closeListPickerOnSelect: canonicalKey === 'assignees' || canonicalKey === 'tags' || canonicalKey === 'contexts',
+				onCommit: payload => {
+					this.applyPayloadToDraft(payload);
+					if (canonicalKey === 'assignees' || canonicalKey === 'tags' || canonicalKey === 'contexts' || canonicalKey === 'links') {
+						return;
+					}
+					this.closeActivePicker();
+					window.setTimeout(() => this.focusDescription(this.descriptionEl.selectionStart ?? this.descriptionEl.value.length), 0);
+				},
 			onOpenNote: () => {
 				this.openNote();
 				window.setTimeout(() => this.focusNote(), 0);

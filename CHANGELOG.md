@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Validation
+
+## [1.0.3] - 2026-05-23
+
+### New
+- Added a Links task field, picker, and optional chips for storing and reusing multiple external web links on inline and file tasks, supporting raw URLs and named Markdown links.
+- Added manual Kanban ordering per preset, so cards can keep a drag-defined order inside each board cell while new cards append naturally and duplicated presets preserve their saved order.
+- Added Daily ToDo and Last Seven Days Open as default saved filters for new Operon setups, giving first-time users useful task views immediately.
+- Added an Operon demo workspace for new users, with a first-run prompt and Settings button that create the Basics project with benefit notes on each task, a command reference note, a realistic setup project, reusable filters, and initialized parent totals without overwriting user edits.
+
+### Improved
+- Improved Tasks emoji line conversion so priority emojis now map into the user's ordered Operon priorities instead of being preserved only as leftover notes.
+- Improved Calendar time grid scale settings with smaller 0.25x and 0.50x options for denser timed planning views.
+- Improved Date Picker and DateTime Picker suggestions with compact aligned rows, making quick dates easier to scan without clipped bottom entries.
+- Improved task chip customization with optional start and end time chips that show only the clock icon and time.
+- Improved Kanban boards with No swimlane selected by hiding the unused swimlane column, giving status columns more room.
+- Improved Kanban preset sorting controls with clearer spacing before the appearance settings, making the preset editor easier to scan.
+
+### Changed
+- Daily Notes targets now follow the date format configured in Obsidian's Daily Notes core plugin, including custom Moment-style formats such as dotted dates, nested year/month folders, and weekday names.
+- Task Editor date fields now use canonical date labels and compact time-only datetime labels while keeping field icons visible after selection.
+
+### Fixed
+- Fixed Calendar navigation date buttons showing today's date while another date is focused, so they now display the focused date while still jumping back to today when clicked.
+- Fixed Task Chips settings jumping back to the top after toggling chip visibility or display controls.
+- Fixed No swimlane Kanban boards hiding cards when an old hidden swimlane collapse state was still saved.
+- Fixed Kanban inline task creation ignoring the configured inline task save location, so Kanban-created inline tasks now respect Specific File and Daily Notes modes.
+- Fixed numeric settings inputs snapping back while editing, so values such as Kanban expanded column width can be deleted and retyped normally before saving.
+
+### Validation
+- Local maintainer validation passed `npm run check:local`, including strict linting, production build, release guard, and the full Phase 5 regression suite at 595/595 checks.
+
 ## [1.0.2] - 2026-05-20
 
 ### Fixed

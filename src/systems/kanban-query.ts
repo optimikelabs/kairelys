@@ -54,6 +54,7 @@ export function queryKanbanBoard(options: {
 	skippedStatusIds?: Iterable<string>;
 	skippedLaneKeys?: Iterable<string>;
 	pinnedCache?: PinnedCache | null;
+	manualOrder?: Record<string, string[]>;
 }): KanbanBoardData {
 	const { preset, pipeline, filterSet, priorities, pinnedCache } = options;
 	const normalizedSearchQuery = (options.searchQuery ?? '').trim().toLocaleLowerCase();
@@ -97,8 +98,12 @@ export function queryKanbanBoard(options: {
 		}
 	}
 
-	for (const tasks of cellMap.values()) {
-		tasks.sort(taskComparator);
+	for (const [cellKey, tasks] of cellMap.entries()) {
+		if (preset.sortMode === 'manual') {
+			applyManualKanbanTaskOrder(tasks, options.manualOrder?.[cellKey] ?? []);
+		} else {
+			tasks.sort(taskComparator);
+		}
 	}
 
 	return {
@@ -112,6 +117,28 @@ export function queryKanbanBoard(options: {
 		cellCountMap,
 		cellMap,
 	};
+}
+
+export function applyManualKanbanTaskOrder(
+	tasks: IndexedTask[],
+	taskIds: string[],
+): void {
+	const manualRank = new Map<string, number>();
+	for (const taskId of taskIds) {
+		if (!manualRank.has(taskId)) {
+			manualRank.set(taskId, manualRank.size);
+		}
+	}
+	const originalRank = new Map(tasks.map((task, index) => [task.operonId, index] as const));
+
+	tasks.sort((left, right) => {
+		const leftRank = manualRank.get(left.operonId);
+		const rightRank = manualRank.get(right.operonId);
+		if (leftRank !== undefined && rightRank !== undefined) return leftRank - rightRank;
+		if (leftRank !== undefined) return -1;
+		if (rightRank !== undefined) return 1;
+		return (originalRank.get(left.operonId) ?? 0) - (originalRank.get(right.operonId) ?? 0);
+	});
 }
 
 export function buildKanbanTaskComparator(options: {

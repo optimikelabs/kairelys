@@ -21,6 +21,7 @@ import type { ContextualMenuActionId } from '../core/contextual-menu-engine';
 import { getConfiguredKeyMappingIcon } from '../core/key-mapping-icons';
 import { openObsidianTagSearch } from './tag-search';
 import { bindCompactChipLinkPreview } from './compact-chip-link-preview';
+import { bindExternalLinkContextMenu, openExternalUrl } from './external-link-actions';
 import {
 	bindAdaptiveIconOnlyExpansion,
 	bindIconOnlyChipPreview,
@@ -151,6 +152,9 @@ export function buildReadingTaskRowElement(
 		applyCompactChipVisualStyles(chip, entry, task, callbacks, statusColor, taskColor);
 		if (entry.iconOnly) {
 			bindAdaptiveIconOnlyExpansion(chip, entry.label, taskColor ?? null);
+			if (entry.externalUrl) {
+				bindExternalLinkContextMenu(chip, entry.externalUrl, entry.externalRawValue);
+			}
 			if (entry.tooltipContent) {
 				bindOperonHoverTooltip(chip, {
 					title: entry.tooltipTitle ?? t('taskEditor', 'details'),
@@ -179,6 +183,9 @@ export function buildReadingTaskRowElement(
 				taskColor,
 			})
 			: chip;
+		if (entry.externalUrl) {
+			bindExternalLinkContextMenu(chip, entry.externalUrl, entry.externalRawValue);
+		}
 		if (entry.linkTarget) {
 			bindCompactChipLinkPreview(callbacks.app, chip, entry.linkTarget, task.primary.filePath);
 		}
@@ -410,6 +417,10 @@ function attachReadingChipAction(
 				break;
 			case 'tags':
 				void openObsidianTagSearch(callbacks.app, entry.label);
+				onCommit?.();
+				break;
+			case 'links':
+				openExternalUrl(entry.externalUrl);
 				onCommit?.();
 				break;
 			case 'estimate':

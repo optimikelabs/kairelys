@@ -15,6 +15,10 @@ export type TasksEmojiToOperonResult =
 	| { kind: 'already_operon' }
 	| { kind: 'hybrid_unsupported' };
 
+export interface TasksEmojiToOperonOptions {
+	priorities?: Array<{ label: string }>;
+}
+
 interface TextRange {
 	from: number;
 	to: number;
@@ -36,7 +40,14 @@ const SUPPORTED_DATE_EMOJIS: Array<{ emoji: string; key: string }> = [
 	{ emoji: '➕', key: 'datetimeCreated' },
 ];
 
-const PRIORITY_EMOJIS = ['⏫', '🔼', '🔽', '⏬'];
+const TASKS_PRIORITY_EMOJIS: Array<{ emoji: string; rank: number }> = [
+	{ emoji: '🔺', rank: 0 },
+	{ emoji: '⏫', rank: 1 },
+	{ emoji: '🔼', rank: 2 },
+	{ emoji: '🔽', rank: 4 },
+	{ emoji: '⏬', rank: 5 },
+];
+const PRIORITY_EMOJIS = TASKS_PRIORITY_EMOJIS.map(entry => entry.emoji);
 const UNSUPPORTED_LONG_EMOJIS = ['🆔', '⛔', '🔁'];
 const UNSUPPORTED_SHORT_EMOJIS = ['⏰'];
 const ALL_TASKS_METADATA_EMOJIS = [
@@ -101,6 +112,19 @@ function compressWhitespace(text: string): string {
 
 function normalizeCreatedDate(value: string): string {
 	return `${value}T00:00:01`;
+}
+
+function normalizePriorityLabels(options: TasksEmojiToOperonOptions): string[] {
+	return options.priorities
+		?.map(priority => priority.label.trim())
+		.filter(Boolean) ?? [];
+}
+
+function resolveTasksPriorityLabel(rank: number, priorityLabels: string[]): string | null {
+	if (priorityLabels.length === 0) return null;
+	const maxIndex = priorityLabels.length - 1;
+	const priorityIndex = Math.min(maxIndex, Math.max(0, Math.round((rank / 5) * maxIndex)));
+	return priorityLabels[priorityIndex] ?? null;
 }
 
 function detectLeadingTimeBlock(text: string): LeadingTimeBlock | null {
@@ -221,7 +245,7 @@ function parseCheckboxState(raw: string): { checkbox: CheckboxState; leftover: s
 	}
 }
 
-export function convertTasksEmojiLineToOperon(line: string): TasksEmojiToOperonResult {
+export function convertTasksEmojiLineToOperon(line: string, options: TasksEmojiToOperonOptions = {}): TasksEmojiToOperonResult {
 	const checkboxMatch = /^(\s*)- \[(.)\](\s*)/.exec(line);
 	if (!checkboxMatch) return { kind: 'not_tasks_emoji' };
 
@@ -234,6 +258,8 @@ export function convertTasksEmojiLineToOperon(line: string): TasksEmojiToOperonR
 	const rangesToRemove: TextRange[] = [];
 	const leftovers: string[] = [];
 	const mappedFields: Record<string, string> = {};
+	const priorityLabels = normalizePriorityLabels(options);
+	let mappedPriorityEmoji = false;
 	let foundTasksSyntax = checkboxInfo.leftover !== null;
 
 	if (checkboxInfo.leftover) leftovers.push(checkboxInfo.leftover);
@@ -275,12 +301,18 @@ export function convertTasksEmojiLineToOperon(line: string): TasksEmojiToOperonR
 		}
 		if (matched) continue;
 
-		for (const emoji of PRIORITY_EMOJIS) {
-			if (!body.startsWith(emoji, i)) continue;
-			pushRange({ from: i, to: i + emoji.length });
-			leftovers.push(emoji);
+		for (const entry of TASKS_PRIORITY_EMOJIS) {
+			if (!body.startsWith(entry.emoji, i)) continue;
+			pushRange({ from: i, to: i + entry.emoji.length });
+			const priority = mappedPriorityEmoji ? null : resolveTasksPriorityLabel(entry.rank, priorityLabels);
+			if (priority) {
+				mappedFields['priority'] = priority;
+				mappedPriorityEmoji = true;
+			} else {
+				leftovers.push(entry.emoji);
+			}
 			foundTasksSyntax = true;
-			i += emoji.length - 1;
+			i += entry.emoji.length - 1;
 			matched = true;
 			break;
 		}

@@ -916,24 +916,47 @@
 }
 
 .operon-date-picker-results {
+	--operon-date-picker-gap: 4px;
+	--operon-date-picker-row-height: 36px;
 	display: flex;
 	flex-direction: column;
-	gap: 4px;
-	max-height: 240px;
+	gap: var(--operon-date-picker-gap);
+	max-height: calc((var(--operon-date-picker-row-height) * 8) + (var(--operon-date-picker-gap) * 7));
 	overflow-y: auto;
+	scroll-padding-block: var(--operon-date-picker-gap);
 }
 
 .operon-date-picker-item {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 10ch 9.5ch;
+	gap: 12px;
+	align-items: center;
+	box-sizing: border-box;
+	height: var(--operon-date-picker-row-height);
+	min-height: var(--operon-date-picker-row-height);
+	padding: 0 12px 0 24px;
+	line-height: 1.2;
 }
 
-.operon-date-picker-item-primary {
+.operon-date-picker-item-label {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 	font-weight: 600;
 }
 
-.operon-date-picker-item-secondary {
+.operon-date-picker-item-date {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-normal);
+}
+
+.operon-date-picker-item-weekday {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 	font-size: 11px;
 	color: var(--text-muted);
 }
@@ -2848,6 +2871,24 @@
 	gap: 6px;
 	max-height: min(320px, 48vh);
 	overflow-y: auto;
+}
+
+.operon-links-picker-panel {
+	width: min(360px, calc(100vw - 24px));
+	max-width: min(360px, calc(100vw - 24px));
+}
+
+.operon-links-picker-label,
+.operon-links-picker-link-value,
+.operon-links-selected-chip-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.operon-links-picker-link-row {
+	margin-top: 0;
 }
 
 .operon-file-template-picker-panel {
@@ -12246,6 +12287,15 @@ body.operon-calendar-sidebar-is-resizing {
 		var(--operon-kanban-surface-main);
 }
 
+.operon-kanban-drop-indicator {
+	flex: 0 0 4px;
+	min-height: 4px;
+	border-radius: 999px;
+	background: var(--interactive-accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--interactive-accent) 22%, transparent);
+	pointer-events: none;
+}
+
 .operon-kanban-cell:not(.is-collapsed):hover,
 .operon-kanban-cell:not(.is-collapsed):focus-within {
 	border-color: color-mix(
@@ -13265,6 +13315,54 @@ body.operon-calendar-sidebar-is-resizing {
 	flex-direction: column;
 	gap: 8px;
 	margin-top: 10px;
+	margin-bottom: 12px;
+}
+
+.operon-kanban-sort-mode-row {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 10px;
+	margin-bottom: 10px;
+}
+
+.operon-kanban-sort-mode-control {
+	display: inline-flex;
+	gap: 4px;
+	padding: 3px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	background: var(--background-secondary);
+}
+
+.operon-kanban-sort-mode-button {
+	min-width: 96px;
+	border-radius: 6px;
+	box-shadow: none;
+}
+
+.operon-kanban-sort-mode-button.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.operon-kanban-manual-sort-message {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-top: 10px;
+	margin-bottom: 12px;
+	padding: 10px 12px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	background: var(--background-primary);
+	color: var(--text-muted);
+}
+
+.operon-kanban-manual-sort-message > div:first-child {
+	color: var(--text-normal);
+	font-weight: 600;
 }
 
 .operon-kanban-sort-row {
@@ -13298,6 +13396,7 @@ body.operon-calendar-sidebar-is-resizing {
 }
 
 .operon-kanban-sort-select:focus-visible,
+.operon-kanban-sort-mode-button:focus-visible,
 .operon-kanban-sort-toggle:focus-visible,
 .operon-kanban-sort-icon-button:focus-visible,
 .operon-kanban-sort-add-row button:focus-visible {
