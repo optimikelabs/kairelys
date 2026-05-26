@@ -142,12 +142,19 @@ import { FileTaskArchiver } from './src/systems/file-task-archiver';
 import { ExternalCalendarService } from './src/systems/external-calendar-service';
 import { buildExternalCalendarItems } from './src/systems/external-calendar-query';
 import { formatDurationHuman, parseLocalDatetime } from './src/systems/tracker-utils';
-import { parseListValue, parseTaskLine, resolveInlineTaskDescriptionCursorCh } from './src/core/parser';
+import { hasOperonFields, parseListValue, parseTaskLine, resolveInlineTaskDescriptionCursorCh } from './src/core/parser';
 import { buildSubtaskExcludedIds } from './src/core/task-hierarchy';
 import { serializeTask } from './src/core/serializer';
 import { applyFieldRules } from './src/core/field-rules';
 import { normalizeTaskFieldPatch } from './src/core/task-field-patch';
 import { convertTasksEmojiLineToOperon } from './src/core/tasks-emoji-to-operon';
+import { applyTasksEmojiConversionToParsedTask } from './src/core/tasks-emoji-application';
+import {
+	extractMarkdownCheckboxListItem,
+	extractMarkdownListItemDescription,
+	measureMarkdownIndent,
+	normalizeMarkdownCheckboxMarker,
+} from './src/core/markdown-list-items';
 import { generateOperonId, generateRepeatSeriesId, setExistingIdsProvider } from './src/core/id-generator';
 import { resolveFileTaskDefaults } from './src/core/file-task-defaults';
 import { resolveOperonIdPlaceholders, resolveOperonIdPlaceholdersInTaskBlock } from './src/core/operon-id-placeholders';
@@ -298,6 +305,18 @@ interface CreateFileTaskSourceSeed {
 	selection?: EditorSelection;
 	lineNumber?: number;
 	sourceFilePath?: string;
+}
+
+interface BulkSelectionTaskNode {
+	indent: number;
+	operonId: string;
+	fieldValues: Record<string, string>;
+}
+
+interface BulkSelectionLineChange {
+	from: EditorPosition;
+	to: EditorPosition;
+	text: string;
 }
 
 interface CreateFileTaskOptions {
@@ -3767,7 +3786,7 @@ export default class OperonPlugin extends Plugin {
 
 	private stripInlineTaskBulletMarker(text: string): string {
 		const trimmed = text.replace(/^\s+/, '');
-		return trimmed.replace(/^([-*+]|\d+\.)\s+/, '');
+		return trimmed.replace(/^([-*+]|\d+[.)])\s+/, '');
 	}
 
 	private buildTaskFromPlainLine(
@@ -7015,8 +7034,10 @@ export default class OperonPlugin extends Plugin {
 		content: string,
 		template: ParsedFrontmatterDocument | null,
 		templateOption: FileTaskTemplateOption | null,
+		options: { runMode?: number } = {},
 	): Promise<string> {
-		if (!templateDocumentContainsTemplaterSyntax(template)) return content;
+		if (!this.fileTaskContentNeedsTemplaterProcessing(template, content)) return content;
+		const runMode = options.runMode ?? 2;
 
 		const templater = this.getTemplaterEngine();
 		if (!templater) {
@@ -7029,41 +7050,91 @@ export default class OperonPlugin extends Plugin {
 			const createRunningConfig = templater['create_running_config'];
 			const startTask = templater['start_templater_task'];
 			const endTask = templater['end_templater_task'];
+			const overwrite = templater['overwrite_file_commands'];
 			const templateFile = templateOption?.path
 				? this.app.vault.getAbstractFileByPath(templateOption.path)
 				: null;
 
-			if (
-				templateFile instanceof TFile
-				&& typeof parseTemplate === 'function'
-				&& typeof createRunningConfig === 'function'
-			) {
+			const parseWithRunningConfig = async (
+				sourceTemplateFile: TFile,
+				targetFile: TFile,
+				sourceContent: string,
+			): Promise<string | null> => {
+				if (typeof parseTemplate !== 'function' || typeof createRunningConfig !== 'function') return null;
 				if (typeof startTask === 'function') {
-					await startTask.call(templater, file.path);
+					await startTask.call(templater, targetFile.path);
 				}
 
 				try {
-					const config = callUnknownMethod(templater, 'create_running_config', templateFile, file, 2);
-					const rendered = await callUnknownMethod(templater, 'parse_template', config, content);
-					return typeof rendered === 'string' ? rendered : content;
+					const config = callUnknownMethod(templater, 'create_running_config', sourceTemplateFile, targetFile, runMode);
+					const rendered = await callUnknownMethod(templater, 'parse_template', config, sourceContent);
+					return typeof rendered === 'string' ? rendered : sourceContent;
 				} finally {
 					if (typeof endTask === 'function') {
-						await endTask.call(templater, file.path);
+						await endTask.call(templater, targetFile.path);
 					}
 				}
+			};
+
+			const ensureFileContentForTemplater = async (sourceContent: string): Promise<void> => {
+				const currentContent = await this.app.vault.read(file);
+				if (currentContent !== sourceContent) {
+					await this.app.vault.modify(file, sourceContent);
+				}
+			};
+
+			const runTargetFilePass = async (sourceContent: string): Promise<string | null> => {
+				await ensureFileContentForTemplater(sourceContent);
+				await delayWithActiveWindow(350);
+				const currentContent = await this.app.vault.read(file);
+				let targetParsedContent: string | null = null;
+				try {
+					targetParsedContent = await parseWithRunningConfig(file, file, currentContent);
+				} catch (parseError) {
+					console.warn('Operon: target-file Templater pass failed; falling back to overwrite pass.', parseError);
+				}
+
+				if (targetParsedContent !== null) {
+					if (!this.fileTaskContentNeedsTemplaterProcessing(null, targetParsedContent)) return targetParsedContent;
+					if (targetParsedContent !== currentContent) {
+						await this.app.vault.modify(file, targetParsedContent);
+					}
+				}
+
+				if (typeof overwrite !== 'function') return targetParsedContent;
+				await overwrite.call(templater, file, false);
+				await delayWithActiveWindow(50);
+				return await this.app.vault.read(file);
+			};
+
+			if (
+				templateFile instanceof TFile
+			) {
+				let renderedContent = content;
+				try {
+					renderedContent = await parseWithRunningConfig(templateFile, file, content) ?? content;
+				} catch (parseError) {
+					console.warn('Operon: template-file Templater pass failed; falling back to target-file pass.', parseError);
+				}
+
+				if (!this.fileTaskContentNeedsTemplaterProcessing(null, renderedContent)) return renderedContent;
+				return await runTargetFilePass(renderedContent) ?? renderedContent;
 			}
 
-			const overwrite = templater['overwrite_file_commands'];
-			if (typeof overwrite === 'function') {
-				await overwrite.call(templater, file, false);
-				return await this.app.vault.cachedRead(file);
-			}
+			return await runTargetFilePass(content) ?? content;
 		} catch (error) {
 			console.error('Operon: failed to process Templater syntax for file task', error);
 			new Notice(t('notifications', 'templaterProcessingFailed'));
 		}
 
 		return content;
+	}
+
+	private fileTaskContentNeedsTemplaterProcessing(
+		template: ParsedFrontmatterDocument | null,
+		content: string,
+	): boolean {
+		return templateDocumentContainsTemplaterSyntax(template) || content.includes('<%');
 	}
 
 	private resolveOperonIdPlaceholdersInContent(content: string): string {
@@ -7621,8 +7692,9 @@ export default class OperonPlugin extends Plugin {
 
 		const sanitized = this.sanitizeTaskFileName(title) || t('taskEditor', 'untitledTaskFile');
 		const filePath = this.formatConverter.getUniqueFilePath(folder, sanitized);
+		const needsTemplaterProcessing = this.fileTaskContentNeedsTemplaterProcessing(template, draft.content);
 		this.suppressRawTaskCreationNotice(draft.operonId);
-		await this.app.vault.create(filePath, draft.content);
+		await this.app.vault.create(filePath, needsTemplaterProcessing ? '' : draft.content);
 
 		const created = this.app.vault.getAbstractFileByPath(filePath);
 		if (!(created instanceof TFile)) return null;
@@ -7632,9 +7704,10 @@ export default class OperonPlugin extends Plugin {
 			draft.content,
 			template,
 			selectedTemplate,
+			{ runMode: needsTemplaterProcessing ? 0 : 2 },
 		);
 		const resolvedContent = this.resolveOperonIdPlaceholdersInContent(renderedContent);
-		if (resolvedContent !== draft.content) {
+		if (resolvedContent !== await this.app.vault.cachedRead(created)) {
 			await this.app.vault.modify(created, resolvedContent);
 		}
 
@@ -8503,13 +8576,14 @@ export default class OperonPlugin extends Plugin {
 
 		const sanitized = this.sanitizeTaskFileName(initialDescription) || t('taskEditor', 'untitledTaskFile');
 		const filePath = this.formatConverter.getUniqueFilePath(folder, sanitized);
+		const needsTemplaterProcessing = this.fileTaskContentNeedsTemplaterProcessing(template, draft.content);
 		await this.withInlineToFileTaskTransitionSafePass(
 			draft.operonId,
 			file.path,
 			parsed.lineNumber,
 			filePath,
 			async () => {
-				await this.app.vault.create(filePath, draft.content);
+				await this.app.vault.create(filePath, needsTemplaterProcessing ? '' : draft.content);
 				const created = this.app.vault.getAbstractFileByPath(filePath);
 				if (!(created instanceof TFile)) return;
 
@@ -8518,6 +8592,7 @@ export default class OperonPlugin extends Plugin {
 					draft.content,
 					template,
 					selectedTemplate,
+					{ runMode: needsTemplaterProcessing ? 0 : 2 },
 				);
 				const resolvedContent = this.resolveOperonIdPlaceholdersInContent(renderedContent);
 				if (!this.isInlineToFileTaskTransitionContentValid(resolvedContent, draft.operonId)) {
@@ -8529,7 +8604,7 @@ export default class OperonPlugin extends Plugin {
 					}
 					return;
 				}
-				if (resolvedContent !== draft.content) {
+				if (resolvedContent !== await this.app.vault.cachedRead(created)) {
 					await this.app.vault.modify(created, resolvedContent);
 				}
 
@@ -8778,14 +8853,21 @@ export default class OperonPlugin extends Plugin {
 			new Notice(t('notifications', 'tasksEmojiConversionFailed'));
 			return;
 		}
+		const previousFieldValues = this.getParsedTaskFieldValues(parsed);
 
-		parsed.tags = [...new Set(conversion.tags.map(tag => tag.replace(/^#/, '').trim()).filter(Boolean))];
-		for (const [key, value] of Object.entries(conversion.mappedFields)) {
-			if (!value.trim()) continue;
-			this.setParsedTaskField(parsed, key, value);
-		}
-		if (conversion.leftovers.length > 0) {
-			this.setParsedTaskField(parsed, 'note', `Tasks syntax leftovers: ${conversion.leftovers.join(' | ')}`, 'text');
+		const applied = applyTasksEmojiConversionToParsedTask({
+			task: parsed,
+			tags: conversion.tags,
+			mappedFields: conversion.mappedFields,
+			leftovers: conversion.leftovers,
+			previousFieldValues,
+			pipelines: this.settings.pipelines,
+			defaultPipelineName: this.settings.defaultPipelineName,
+			defaultPriority: this.settings.defaultPriority,
+		});
+		if (!applied.ok) {
+			new Notice(applied.errorMessage ?? t('notifications', 'terminalDateWorkflowResolveFailed'));
+			return;
 		}
 		this.touchParsedTaskModifiedTimestamp(parsed, now);
 
@@ -8801,6 +8883,252 @@ export default class OperonPlugin extends Plugin {
 			description: updatedParsed.description,
 			operonId: updatedParsed.operonId,
 		});
+	}
+
+	private async handleConvertSelectionToOperonTasksCommand(
+		editor: Editor,
+		view: MarkdownView,
+	): Promise<void> {
+		const filePath = view.file?.path ?? '';
+		if (!filePath) {
+			new Notice(t('notifications', 'openMarkdownForSelectionConversion'));
+			return;
+		}
+
+		const selectedRange = this.resolveSelectedLineRangeForTaskConversion(editor);
+		if (!selectedRange) return;
+
+		const now = localNow();
+		const baseInherited = this.resolveInlineTaskInheritedFields(view.file ?? null);
+		const changes: BulkSelectionLineChange[] = [];
+		const parentStack: BulkSelectionTaskNode[] = [];
+		let convertedCount = 0;
+		let linkedCount = 0;
+		let skippedCount = 0;
+		let inFencedCodeBlock = false;
+
+		for (let lineNumber = 0; lineNumber <= selectedRange.endLine; lineNumber++) {
+			const line = editor.getLine(lineNumber);
+			const fenceLine = this.isMarkdownFenceLine(line);
+			const inSelection = lineNumber >= selectedRange.startLine;
+
+			if (inSelection) {
+				if (inFencedCodeBlock || fenceLine) {
+					skippedCount++;
+				} else {
+					const result = this.buildSelectedLineOperonTaskConversion({
+						line,
+						lineNumber,
+						filePath,
+						now,
+						baseInherited,
+						parentStack,
+					});
+
+					if (result.kind === 'converted') {
+						convertedCount++;
+						if (result.linkedToParent) linkedCount++;
+						changes.push({
+							from: { line: lineNumber, ch: 0 },
+							to: { line: lineNumber, ch: line.length },
+							text: result.taskLine,
+						});
+						this.suppressRawTaskCreationNotice(result.operonId);
+					} else if (result.kind === 'skipped') {
+						skippedCount++;
+					}
+				}
+			}
+
+			if (fenceLine) {
+				inFencedCodeBlock = !inFencedCodeBlock;
+			}
+		}
+
+		if (convertedCount === 0) {
+			new Notice(t('notifications', 'convertSelectionToOperonTasksNoItems'));
+			return;
+		}
+
+		this.applyBulkSelectionLineChanges(editor, changes);
+		new Notice(t('notifications', 'convertSelectionToOperonTasksSummary', {
+			converted: String(convertedCount),
+			linked: String(linkedCount),
+			skipped: String(skippedCount),
+		}));
+	}
+
+	private applyBulkSelectionLineChanges(editor: Editor, changes: BulkSelectionLineChange[]): void {
+		try {
+			editor.transaction({ changes }, 'operon-convert-selection-to-tasks');
+		} catch (error) {
+			console.warn('Operon: bulk selection transaction failed; falling back to line updates.', error);
+			for (const change of changes) {
+				editor.setLine(change.from.line, change.text);
+			}
+			return;
+		}
+
+		const allChangesApplied = changes.every(change => editor.getLine(change.from.line) === change.text);
+		if (allChangesApplied) return;
+
+		console.warn('Operon: bulk selection transaction did not apply every line; falling back to line updates.');
+		for (const change of changes) {
+			if (editor.getLine(change.from.line) !== change.text) {
+				editor.setLine(change.from.line, change.text);
+			}
+		}
+	}
+
+	private resolveSelectedLineRangeForTaskConversion(editor: Editor): { startLine: number; endLine: number } | null {
+		if (!editor.somethingSelected()) {
+			new Notice(t('notifications', 'convertSelectionToOperonTasksSelectListItems'));
+			return null;
+		}
+
+		const selections = editor.listSelections();
+		if (selections.length !== 1) {
+			new Notice(t('notifications', 'convertSelectionToOperonTasksSingleSelection'));
+			return null;
+		}
+
+		const { from, to } = this.normalizeEditorSelection(selections[0]);
+		let endLine = to.line;
+		if (to.ch === 0 && endLine > from.line) {
+			endLine -= 1;
+		}
+		if (from.line > endLine) {
+			new Notice(t('notifications', 'convertSelectionToOperonTasksSelectListItems'));
+			return null;
+		}
+
+		return { startLine: from.line, endLine };
+	}
+
+	private buildSelectedLineOperonTaskConversion(options: {
+		line: string;
+		lineNumber: number;
+		filePath: string;
+		now: string;
+		baseInherited: SubtaskInitialFields;
+		parentStack: BulkSelectionTaskNode[];
+	}): { kind: 'converted'; taskLine: string; operonId: string; linkedToParent: boolean } | { kind: 'existing' } | { kind: 'skipped' } {
+		const existingParsed = this.parseInlineTaskLine(options.line, options.lineNumber, options.filePath);
+		const indent = measureMarkdownIndent(options.line);
+		this.pruneBulkSelectionParentStack(options.parentStack, indent);
+		const parentNode = options.parentStack[options.parentStack.length - 1] ?? null;
+
+		if (existingParsed?.operonId) {
+			options.parentStack.push({
+				indent,
+				operonId: existingParsed.operonId,
+				fieldValues: this.getParsedTaskFieldValues(existingParsed),
+			});
+			return { kind: 'existing' };
+		}
+
+		const lineIndent = options.line.match(/^\s*/)?.[0] ?? '';
+		const inherited = parentNode
+			? resolveSubtaskInitialFieldsFromParentValues(parentNode.operonId, parentNode.fieldValues, this.settings)
+			: options.baseInherited;
+		const normalizedCheckboxLine = normalizeMarkdownCheckboxMarker(options.line);
+		const conversionSourceLine = normalizedCheckboxLine ?? options.line;
+		const tasksEmojiConversion = convertTasksEmojiLineToOperon(conversionSourceLine, {
+			priorities: this.settings.priorities ?? DEFAULT_PRIORITIES,
+		});
+
+		if (tasksEmojiConversion.kind === 'converted') {
+			const provisionalTaskLine = `${lineIndent}${this.buildNewInlineTaskWithInheritedFields(
+				tasksEmojiConversion.description,
+				tasksEmojiConversion.checkbox,
+				inherited,
+				options.now,
+				options.filePath,
+				options.lineNumber,
+			)}`;
+			const parsed = this.parseInlineTaskLine(provisionalTaskLine, options.lineNumber, options.filePath);
+			if (!parsed?.operonId) return { kind: 'skipped' };
+			const previousFieldValues = this.getParsedTaskFieldValues(parsed);
+
+			const applied = applyTasksEmojiConversionToParsedTask({
+				task: parsed,
+				tags: tasksEmojiConversion.tags,
+				mappedFields: tasksEmojiConversion.mappedFields,
+				leftovers: tasksEmojiConversion.leftovers,
+				previousFieldValues,
+				pipelines: this.settings.pipelines,
+				defaultPipelineName: this.settings.defaultPipelineName,
+				defaultPriority: this.settings.defaultPriority,
+			});
+			if (!applied.ok) return { kind: 'skipped' };
+			this.touchParsedTaskModifiedTimestamp(parsed, options.now);
+
+			return this.finalizeBulkConvertedTaskNode(parsed, options.parentStack, indent, parentNode !== null);
+		}
+
+		const checkboxItem = extractMarkdownCheckboxListItem(options.line);
+		if (checkboxItem) {
+			if (hasOperonFields(options.line)) return { kind: 'skipped' };
+			const taskLine = `${checkboxItem.indent}${this.buildNewInlineTaskWithInheritedFields(
+				checkboxItem.description,
+				checkboxItem.checkbox,
+				inherited,
+				options.now,
+				options.filePath,
+				options.lineNumber,
+			)}`;
+			const parsed = this.parseInlineTaskLine(taskLine, options.lineNumber, options.filePath);
+			if (!parsed?.operonId) return { kind: 'skipped' };
+			return this.finalizeBulkConvertedTaskNode(parsed, options.parentStack, indent, parentNode !== null);
+		}
+
+		if (normalizedCheckboxLine) return { kind: 'skipped' };
+
+		const listItemDescription = extractMarkdownListItemDescription(options.line);
+		if (!listItemDescription) return { kind: 'skipped' };
+
+		const taskLine = `${lineIndent}${this.buildNewInlineTaskWithInheritedFields(
+			listItemDescription,
+			'open',
+			inherited,
+			options.now,
+			options.filePath,
+			options.lineNumber,
+		)}`;
+		const parsed = this.parseInlineTaskLine(taskLine, options.lineNumber, options.filePath);
+		if (!parsed?.operonId) return { kind: 'skipped' };
+		return this.finalizeBulkConvertedTaskNode(parsed, options.parentStack, indent, parentNode !== null);
+	}
+
+	private finalizeBulkConvertedTaskNode(
+		parsed: ParsedTask,
+		parentStack: BulkSelectionTaskNode[],
+		indent: number,
+		linkedToParent: boolean,
+	): { kind: 'converted'; taskLine: string; operonId: string; linkedToParent: boolean } | { kind: 'skipped' } {
+		if (!parsed.operonId) return { kind: 'skipped' };
+		const taskLine = this.serializeInlineTask(parsed);
+		parentStack.push({
+			indent,
+			operonId: parsed.operonId,
+			fieldValues: this.getParsedTaskFieldValues(parsed),
+		});
+		return {
+			kind: 'converted',
+			taskLine,
+			operonId: parsed.operonId,
+			linkedToParent,
+		};
+	}
+
+	private getParsedTaskFieldValues(task: ParsedTask): Record<string, string> {
+		return Object.fromEntries(task.fields.map(field => [field.key, field.value]));
+	}
+
+	private pruneBulkSelectionParentStack(parentStack: BulkSelectionTaskNode[], indent: number): void {
+		while (parentStack.length > 0 && parentStack[parentStack.length - 1].indent >= indent) {
+			parentStack.pop();
+		}
 	}
 
 	private async handleConvertOrEditFileTaskCommand(): Promise<void> {
@@ -10066,6 +10394,14 @@ export default class OperonPlugin extends Plugin {
 				name: t('commands', 'convertTasksEmojiLineToInlineTask'),
 				editorCallback: (editor: Editor, view: MarkdownView) => {
 					runAsyncAction('convert tasks emoji line command failed', () => this.handleConvertTasksEmojiLineToOperonInlineTaskCommand(editor, view));
+				},
+			});
+
+			this.addCommand({
+				id: 'convert-selection-to-tasks',
+				name: t('commands', 'convertSelectionToOperonTasks'),
+				editorCallback: (editor: Editor, view: MarkdownView) => {
+					runAsyncAction('convert selection to operon tasks command failed', () => this.handleConvertSelectionToOperonTasksCommand(editor, view));
 				},
 			});
 

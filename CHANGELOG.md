@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Validation
 
+## [1.0.6] - 2026-05-26
+
+### New
+- Added a command to convert selected list items into Operon inline tasks, including checkbox lines, Tasks emoji lines, bullets, numbered items, selected indentation-based subtask links, normal inline inheritance for top-level converted items, Tasks priority emoji handling that falls back to Operon's default priority when no priority emoji is present, and scheduled-date emoji handling that uses the configured scheduled status target.
+
+### Improved
+- Improved the Demo Workspace command reference for selection-to-task conversion, clarifying how indented selected lists become parent-child task trees.
+- Improved Tasks emoji conversion so scheduled-date emoji metadata uses the configured scheduled status target in both single-line and selection conversion.
+
+### Changed
+- Demo Workspace files are now created in `Operon/Demo Workspace`, keeping bundled demo tasks separate from regular Operon task notes.
+
+### Fixed
+- Fixed Tasks emoji conversion leaving completed or cancelled emoji dates with a default workflow status; converted tasks now use the configured finished or cancelled status.
+- Fixed file tasks created from selected text or a normal note line leaving Templater commands unprocessed; Operon now creates an empty target file first, runs Templater with that file as the creation context, and then writes the final file-task content before replacing the source text with the new file-task link.
+
+### Validation
+- Local validation passed `npm run check:local`, including strict linting, production build, release guard, and the full Phase 5 regression suite at 649/649 checks.
+
 ## [1.0.5] - 2026-05-25
 
 ### New

@@ -3,9 +3,32 @@ import { FilterSet, KeyMapping, normalizeFilterSet, OperonSettings } from '../ty
 import { localNow, localToday, toLocalDate } from './local-time';
 import { isRecord } from './unknown-value';
 
-export const OPERON_BASICS_PROJECT_PATH = 'Operon/Operon Basics Project.md';
-export const OPERON_COMMAND_PALETTE_PATH = 'Operon/Operon Command Palette.md';
-export const OPERON_SETUP_PROJECT_PATH = 'Operon/Set Up Your Obsidian Vault with Operon.md';
+const OPERON_DEMO_WORKSPACE_FOLDER = 'Operon/Demo Workspace';
+
+export const OPERON_BASICS_PROJECT_PATH = `${OPERON_DEMO_WORKSPACE_FOLDER}/Operon Basics Project.md`;
+export const OPERON_COMMAND_PALETTE_PATH = `${OPERON_DEMO_WORKSPACE_FOLDER}/Operon Command Palette.md`;
+export const OPERON_SETUP_PROJECT_PATH = `${OPERON_DEMO_WORKSPACE_FOLDER}/Set Up Your Obsidian Vault with Operon.md`;
+
+const LEGACY_OPERON_BASICS_PROJECT_PATHS = [
+	'Operon/Operon Basics Project.md',
+	'Operon/Tasks/Operon Basics Project.md',
+] as const;
+const LEGACY_OPERON_COMMAND_PALETTE_PATHS = [
+	'Operon/Operon Command Palette.md',
+	'Operon/Tasks/Operon Command Palette.md',
+] as const;
+const LEGACY_OPERON_SETUP_PROJECT_PATHS = [
+	'Operon/Set Up Your Obsidian Vault with Operon.md',
+	'Operon/Tasks/Set Up Your Obsidian Vault with Operon.md',
+] as const;
+const OPERON_DEMO_WORKSPACE_ARTIFACT_PATHS = [
+	OPERON_BASICS_PROJECT_PATH,
+	OPERON_COMMAND_PALETTE_PATH,
+	OPERON_SETUP_PROJECT_PATH,
+	...LEGACY_OPERON_BASICS_PROJECT_PATHS,
+	...LEGACY_OPERON_COMMAND_PALETTE_PATHS,
+	...LEGACY_OPERON_SETUP_PROJECT_PATHS,
+] as const;
 export const OPERON_BASICS_ROOT_ID = 'l1dk70s';
 export const OPERON_BASICS_FILTER_ID = 'fs_2pv2ls9';
 export const OPERON_SETUP_ROOT_ID = 'bui5bdb';
@@ -617,7 +640,20 @@ function buildCommandPaletteContent(): string {
 		'Useful when:',
 		'- You are migrating old Tasks-plugin tasks.',
 		'- You have lines with due, scheduled, priority, or recurrence emoji metadata.',
+		'- You want scheduled, completed, and cancelled dates to use your configured workflow statuses.',
 		'- You want Operon fields instead of Tasks emoji syntax.',
+		'',
+		'### Convert Selection to Operon Tasks',
+		'',
+		'Converts selected Markdown list items into Operon inline tasks. It supports checkbox lines, Tasks emoji lines, bullet items, and numbered items.',
+		'',
+		'When the selection contains an indented list, Operon preserves that outline as a real task tree. Each converted indented item is linked to the nearest converted or existing Operon task above it at a lower indentation level, so nested list items become child tasks instead of a flat list.',
+		'',
+		'Useful when:',
+		'- You want to migrate a checklist or outline in one command.',
+		'- You want selected indentation to become Operon parent-child task links.',
+		'- You want supported Tasks emoji metadata to become Operon fields, including scheduled, completed, and cancelled dates using your configured workflow statuses.',
+		'- You want unsupported lines skipped instead of guessed.',
 		'',
 		'## Finding And Moving Tasks',
 		'',
@@ -788,7 +824,20 @@ async function ensureFolderPath(app: App, filePath: string): Promise<void> {
 	}
 }
 
-async function createFileIfMissing(app: App, filePath: string, content: string): Promise<{ file: TFile; created: boolean }> {
+function findExistingFileByPath(app: App, filePaths: readonly string[]): TFile | null {
+	for (const filePath of filePaths) {
+		const existing = app.vault.getAbstractFileByPath(normalizePath(filePath));
+		if (existing instanceof TFile) return existing;
+	}
+	return null;
+}
+
+async function createFileIfMissing(
+	app: App,
+	filePath: string,
+	content: string,
+	legacyFilePaths: readonly string[] = [],
+): Promise<{ file: TFile; created: boolean }> {
 	const normalizedPath = normalizePath(filePath);
 	const existing = app.vault.getAbstractFileByPath(normalizedPath);
 
@@ -797,6 +846,11 @@ async function createFileIfMissing(app: App, filePath: string, content: string):
 	}
 	if (existing) {
 		throw new Error(`Operon demo workspace path is not a file: ${normalizedPath}`);
+	}
+
+	const legacyFile = findExistingFileByPath(app, legacyFilePaths);
+	if (legacyFile) {
+		return { file: legacyFile, created: false };
 	}
 
 	await ensureFolderPath(app, normalizedPath);
@@ -867,8 +921,7 @@ async function ensureSetupVaultFilter(app: App, store: BasicsWorkspaceStore): Pr
 }
 
 export async function hasBasicsWorkspaceArtifact(app: App, store: BasicsWorkspaceStore): Promise<boolean> {
-	const basicsProject = app.vault.getAbstractFileByPath(normalizePath(OPERON_BASICS_PROJECT_PATH));
-	if (basicsProject instanceof TFile) return true;
+	if (findExistingFileByPath(app, OPERON_DEMO_WORKSPACE_ARTIFACT_PATHS)) return true;
 	if (store.filters.getById(OPERON_BASICS_FILTER_ID)) return true;
 	return (await readFilterFile(app, OPERON_BASICS_FILTER_ID)).exists;
 }
@@ -878,9 +931,24 @@ export async function createOrRepairBasicsWorkspace(
 	store: BasicsWorkspaceStore,
 	settings: Pick<OperonSettings, 'keyMappings'>,
 ): Promise<BasicsWorkspaceResult> {
-	const basicsProject = await createFileIfMissing(app, OPERON_BASICS_PROJECT_PATH, buildBasicsProjectContent(settings));
-	const commandPalette = await createFileIfMissing(app, OPERON_COMMAND_PALETTE_PATH, buildCommandPaletteContent());
-	const setupProject = await createFileIfMissing(app, OPERON_SETUP_PROJECT_PATH, buildSetupVaultProjectContent(settings));
+	const basicsProject = await createFileIfMissing(
+		app,
+		OPERON_BASICS_PROJECT_PATH,
+		buildBasicsProjectContent(settings),
+		LEGACY_OPERON_BASICS_PROJECT_PATHS,
+	);
+	const commandPalette = await createFileIfMissing(
+		app,
+		OPERON_COMMAND_PALETTE_PATH,
+		buildCommandPaletteContent(),
+		LEGACY_OPERON_COMMAND_PALETTE_PATHS,
+	);
+	const setupProject = await createFileIfMissing(
+		app,
+		OPERON_SETUP_PROJECT_PATH,
+		buildSetupVaultProjectContent(settings),
+		LEGACY_OPERON_SETUP_PROJECT_PATHS,
+	);
 
 	const filterResult = await ensureBasicsFilter(app, store);
 	const setupFilterResult = await ensureSetupVaultFilter(app, store);

@@ -169,6 +169,28 @@ After:
 - [ ] Review release plan #release {{operonId:: ...}} {{dateScheduled:: 2026-05-20}} {{datetimeStart:: 2026-05-20T09:00:00}} {{datetimeEnd:: 2026-05-20T10:30:00}} {{estimate:: 5400}} {{dateDue:: 2026-05-22}} {{dateStarted:: 2026-05-19}} {{datetimeCreated:: 2026-05-18T00:00:01}}
 ```
 
+#### Convert Selection to Operon Tasks
+
+- Run `Convert Selection to Operon Tasks` from the Command Palette after selecting Markdown list items.
+- Convert selected checkbox lines, Tasks emoji lines, bullet items, and numbered items into Operon inline tasks.
+- Preserve indentation and infer parent-child links from selected list hierarchy only.
+- Apply normal inline task inheritance to top-level converted items, including file-task auto-parent behavior when enabled.
+- Use Tasks priority emojis when present; when they are absent, keep Operon's default priority instead of inheriting a parent priority.
+- Skip paragraphs, empty markers, code blocks, and unsupported task lines instead of converting them.
+- Use this when migrating a checklist or outline into Operon without converting surrounding prose.
+
+```md
+Before:
+- [ ] Prepare launch
+  - [ ] Review notes 📅 2026-05-22
+  - Draft announcement
+
+After:
+- [ ] Prepare launch {{operonId:: ...}}
+  - [ ] Review notes {{operonId:: ...}} {{parentTask:: ...}} {{dateDue:: 2026-05-22}}
+  - [ ] Draft announcement {{operonId:: ...}} {{parentTask:: ...}}
+```
+
 #### Move inline task here
 
 - Run `Move an inline task here` from the Command Palette.
