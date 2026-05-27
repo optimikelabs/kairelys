@@ -44,6 +44,7 @@ import {
 } from './icon-only-chip-preview';
 import { t } from '../core/i18n';
 import { resolveSubtaskActionIcon, resolveSubtaskActionLabelKey } from '../core/subtask-action';
+import type { InlineRepeatCompletionMode } from '../storage/repeat-series-store';
 
 export const operonIndexRefreshEffect = StateEffect.define<void>();
 export const operonEditorCloseRefreshEffect = StateEffect.define<void>();
@@ -58,15 +59,17 @@ export interface LivePreviewCallbacks {
 	getPipelines: () => Pipeline[];
 	getPriorities: () => PriorityDefinition[];
 	getSettings: () => OperonSettings;
-	updateField: (operonId: string, key: string, value: string, restoreCursor?: LivePreviewCursorRestoreRequest) => void;
+	updateField: (operonId: string, key: string, value: string, restoreCursor?: LivePreviewCursorRestoreRequest) => void | Promise<void>;
 	onContextualAction?: (taskId: string, actionId: ContextualMenuActionId) => void | Promise<void>;
 	isTaskPinned?: (taskId: string) => boolean;
 	isTaskTracking?: (taskId: string) => boolean;
 	toggleTimer?: (taskId: string) => void | Promise<void>;
 	requestSubtask?: (operonId: string) => void | Promise<void>;
-	updateFields?: (operonId: string, payload: Record<string, string>, restoreCursor?: LivePreviewCursorRestoreRequest) => void;
+	updateFields?: (operonId: string, payload: Record<string, string>, restoreCursor?: LivePreviewCursorRestoreRequest) => void | Promise<void>;
 	updateSubtasks?: (operonId: string, subtaskIds: string[]) => void;
 	updateDependencyField?: (operonId: string, field: 'blocking' | 'blockedBy', value: string) => void;
+	getRepeatSeriesInlineCompletionMode?: (repeatSeriesId: string) => InlineRepeatCompletionMode;
+	updateRepeatSeriesInlineCompletionMode?: (operonId: string, mode: InlineRepeatCompletionMode) => void | Promise<void>;
 }
 
 export interface LivePreviewCursorRestoreRequest {
@@ -353,6 +356,8 @@ class MetadataTailWidget extends WidgetType {
 					updateDependencyField: this.callbacks.updateDependencyField
 						? (field, value) => this.callbacks.updateDependencyField?.(operonId, field, value)
 						: undefined,
+					repeatInlineCompletionMode: this.callbacks.getRepeatSeriesInlineCompletionMode?.(fieldValues['repeatSeriesId'] ?? ''),
+					onRepeatInlineCompletionModeChange: mode => this.callbacks.updateRepeatSeriesInlineCompletionMode?.(operonId, mode),
 					openEditor: () => this.callbacks.openEditor(this.task, view),
 					revealSource: this.revealSource,
 					visibleKeys: getInlineTaskCompactVisibleKeys(this.callbacks.getSettings()),
@@ -804,16 +809,16 @@ function attachLivePreviewChipAction(
 			case 'priority':
 				showPriorityPicker(pickerAnchor, {
 					priorities: callbacks.getPriorities(),
-					value: fieldValues['priority'],
-					retainInputFocus: true,
-					onSelect: next => {
-						callbacks.updateField(operonId, 'priority', next, restoreCursor());
-						onCommit?.();
-					},
-					onClear: () => {
-						callbacks.updateField(operonId, 'priority', '', restoreCursor());
-						onCommit?.();
-					},
+						value: fieldValues['priority'],
+						retainInputFocus: true,
+						onSelect: next => {
+							void callbacks.updateField(operonId, 'priority', next, restoreCursor());
+							onCommit?.();
+						},
+						onClear: () => {
+							void callbacks.updateField(operonId, 'priority', '', restoreCursor());
+							onCommit?.();
+						},
 				});
 				break;
 			case 'dateStarted':
@@ -821,17 +826,17 @@ function attachLivePreviewChipAction(
 			case 'dateScheduled':
 				showDatePicker(pickerAnchor, {
 					app: callbacks.app,
-					fieldKey: entry.key,
-					value: fieldValues[entry.key],
-					onSelect: next => {
-						callbacks.updateField(operonId, entry.key, next, restoreCursor());
-						onCommit?.();
-					},
-					canRemove: !!fieldValues[entry.key],
-					onRemove: () => {
-						callbacks.updateField(operonId, entry.key, '', restoreCursor());
-						onCommit?.();
-					},
+						fieldKey: entry.key,
+						value: fieldValues[entry.key],
+						onSelect: next => {
+							void callbacks.updateField(operonId, entry.key, next, restoreCursor());
+							onCommit?.();
+						},
+						canRemove: !!fieldValues[entry.key],
+						onRemove: () => {
+							void callbacks.updateField(operonId, entry.key, '', restoreCursor());
+							onCommit?.();
+						},
 					retainInputFocus: true,
 				});
 				break;
@@ -852,17 +857,17 @@ function attachLivePreviewChipAction(
 				onCommit?.();
 				break;
 			case 'estimate':
-				showEstimatePicker(pickerAnchor, {
-					value: fieldValues['estimate'],
-					onSelect: next => {
-						callbacks.updateField(operonId, 'estimate', next, restoreCursor());
-						onCommit?.();
-					},
-					canRemove: !!fieldValues['estimate'],
-					onRemove: () => {
-						callbacks.updateField(operonId, 'estimate', '', restoreCursor());
-						onCommit?.();
-					},
+					showEstimatePicker(pickerAnchor, {
+						value: fieldValues['estimate'],
+						onSelect: next => {
+							void callbacks.updateField(operonId, 'estimate', next, restoreCursor());
+							onCommit?.();
+						},
+						canRemove: !!fieldValues['estimate'],
+						onRemove: () => {
+							void callbacks.updateField(operonId, 'estimate', '', restoreCursor());
+							onCommit?.();
+						},
 				});
 				break;
 			case 'duration':

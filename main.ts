@@ -212,6 +212,10 @@ import {
 } from './src/core/task-creator-target-resolver';
 import { DEFAULT_INLINE_TASK_TARGET_FILE, FilterSet, normalizeInlineTaskHeadingKeyword, OperonSettings } from './src/types/settings';
 import {
+	type InlineRepeatCompletionMode,
+	normalizeInlineCompletionMode,
+} from './src/storage/repeat-series-store';
+import {
 	CalendarItem,
 	CalendarLeafState,
 	CalendarSlotSelection,
@@ -465,6 +469,7 @@ interface TaskFieldsUpdateOptions {
 	changedKeys?: string[];
 	statusCycleTrace?: StatusCyclePerfTrace | null;
 	refreshReason?: 'status-cycle';
+	inlineCompletionMode?: InlineRepeatCompletionMode;
 }
 
 interface LivePreviewAuthoringCursorRestoreLease {
@@ -1347,17 +1352,21 @@ export default class OperonPlugin extends Plugin {
 				(parentId) => [...this.indexer.secondary.getChildIds(parentId)],
 				(task: IndexedTask) => { this.navigateToTask(task); },
 				() => this.settings,
-				(operonId, key, value) => {
-					void this.updateTaskFieldAndRefresh(operonId, key, value);
+				async (operonId, key, value) => {
+					await this.updateTaskFieldAndRefresh(operonId, key, value);
 				},
-				(operonId, payload) => {
-					void this.updateTaskFieldsAndRefresh(operonId, payload);
+				async (operonId, payload) => {
+					await this.updateTaskFieldsAndRefresh(operonId, payload);
 				},
 				(operonId, subtaskIds) => {
 					void this.syncExistingSubtasksForParent(operonId, subtaskIds);
 				},
 				(operonId, field, value) => {
 					void this.updateTaskDependencyFieldAndRefresh(operonId, field, value);
+				},
+				(repeatSeriesId) => this.getRepeatSeriesInlineCompletionMode(repeatSeriesId),
+				(operonId, mode) => {
+					void this.applyInlineRepeatCompletionModeIfRequested(this.indexer.getTask(operonId), mode);
 				},
 				(operonId) => {
 					void this.requestSubtaskForParentId(operonId);
@@ -1985,6 +1994,8 @@ export default class OperonPlugin extends Plugin {
 				await this.openProjectedOccurrenceLatestTaskEditor(projectedRef);
 			},
 			skipProjectedOccurrence: async (projectedRef) => {
+				const rule = this.getRepeatRuleForSeries(projectedRef.seriesId);
+				if (rule?.mode === 'done') return;
 				await this.storage.repeatSeries.skipOccurrence(projectedRef.seriesId, projectedRef.occurrenceDate, localNow());
 				this.refreshViews();
 				new Notice(t('notifications', 'skippedThisOccurrence'));
@@ -4198,13 +4209,17 @@ export default class OperonPlugin extends Plugin {
 			// getPriorities
 			getPriorities: () => this.settings.priorities ?? DEFAULT_PRIORITIES,
 			getSettings: () => this.settings,
+			getRepeatSeriesInlineCompletionMode: (repeatSeriesId: string) => this.getRepeatSeriesInlineCompletionMode(repeatSeriesId),
+			updateRepeatSeriesInlineCompletionMode: (operonId: string, mode: InlineRepeatCompletionMode) => {
+				void this.applyInlineRepeatCompletionModeIfRequested(this.indexer.getTask(operonId), mode);
+			},
 				updateField: (
 					operonId: string,
 					key: string,
 					value: string,
 					restoreCursor?: { filePath: string; lineNumber: number; ch: number; editorView?: EditorView; trackDescriptionEnd?: boolean },
 				) => {
-					void (async () => {
+					return (async () => {
 						const wrote = await this.updateTaskFieldAndRefresh(operonId, key, value);
 						if (!wrote && restoreCursor) {
 							await this.updateLivePreviewInlineFieldsFallback(operonId, { [key]: value }, restoreCursor);
@@ -4235,7 +4250,7 @@ export default class OperonPlugin extends Plugin {
 					payload: Record<string, string>,
 					restoreCursor?: { filePath: string; lineNumber: number; ch: number; editorView?: EditorView; trackDescriptionEnd?: boolean },
 				) => {
-					void (async () => {
+					return (async () => {
 						const wrote = await this.updateTaskFieldsAndRefresh(operonId, payload);
 						if (!wrote && restoreCursor) {
 							await this.updateLivePreviewInlineFieldsFallback(operonId, payload, restoreCursor);
@@ -4441,9 +4456,9 @@ export default class OperonPlugin extends Plugin {
 									});
 							}
 					},
-					updateField: (operonId: string, key: string, value: string) => {
-						void this.updateTaskFieldAndRefresh(operonId, key, value);
-					},
+						updateField: async (operonId: string, key: string, value: string) => {
+							await this.updateTaskFieldAndRefresh(operonId, key, value);
+						},
 					onContextualAction: (taskId: string, actionId: ContextualMenuActionId) => this.handleContextualMenuAction(taskId, actionId),
 					isTaskPinned: (taskId: string) => this.pinnedCache?.isPinned(taskId) === true,
 					isTaskTracking: (taskId: string) => this.timeTracker.isTimerRunning(taskId),
@@ -4453,14 +4468,18 @@ export default class OperonPlugin extends Plugin {
 					requestSubtask: (operonId: string) => {
 						void this.requestSubtaskForParentId(operonId);
 					},
-					updateFields: (operonId: string, payload: Record<string, string>) => {
-						void this.updateTaskFieldsAndRefresh(operonId, payload);
-					},
+						updateFields: async (operonId: string, payload: Record<string, string>) => {
+							await this.updateTaskFieldsAndRefresh(operonId, payload);
+						},
 					updateSubtasks: (operonId: string, subtaskIds: string[]) => {
 						void this.syncExistingSubtasksForParent(operonId, subtaskIds);
 					},
 					updateDependencyField: (operonId: string, field: 'blocking' | 'blockedBy', value: string) => {
 						void this.updateTaskDependencyFieldAndRefresh(operonId, field, value);
+					},
+					getRepeatSeriesInlineCompletionMode: (repeatSeriesId: string) => this.getRepeatSeriesInlineCompletionMode(repeatSeriesId),
+					updateRepeatSeriesInlineCompletionMode: (operonId: string, mode: InlineRepeatCompletionMode) => {
+						void this.applyInlineRepeatCompletionModeIfRequested(this.indexer.getTask(operonId), mode);
 					},
 				};
 
@@ -4910,6 +4929,7 @@ export default class OperonPlugin extends Plugin {
 						resolvedOptions.fileBody.filePath = freshTask.primary.filePath;
 					}
 					await this.syncRepeatSeriesEntryIfNeeded(freshTask);
+					await this.applyInlineRepeatCompletionModeIfRequested(freshTask, request.inlineCompletionMode);
 					return true;
 				}
 
@@ -4927,6 +4947,12 @@ export default class OperonPlugin extends Plugin {
 					: null,
 				now: localNow(),
 			});
+			await this.updateRepeatSeriesInlineCompletionMode(seriesId, request.inlineCompletionMode, {
+				sourceTaskId: operonId,
+				sourceFormat: fallbackSourceFormat,
+				repeat: fieldValues['repeat'],
+				description: parsed?.description ?? task?.description ?? null,
+			});
 			this.refreshViews();
 			return true;
 		};
@@ -4936,6 +4962,7 @@ export default class OperonPlugin extends Plugin {
 				return await this.deleteTaskFromEditor(parsedTask);
 			},
 			getRepeatSkipDates: (repeatSeriesId: string) => this.storage.repeatSeries.getSkipDates(repeatSeriesId),
+			getRepeatSeriesInlineCompletionMode: (repeatSeriesId: string) => this.getRepeatSeriesInlineCompletionMode(repeatSeriesId),
 			onUpdateRepeatSkips: async (request: TaskEditorRepeatSkipUpdateRequest): Promise<TaskEditorRepeatSkipUpdateResult> => {
 				return await this.updateTaskRepeatSkips(request.operonId, request.repeatSeriesId, request.skipDates);
 			},
@@ -7920,6 +7947,7 @@ export default class OperonPlugin extends Plugin {
 		await this.applyCreatorPinnedState(normalizedOperonId, draft);
 		const createdTask = this.indexer.getTask(normalizedOperonId) ?? null;
 		await this.syncRepeatSeriesEntryIfNeeded(createdTask);
+		await this.applyInlineRepeatCompletionModeIfRequested(createdTask, draft.inlineCompletionMode);
 		const hasParent = !!createdTask?.fieldValues['parentTask']?.trim();
 		const hasChildren = this.indexer.secondary.getChildIds(normalizedOperonId).size > 0;
 		if (createdTask && (hasParent || hasChildren)) {
@@ -9310,14 +9338,19 @@ export default class OperonPlugin extends Plugin {
 			if (modifiedTimestamp) {
 				await this.writer.touchTaskAncestorsModified(freshTask, afterTask ?? null, modifiedTimestamp);
 			}
+			let recurrenceResult: RecurrenceMaterializationResult | null = null;
 			if (afterTask) {
 				await this.syncRepeatSeriesEntryIfNeeded(afterTask);
+				await this.applyInlineRepeatCompletionModeIfRequested(afterTask, request.inlineCompletionMode);
 				if (pendingRepeatOverride) {
 					await this.storage.repeatSeries.upsertFollowingOverride(pendingRepeatSeriesId, pendingRepeatOverride, localNow());
 				}
-				await this.maybeCreateRecurringOccurrence(task, afterTask, localNow());
+				recurrenceResult = await this.maybeCreateRecurringOccurrence(task, afterTask, localNow());
 			}
-			await this.refreshAggregateTotalsAfterTaskMutation(task, afterTask ?? null);
+			await this.refreshAggregateTotalsAfterTaskMutation(
+				task,
+				this.resolveAfterTaskForRecurrenceMaterialization(afterTask ?? null, recurrenceResult),
+			);
 			this.refreshViews();
 			return true;
 		}
@@ -9359,14 +9392,19 @@ export default class OperonPlugin extends Plugin {
 		await delayWithActiveWindow(500);
 		await this.indexer.reindexFilePath(indexedPath, { notify: false });
 		const afterTask = this.indexer.getTask(freshTask.operonId);
+		let recurrenceResult: RecurrenceMaterializationResult | null = null;
 		if (afterTask) {
 			await this.syncRepeatSeriesEntryIfNeeded(afterTask);
+			await this.applyInlineRepeatCompletionModeIfRequested(afterTask, request.inlineCompletionMode);
 			if (pendingRepeatOverride) {
 				await this.storage.repeatSeries.upsertFollowingOverride(pendingRepeatSeriesId, pendingRepeatOverride, localNow());
 			}
-			await this.maybeCreateRecurringOccurrence(task, afterTask, localNow());
+			recurrenceResult = await this.maybeCreateRecurringOccurrence(task, afterTask, localNow());
 		}
-		await this.refreshAggregateTotalsAfterTaskMutation(task, afterTask ?? null);
+		await this.refreshAggregateTotalsAfterTaskMutation(
+			task,
+			this.resolveAfterTaskForRecurrenceMaterialization(afterTask ?? null, recurrenceResult),
+		);
 		this.refreshViews();
 		return true;
 	}
@@ -9431,6 +9469,58 @@ export default class OperonPlugin extends Plugin {
 		if (!task?.fieldValues['repeatSeriesId']) return;
 		if (!parseRepeatRule(task.fieldValues['repeat'])) return;
 		await this.recurrenceService.ensureSeriesEntry(task, task.fieldValues['repeatSeriesId']);
+	}
+
+	private getRepeatSeriesInlineCompletionMode(repeatSeriesId: string | null | undefined): InlineRepeatCompletionMode {
+		return normalizeInlineCompletionMode(this.storage.repeatSeries.getEntry(repeatSeriesId)?.inlineCompletionMode);
+	}
+
+	private async updateRepeatSeriesInlineCompletionMode(
+		seriesId: string | null | undefined,
+		mode: InlineRepeatCompletionMode | null | undefined,
+		context: {
+			sourceTaskId: string;
+			sourceFormat: IndexedTask['primary']['format'];
+			repeat: string | null | undefined;
+			description: string | null | undefined;
+		},
+	): Promise<void> {
+		const normalizedSeriesId = (seriesId ?? '').trim();
+		if (!normalizedSeriesId) return;
+		const rule = parseRepeatRule(context.repeat ?? '');
+		if (!rule) return;
+		const effectiveMode = context.sourceFormat === 'inline' && rule.mode === 'done'
+			? normalizeInlineCompletionMode(mode)
+			: 'keep-completed';
+		await this.storage.repeatSeries.ensureSeries({
+			seriesId: normalizedSeriesId,
+			sourceTaskId: context.sourceTaskId,
+			sourceFormat: context.sourceFormat,
+			baseTitle: context.sourceFormat === 'yaml'
+				? ((context.description ?? '').trim() || null)
+				: null,
+			lastMaterializedTitle: (context.description ?? '').trim() || null,
+			now: localNow(),
+		});
+		if (this.getRepeatSeriesInlineCompletionMode(normalizedSeriesId) === effectiveMode) return;
+		await this.storage.repeatSeries.updateInlineCompletionMode(normalizedSeriesId, effectiveMode, localNow());
+	}
+
+	private async applyInlineRepeatCompletionModeIfRequested(
+		task: IndexedTask | null | undefined,
+		mode: InlineRepeatCompletionMode | null | undefined,
+	): Promise<void> {
+		if (!task || mode == null) return;
+		await this.updateRepeatSeriesInlineCompletionMode(
+			task.fieldValues['repeatSeriesId'],
+			mode,
+			{
+				sourceTaskId: task.operonId,
+				sourceFormat: task.primary.format,
+				repeat: task.fieldValues['repeat'],
+				description: task.description,
+			},
+		);
 	}
 
 	private async updateTaskRepeatSkips(
@@ -9508,6 +9598,16 @@ export default class OperonPlugin extends Plugin {
 			}
 		}
 		return result;
+	}
+
+	private resolveAfterTaskForRecurrenceMaterialization(
+		afterTask: IndexedTask | null,
+		result: RecurrenceMaterializationResult | null,
+	): IndexedTask | null {
+		if (result?.created && result.materializationMode === 'replaced' && result.createdTaskId) {
+			return this.indexer.getTask(result.createdTaskId) ?? afterTask;
+		}
+		return afterTask;
 	}
 
 	private mergeTaskFieldValuesWithPayload(task: IndexedTask, payload: Record<string, string>): Record<string, string> {
@@ -9658,11 +9758,13 @@ export default class OperonPlugin extends Plugin {
 
 		const repeatStartedAt = options.statusCycleTrace ? enginePerfNow() : 0;
 		await this.syncRepeatSeriesEntryIfNeeded(freshTask);
-		await this.maybeCreateRecurringOccurrence(task, freshTask, localNow());
+		await this.applyInlineRepeatCompletionModeIfRequested(freshTask, options.inlineCompletionMode);
+		const recurrenceResult = await this.maybeCreateRecurringOccurrence(task, freshTask, localNow());
+		const aggregateAfterTask = this.resolveAfterTaskForRecurrenceMaterialization(freshTask, recurrenceResult);
 		this.logStatusCyclePerfStage(options.statusCycleTrace, 'repeat', repeatStartedAt);
 
 		const aggregateStartedAt = options.statusCycleTrace ? enginePerfNow() : 0;
-		await this.refreshAggregateTotalsAfterTaskMutation(task, freshTask, {
+		await this.refreshAggregateTotalsAfterTaskMutation(task, aggregateAfterTask, {
 			modifiedTimestamp: (normalizedPayload['datetimeModified'] ?? '').trim(),
 			indexPerfContext: this.createStatusCycleIndexPerfContext(
 				options.statusCycleTrace,
@@ -9678,7 +9780,7 @@ export default class OperonPlugin extends Plugin {
 		const markdownScope = isStatusCycleRefresh
 			? resolveStatusMarkdownRefreshScope({
 				beforeTask: task,
-				afterTask: freshTask,
+				afterTask: aggregateAfterTask ?? freshTask,
 				getTask: taskId => this.indexer.getTask(taskId),
 			})
 			: undefined;
@@ -9994,6 +10096,7 @@ export default class OperonPlugin extends Plugin {
 	private commitLivePreviewSessionFields(
 		payload: Record<string, string | string[]>,
 		sessionId?: string,
+		inlineCompletionMode?: InlineRepeatCompletionMode | null,
 	): void {
 		const session = this.livePreviewEphemeralSession.getActive();
 		if (!session || (sessionId && session.id !== sessionId)) return;
@@ -10059,6 +10162,19 @@ export default class OperonPlugin extends Plugin {
 		this.withSuppressedLivePreviewEditorChange(() => {
 			editor.setLine(session.lineNumber, serialized);
 		});
+		if (inlineCompletionMode != null && parsed.operonId) {
+			const committedFieldValues = Object.fromEntries(parsed.fields.map(field => [field.key, field.value]));
+			runAsyncAction('live preview repeat completion policy update failed', () => this.updateRepeatSeriesInlineCompletionMode(
+				committedFieldValues['repeatSeriesId'],
+				inlineCompletionMode,
+				{
+					sourceTaskId: parsed.operonId ?? '',
+					sourceFormat: 'inline',
+					repeat: committedFieldValues['repeat'],
+					description: parsed.description,
+				},
+			));
+		}
 		this.indexer.scheduleReindex(markdownView.file.path);
 		this.refreshViews();
 		this.restoreLivePreviewAuthoringCursor(markdownView.file.path, resumeCursor, true, true);
@@ -10129,6 +10245,7 @@ export default class OperonPlugin extends Plugin {
 			this.cancelLivePreviewSession(reason, session);
 		};
 		let closePanel: (() => void) | null = null;
+		let pendingInlineCompletionMode: InlineRepeatCompletionMode | null = null;
 		const handleClose = () => {
 			this.clearActiveLivePreviewPicker(closePanel ?? undefined);
 			cancelSession('picker_closed');
@@ -10143,7 +10260,12 @@ export default class OperonPlugin extends Plugin {
 			currentTags,
 			closeListPickerOnSelect: true,
 			retainInputFocus: true,
-			onCommit: payload => { this.commitLivePreviewSessionFields(payload, sessionId); },
+			taskFormat: 'inline',
+			repeatInlineCompletionMode: this.getRepeatSeriesInlineCompletionMode(currentFieldValues['repeatSeriesId']),
+			onCommit: payload => { this.commitLivePreviewSessionFields(payload, sessionId, pendingInlineCompletionMode); },
+			onRepeatInlineCompletionModeChange: mode => {
+				pendingInlineCompletionMode = normalizeInlineCompletionMode(mode);
+			},
 			onCancel: () => cancelSession('picker_cancelled'),
 			onClose: handleClose,
 		});

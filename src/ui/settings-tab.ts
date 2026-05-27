@@ -13,7 +13,7 @@
 
 import { AbstractInputSuggest, App, Notice, Plugin, PluginSettingTab, Setting, TFile, TFolder, ToggleComponent, getIcon, setIcon } from 'obsidian';
 import type { DropdownComponent, TextComponent } from 'obsidian';
-import { OperonSettings, DEFAULT_SETTINGS, DEFAULT_INLINE_TASK_TARGET_FILE, DEFAULT_INLINE_TASK_HEADING_KEYWORD, DEFAULT_INLINE_TASK_PARENT_FILE_HEADING_KEYWORD, KeyMapping, FilterSet, CALENDAR_TIME_GRID_SCALE_OPTIONS, CALENDAR_AUTO_SCROLL_POSITION_OPTIONS, CALENDAR_SIDEBAR_WIDTH_MIN, CALENDAR_SIDEBAR_WIDTH_MAX, KANBAN_EXPANDED_COLUMN_WIDTH_MIN, KANBAN_EXPANDED_COLUMN_WIDTH_MAX, KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MIN, KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MAX, createExternalCalendarSourceId, ExternalCalendarSource, TaskCreatorToolbarFieldKey, TaskCreatorToolbarItem, TASK_CREATOR_FALLBACK_FIELD_ICONS, TaskEditorWorkflowPickerKey, TaskEditorWorkflowPickerItem, InlineTaskCompactChipKey, INLINE_TASK_COMPACT_FALLBACK_ICONS, TrackerTaskDescriptionClickAction, TASK_FINDER_DEFAULT_SCOPE_ORDER, TaskFinderDefaultScopeKey, normalizeTaskFinderShortcutValue, FLOW_TIME_PAUSE_MINUTE_OPTIONS, FLOW_TIME_DEFAULT_SESSION_MINUTE_OPTIONS, cloneFilterSet, getNumericConstraint, isNumericSettingKey, normalizeCalendarSidebarDefaultExpansionState, normalizeInlineTaskHeadingKeyword, normalizeInlineTaskParentFileHeadingKeyword, setNumericSetting, type CalendarSidebarDefaultStateKey, type FallbackTaskIconSource } from '../types/settings';
+import { OperonSettings, DEFAULT_SETTINGS, DEFAULT_INLINE_TASK_TARGET_FILE, DEFAULT_INLINE_TASK_HEADING_KEYWORD, DEFAULT_INLINE_TASK_PARENT_FILE_HEADING_KEYWORD, KeyMapping, FilterSet, CALENDAR_TIME_GRID_SCALE_OPTIONS, CALENDAR_AUTO_SCROLL_POSITION_OPTIONS, CALENDAR_SIDEBAR_WIDTH_MIN, CALENDAR_SIDEBAR_WIDTH_MAX, KANBAN_EXPANDED_COLUMN_WIDTH_MIN, KANBAN_EXPANDED_COLUMN_WIDTH_MAX, KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MIN, KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MAX, KANBAN_MOBILE_LAYOUT_MAX_WIDTH_MIN, KANBAN_MOBILE_LAYOUT_MAX_WIDTH_MAX, KANBAN_MOBILE_COMPACT_SWIMLANE_WIDTH_MIN, KANBAN_MOBILE_COMPACT_SWIMLANE_WIDTH_MAX, createExternalCalendarSourceId, ExternalCalendarSource, TaskCreatorToolbarFieldKey, TaskCreatorToolbarItem, TASK_CREATOR_FALLBACK_FIELD_ICONS, TaskEditorWorkflowPickerKey, TaskEditorWorkflowPickerItem, InlineTaskCompactChipKey, INLINE_TASK_COMPACT_FALLBACK_ICONS, TrackerTaskDescriptionClickAction, TASK_FINDER_DEFAULT_SCOPE_ORDER, TaskFinderDefaultScopeKey, normalizeTaskFinderShortcutValue, FLOW_TIME_PAUSE_MINUTE_OPTIONS, FLOW_TIME_DEFAULT_SESSION_MINUTE_OPTIONS, cloneFilterSet, getNumericConstraint, isNumericSettingKey, normalizeCalendarSidebarDefaultExpansionState, normalizeInlineTaskHeadingKeyword, normalizeInlineTaskParentFileHeadingKeyword, setNumericSetting, type CalendarSidebarDefaultStateKey, type FallbackTaskIconSource } from '../types/settings';
 import { clonePipeline, composeStatusValue, createPipelineId, createStatusId, Pipeline, StatusDefinition } from '../types/pipeline';
 import { PriorityDefinition, DEFAULT_PRIORITIES, clonePriorityDefinition, createPriorityId } from '../types/priority';
 import { CalendarPreset, createCalendarPresetId } from '../types/calendar';
@@ -2144,6 +2144,21 @@ export class OperonSettingsTab extends PluginSettingTab {
 			},
 		});
 
+		renderSettingsHeading(containerEl, t('calendar', 'touchControls'));
+		this.renderBoundToggleSetting(containerEl, t('calendar', 'touchTimeGridTaskMove'), t('calendar', 'touchTimeGridTaskMoveDesc'), 'calendarTouchTimeGridTaskMoveEnabled');
+		this.renderBoundClampedNumericSetting(containerEl, t('calendar', 'touchDragLongPress'), t('calendar', 'touchDragLongPressDesc'), 'calendarTouchDragLongPressMs', {
+			min: 150,
+			max: 600,
+			fallback: DEFAULT_SETTINGS.calendarTouchDragLongPressMs,
+			step: '1',
+		});
+		this.renderBoundClampedNumericSetting(containerEl, t('calendar', 'touchDragCancelDistance'), t('calendar', 'touchDragCancelDistanceDesc'), 'calendarTouchDragCancelDistancePx', {
+			min: 4,
+			max: 24,
+			fallback: DEFAULT_SETTINGS.calendarTouchDragCancelDistancePx,
+			step: '1',
+		});
+
 		renderSettingsHeading(containerEl, t('calendar', 'viewPresets'));
 		containerEl.createEl('p', {
 			text: t('calendar', 'viewPresetsDesc'),
@@ -2442,6 +2457,21 @@ export class OperonSettingsTab extends PluginSettingTab {
 			min: KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MIN,
 			max: KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MAX,
 			fallback: DEFAULT_SETTINGS.kanbanMaxVisibleTasksPerCell,
+			step: '1',
+		});
+
+		renderSettingsHeading(containerEl, t('settings', 'kanbanMobileLayoutSettings'));
+		this.renderBoundToggleSetting(containerEl, t('settings', 'kanbanMobileLayoutChrome'), t('settings', 'kanbanMobileLayoutChromeDesc'), 'kanbanMobileLayoutChromeEnabled');
+		this.renderBoundClampedNumericSetting(containerEl, t('settings', 'kanbanMobileLayoutMaxWidth'), t('settings', 'kanbanMobileLayoutMaxWidthDesc'), 'kanbanMobileLayoutMaxWidthPx', {
+			min: KANBAN_MOBILE_LAYOUT_MAX_WIDTH_MIN,
+			max: KANBAN_MOBILE_LAYOUT_MAX_WIDTH_MAX,
+			fallback: DEFAULT_SETTINGS.kanbanMobileLayoutMaxWidthPx,
+			step: '1',
+		});
+		this.renderBoundClampedNumericSetting(containerEl, t('settings', 'kanbanMobileSwimlaneHandleWidth'), t('settings', 'kanbanMobileSwimlaneHandleWidthDesc'), 'kanbanMobileCompactSwimlaneWidthPx', {
+			min: KANBAN_MOBILE_COMPACT_SWIMLANE_WIDTH_MIN,
+			max: KANBAN_MOBILE_COMPACT_SWIMLANE_WIDTH_MAX,
+			fallback: DEFAULT_SETTINGS.kanbanMobileCompactSwimlaneWidthPx,
 			step: '1',
 		});
 

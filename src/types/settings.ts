@@ -125,6 +125,10 @@ export const KANBAN_EXPANDED_COLUMN_WIDTH_MIN = 220;
 export const KANBAN_EXPANDED_COLUMN_WIDTH_MAX = 520;
 export const KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MIN = 1;
 export const KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MAX = 30;
+export const KANBAN_MOBILE_LAYOUT_MAX_WIDTH_MIN = 600;
+export const KANBAN_MOBILE_LAYOUT_MAX_WIDTH_MAX = 1200;
+export const KANBAN_MOBILE_COMPACT_SWIMLANE_WIDTH_MIN = 12;
+export const KANBAN_MOBILE_COMPACT_SWIMLANE_WIDTH_MAX = 48;
 export type TrackerTaskDescriptionClickAction = 'jumpToSource' | 'openTaskEditor';
 export type FlowTimeMode = 'tracktime' | 'flowtime';
 export type InlineTaskSaveMode = 'daily-notes' | 'specific-file' | 'active-file' | 'ask-every-time';
@@ -853,12 +857,18 @@ export interface OperonSettings {
 	calendarShowWeekLabelOnFirstDay: boolean;
 	calendarSidebarTaskPoolDefaultExpanded: boolean;
 	calendarSidebarFinishedTasksDefaultExpanded: boolean;
+	calendarTouchTimeGridTaskMoveEnabled: boolean;
+	calendarTouchDragLongPressMs: number;
+	calendarTouchDragCancelDistancePx: number;
 
 	// Kanban
 	kanbanPresets: KanbanPreset[];
 	kanbanDefaultPresetId: string | null;
 	kanbanExpandedColumnWidthPx: number;
 	kanbanMaxVisibleTasksPerCell: number;
+	kanbanMobileLayoutChromeEnabled: boolean;
+	kanbanMobileLayoutMaxWidthPx: number;
+	kanbanMobileCompactSwimlaneWidthPx: number;
 
 	// Indexer
 	indexEventDebounceMs: number;
@@ -1180,11 +1190,17 @@ export const DEFAULT_SETTINGS: OperonSettings = {
 	calendarShowWeekLabelOnFirstDay: true,
 	calendarSidebarTaskPoolDefaultExpanded: true,
 	calendarSidebarFinishedTasksDefaultExpanded: false,
+	calendarTouchTimeGridTaskMoveEnabled: true,
+	calendarTouchDragLongPressMs: 260,
+	calendarTouchDragCancelDistancePx: 10,
 
 	kanbanPresets: cloneDefaultKanbanPresets(),
 	kanbanDefaultPresetId: DEFAULT_KANBAN_DEFAULT_PRESET_ID,
 	kanbanExpandedColumnWidthPx: 320,
 	kanbanMaxVisibleTasksPerCell: 7,
+	kanbanMobileLayoutChromeEnabled: true,
+	kanbanMobileLayoutMaxWidthPx: 900,
+	kanbanMobileCompactSwimlaneWidthPx: 24,
 
 	indexEventDebounceMs: 250,
 	fullReindexOnStartup: false,
@@ -1242,8 +1258,12 @@ export const NUMERIC_CONSTRAINTS = {
 	leftRailMaxTabs: { min: 1, max: 20 },
 	rightRailMaxTabs: { min: 1, max: 20 },
 	calendarDefaultScrollHour: { min: 0, max: 23 },
+	calendarTouchDragLongPressMs: { min: 150, max: 600 },
+	calendarTouchDragCancelDistancePx: { min: 4, max: 24 },
 	kanbanExpandedColumnWidthPx: { min: KANBAN_EXPANDED_COLUMN_WIDTH_MIN, max: KANBAN_EXPANDED_COLUMN_WIDTH_MAX },
 	kanbanMaxVisibleTasksPerCell: { min: KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MIN, max: KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MAX },
+	kanbanMobileLayoutMaxWidthPx: { min: KANBAN_MOBILE_LAYOUT_MAX_WIDTH_MIN, max: KANBAN_MOBILE_LAYOUT_MAX_WIDTH_MAX },
+	kanbanMobileCompactSwimlaneWidthPx: { min: KANBAN_MOBILE_COMPACT_SWIMLANE_WIDTH_MIN, max: KANBAN_MOBILE_COMPACT_SWIMLANE_WIDTH_MAX },
 	taskFinderRecentModifiedDays: { min: 1, max: 7 },
 	taskFinderVisibleResultCount: { min: 3, max: 9 },
 	fileTaskArchiveDelaySeconds: { min: 0, max: 3600 },
@@ -1583,6 +1603,20 @@ function normalizeCalendarSidebarWidthPx(raw: unknown): number {
 	);
 }
 
+function normalizeCalendarTouchDragLongPressMs(raw: unknown): number {
+	if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+		return DEFAULT_SETTINGS.calendarTouchDragLongPressMs;
+	}
+	return Math.max(150, Math.min(600, Math.round(raw)));
+}
+
+function normalizeCalendarTouchDragCancelDistancePx(raw: unknown): number {
+	if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+		return DEFAULT_SETTINGS.calendarTouchDragCancelDistancePx;
+	}
+	return Math.max(4, Math.min(24, Math.round(raw)));
+}
+
 function normalizeContextualMenuOpenDelayMs(raw: unknown): number {
 	if (typeof raw !== 'number' || !Number.isFinite(raw)) {
 		return DEFAULT_SETTINGS.contextualMenuOpenDelayMs;
@@ -1607,6 +1641,26 @@ function normalizeKanbanMaxVisibleTasksPerCell(raw: unknown): number {
 	return Math.max(
 		KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MIN,
 		Math.min(KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MAX, Math.round(raw)),
+	);
+}
+
+function normalizeKanbanMobileLayoutMaxWidthPx(raw: unknown): number {
+	if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+		return DEFAULT_SETTINGS.kanbanMobileLayoutMaxWidthPx;
+	}
+	return Math.max(
+		KANBAN_MOBILE_LAYOUT_MAX_WIDTH_MIN,
+		Math.min(KANBAN_MOBILE_LAYOUT_MAX_WIDTH_MAX, Math.round(raw)),
+	);
+}
+
+function normalizeKanbanMobileCompactSwimlaneWidthPx(raw: unknown): number {
+	if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+		return DEFAULT_SETTINGS.kanbanMobileCompactSwimlaneWidthPx;
+	}
+	return Math.max(
+		KANBAN_MOBILE_COMPACT_SWIMLANE_WIDTH_MIN,
+		Math.min(KANBAN_MOBILE_COMPACT_SWIMLANE_WIDTH_MAX, Math.round(raw)),
 	);
 }
 
@@ -2382,6 +2436,11 @@ export function migrateSettings(raw: unknown): OperonSettings {
 	out.calendarSidebarFinishedTasksDefaultExpanded = typeof src.calendarSidebarFinishedTasksDefaultExpanded === 'boolean'
 		? src.calendarSidebarFinishedTasksDefaultExpanded
 		: DEFAULT_SETTINGS.calendarSidebarFinishedTasksDefaultExpanded;
+	out.calendarTouchTimeGridTaskMoveEnabled = typeof src.calendarTouchTimeGridTaskMoveEnabled === 'boolean'
+		? src.calendarTouchTimeGridTaskMoveEnabled
+		: DEFAULT_SETTINGS.calendarTouchTimeGridTaskMoveEnabled;
+	out.calendarTouchDragLongPressMs = normalizeCalendarTouchDragLongPressMs(src.calendarTouchDragLongPressMs);
+	out.calendarTouchDragCancelDistancePx = normalizeCalendarTouchDragCancelDistancePx(src.calendarTouchDragCancelDistancePx);
 	const normalizedCalendarSidebarDefaults = normalizeCalendarSidebarDefaultExpansionState({
 		calendarSidebarCalendarsDefaultExpanded: out.calendarSidebarCalendarsDefaultExpanded,
 		calendarSidebarTaskPoolDefaultExpanded: out.calendarSidebarTaskPoolDefaultExpanded,
@@ -2407,6 +2466,9 @@ export function migrateSettings(raw: unknown): OperonSettings {
 	out.kanbanPresets = normalizeKanbanPresets(src.kanbanPresets);
 	out.kanbanExpandedColumnWidthPx = normalizeKanbanExpandedColumnWidthPx(src.kanbanExpandedColumnWidthPx);
 	out.kanbanMaxVisibleTasksPerCell = normalizeKanbanMaxVisibleTasksPerCell(src.kanbanMaxVisibleTasksPerCell);
+	out.kanbanMobileLayoutChromeEnabled = src.kanbanMobileLayoutChromeEnabled !== false;
+	out.kanbanMobileLayoutMaxWidthPx = normalizeKanbanMobileLayoutMaxWidthPx(src.kanbanMobileLayoutMaxWidthPx);
+	out.kanbanMobileCompactSwimlaneWidthPx = normalizeKanbanMobileCompactSwimlaneWidthPx(src.kanbanMobileCompactSwimlaneWidthPx);
 	if (Array.isArray(src.kanbanPresets)) {
 		if (
 			typeof src.kanbanDefaultPresetId === 'string'

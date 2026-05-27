@@ -1,10 +1,12 @@
 import { deriveDatetimeEnd, parseEstimateSeconds } from '../core/scheduling-rules';
-import { parseRepeatRule, listRepeatOccurrencesInRange } from '../core/repeat-rule';
+import { calculateNextRepeatDate, parseRepeatRule, listRepeatOccurrencesInRange, RepeatRule } from '../core/repeat-rule';
 import {
 	CalendarItem,
+	CalendarProjectionKind,
 	buildCalendarRenderSnapshot,
 } from '../types/calendar';
 import { IndexedTask } from '../types/fields';
+import { localToday } from '../core/local-time';
 import {
 	RepeatSeriesEntry,
 	RepeatTemporalTemplate,
@@ -29,6 +31,7 @@ export interface ProjectedRecurringCalendarItemsInput {
 	entries: RepeatSeriesEntry[];
 	rangeStart: string;
 	rangeEnd: string;
+	todayKey?: string;
 }
 
 export function buildProjectedRecurringCalendarItems(
@@ -37,13 +40,14 @@ export function buildProjectedRecurringCalendarItems(
 	const rangeStart = normalizeDate(input.rangeStart);
 	const rangeEnd = normalizeDate(input.rangeEnd);
 	if (!rangeStart || !rangeEnd || rangeStart > rangeEnd) return [];
+	const todayKey = normalizeDate(input.todayKey) || localToday();
 
 	const entryBySeriesId = new Map(input.entries.map(entry => [entry.seriesId, entry]));
 	const projected: CalendarItem[] = [];
 
 	for (const group of buildRepeatSeriesContexts(input.tasks)) {
 		const latestRule = parseRepeatRule(group.latestTask.fieldValues['repeat']);
-		if (!latestRule || latestRule.mode === 'done') continue;
+		if (!latestRule) continue;
 
 		const entry = entryBySeriesId.get(group.seriesId);
 		if (!entry) continue;
@@ -55,12 +59,20 @@ export function buildProjectedRecurringCalendarItems(
 		const projectionRangeEnd = shiftDateKey(rangeEnd, projectionPaddingDays);
 		const latestOccurrenceDate = group.latestOccurrenceDate;
 		if (!latestOccurrenceDate) continue;
-		const occurrenceDates = listRepeatOccurrencesInRange(latestRule, {
-			anchorDate: latestOccurrenceDate,
-			rangeStart: projectionRangeStart,
-			rangeEnd: projectionRangeEnd,
-			repeatEnd: group.latestTask.fieldValues['datetimeRepeatEnd'],
-		});
+		const occurrenceDates = latestRule.mode === 'done'
+			? listDoneRollingOccurrencesInRange(latestRule, {
+				anchorDate: latestOccurrenceDate,
+				todayKey,
+				rangeStart: projectionRangeStart,
+				rangeEnd: projectionRangeEnd,
+				repeatEnd: group.latestTask.fieldValues['datetimeRepeatEnd'],
+			})
+			: listRepeatOccurrencesInRange(latestRule, {
+				anchorDate: latestOccurrenceDate,
+				rangeStart: projectionRangeStart,
+				rangeEnd: projectionRangeEnd,
+				repeatEnd: group.latestTask.fieldValues['datetimeRepeatEnd'],
+			});
 		const snapshot = buildCalendarRenderSnapshot(group.latestTask);
 
 		for (const occurrenceDate of occurrenceDates) {
@@ -72,6 +84,7 @@ export function buildProjectedRecurringCalendarItems(
 				rangeEnd,
 				fallbackTemplate,
 				snapshot,
+				projectionKind: latestRule.mode === 'done' ? 'doneRolling' : 'scheduled',
 			});
 			if (item) projected.push(item);
 		}
@@ -88,10 +101,14 @@ function buildProjectedItemForOccurrence(
 		rangeEnd: string;
 		fallbackTemplate: RepeatTemporalTemplate;
 		snapshot: ReturnType<typeof buildCalendarRenderSnapshot>;
+		projectionKind: CalendarProjectionKind;
 	},
 ): CalendarItem | null {
+	const entry = input.projectionKind === 'doneRolling'
+		? { ...input.entry, skipDates: [] }
+		: input.entry;
 	const occurrencePlan = resolveOccurrencePlan({
-		entry: input.entry,
+		entry,
 		occurrenceDate: input.occurrenceDate,
 		fallbackTemplate: input.fallbackTemplate,
 	});
@@ -115,7 +132,7 @@ function buildProjectedItemForOccurrence(
 		const timedEndDate = endDateTime.slice(0, 10);
 		if (!intersectsDateRange(timedStartDate, timedEndDate, input.rangeStart, input.rangeEnd)) return null;
 		return {
-			taskId: `projected:${input.entry.seriesId}:${input.occurrenceDate}`,
+			taskId: `projected:${entry.seriesId}:${input.occurrenceDate}`,
 			kind: 'timed',
 			startDate: timedStartDate,
 			endDate: timedEndDate,
@@ -125,15 +142,16 @@ function buildProjectedItemForOccurrence(
 			isReadOnly: true,
 			origin: 'projected',
 			repeatRef: {
-				seriesId: input.entry.seriesId,
+				seriesId: entry.seriesId,
 				occurrenceDate: input.occurrenceDate,
 				isLatestMaterialized: false,
 				isProjected: true,
+				projectionKind: input.projectionKind,
 			},
 			externalRef: null,
 			sourceTask: null,
 			renderSnapshot: {
-				description: resolveProjectedDescription(input.entry, input.snapshot.description, scheduledDate, input.occurrenceDate),
+				description: resolveProjectedDescription(entry, input.snapshot.description, scheduledDate, input.occurrenceDate),
 				checkbox: input.snapshot.checkbox,
 				fieldValues: {
 					...input.snapshot.fieldValues,
@@ -153,7 +171,7 @@ function buildProjectedItemForOccurrence(
 	const allDayEndDate = shiftDateKey(input.occurrenceDate, template.endDateShiftDays);
 	if (!intersectsDateRange(allDayStartDate, allDayEndDate, input.rangeStart, input.rangeEnd)) return null;
 	return {
-		taskId: `projected:${input.entry.seriesId}:${input.occurrenceDate}`,
+		taskId: `projected:${entry.seriesId}:${input.occurrenceDate}`,
 		kind: 'allDayScheduled',
 		startDate: allDayStartDate,
 		endDate: allDayEndDate,
@@ -163,29 +181,62 @@ function buildProjectedItemForOccurrence(
 		isReadOnly: true,
 		origin: 'projected',
 		repeatRef: {
-			seriesId: input.entry.seriesId,
+			seriesId: entry.seriesId,
 			occurrenceDate: input.occurrenceDate,
 			isLatestMaterialized: false,
 			isProjected: true,
+			projectionKind: input.projectionKind,
 		},
 		externalRef: null,
 		sourceTask: null,
-			renderSnapshot: {
-				description: resolveProjectedDescription(input.entry, input.snapshot.description, scheduledDate, input.occurrenceDate),
-				checkbox: input.snapshot.checkbox,
-				fieldValues: {
-					...input.snapshot.fieldValues,
+		renderSnapshot: {
+			description: resolveProjectedDescription(entry, input.snapshot.description, scheduledDate, input.occurrenceDate),
+			checkbox: input.snapshot.checkbox,
+			fieldValues: {
+				...input.snapshot.fieldValues,
 				dateScheduled: scheduledDate,
 				dateStarted: allDayStartDate,
 				dateDue: allDayEndDate,
 				repeatOccurrenceDate: input.occurrenceDate,
-					datetimeStart: '',
-					datetimeEnd: '',
-				},
-				tags: [...input.snapshot.tags],
+				datetimeStart: '',
+				datetimeEnd: '',
 			},
-		};
+			tags: [...input.snapshot.tags],
+		},
+	};
+}
+
+function listDoneRollingOccurrencesInRange(
+	rule: RepeatRule,
+	options: {
+		anchorDate: string;
+		todayKey: string;
+		rangeStart: string;
+		rangeEnd: string;
+		repeatEnd?: string | null;
+	},
+): string[] {
+	const todayKey = normalizeDate(options.todayKey);
+	const anchorDate = normalizeDate(options.anchorDate);
+	const rangeStart = normalizeDate(options.rangeStart);
+	const rangeEnd = normalizeDate(options.rangeEnd);
+	if (!todayKey || !anchorDate || !rangeStart || !rangeEnd || rangeStart > rangeEnd) return [];
+
+	const results: string[] = [];
+	let current = anchorDate > todayKey ? anchorDate : todayKey;
+	for (let guard = 0; guard < 5000; guard += 1) {
+		const next = calculateNextRepeatDate(rule, {
+			anchorDate: current,
+			repeatEnd: options.repeatEnd ?? undefined,
+		});
+		if (!next) break;
+		current = next;
+		if (next <= todayKey) continue;
+		if (next >= rangeStart && next <= rangeEnd) results.push(next);
+		if (next > rangeEnd) break;
 	}
+	return results;
+}
 
 function resolveProjectedDescription(
 	entry: RepeatSeriesEntry,

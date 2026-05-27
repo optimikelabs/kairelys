@@ -21,11 +21,16 @@ export interface CalendarQueryResult {
 
 type CalendarQueryPreset = Pick<CalendarPreset, 'dayCount' | 'showWeekends' | 'todayPosition'> & Partial<Pick<CalendarPreset, 'showProjectedOccurrences'>>;
 
+export interface CalendarQueryOptions {
+	todayKey?: string;
+}
+
 export function queryCalendarItems(
 	tasks: IndexedTask[],
 	anchorDate: string,
 	preset: CalendarQueryPreset,
 	repeatSeriesEntries: RepeatSeriesEntry[] = [],
+	options: CalendarQueryOptions = {},
 ): CalendarQueryResult {
 	const visibleDates = buildVisibleCalendarDates(anchorDate, preset.dayCount, preset.showWeekends, preset.todayPosition);
 	const rangeStart = visibleDates[0] ?? normalizeDate(anchorDate);
@@ -43,6 +48,7 @@ export function queryCalendarItems(
 			entries: repeatSeriesEntries,
 			rangeStart,
 			rangeEnd,
+			todayKey: options.todayKey,
 		}));
 	}
 

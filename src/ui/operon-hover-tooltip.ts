@@ -10,6 +10,7 @@ interface OperonHoverTooltipOptions {
 	openOnClick?: boolean;
 	tooltipClassName?: string;
 	preferredHorizontal?: 'auto' | 'left' | 'center' | 'right';
+	preferredVertical?: 'auto' | 'above' | 'below';
 	owner?: Node | null;
 }
 
@@ -22,6 +23,14 @@ type BoundTooltipTarget = HTMLElement & {
 	_operonFloatingTooltip?: HTMLElement | null;
 };
 
+/**
+ * Operon tooltip integration contract:
+ * - Use wrapWithOperonHoverTooltip for picker and inline controls that need the standard shell tooltip.
+ * - Pass taskColor or a resolved surface accent when the tooltip should show the Operon gradient border.
+ * - The gradient is driven by --operon-live-hover-border.
+ * - Use bindOperonHoverTooltip only when wrapping the target would break layout or ownership.
+ * - Avoid ad-hoc picker tooltip elements; they bypass shell styling, placement, and theme behavior.
+ */
 export function createOperonHoverIndicator(options: OperonHoverIndicatorOptions): HTMLElement {
 	const wrapper = createOperonHoverTooltipShell(options, options.owner);
 	wrapper.classList.add('operon-hover-indicator');
@@ -79,7 +88,7 @@ export function bindOperonHoverTooltip(
 
 	const open = (): void => {
 		if (typedTarget._operonFloatingTooltip) {
-			positionFloatingTooltip(target, typedTarget._operonFloatingTooltip);
+			positionFloatingTooltip(target, typedTarget._operonFloatingTooltip, options.preferredVertical ?? 'auto');
 			return;
 		}
 		const tooltip = createTooltip(options.title, options.content, options.contentEl, options.tooltipClassName, target);
@@ -88,7 +97,7 @@ export function bindOperonHoverTooltip(
 			tooltip.setCssProps({ '--operon-live-hover-border': options.taskColor });
 		}
 		getOwnerBody(target).appendChild(tooltip);
-		positionFloatingTooltip(target, tooltip);
+		positionFloatingTooltip(target, tooltip, options.preferredVertical ?? 'auto');
 		ownerWindow.requestAnimationFrame(() => tooltip.classList.add('is-visible'));
 		typedTarget._operonFloatingTooltip = tooltip;
 	};
@@ -130,6 +139,7 @@ export function createOperonHoverTooltipShell(options: OperonHoverTooltipOptions
 	wrapper.className = 'operon-hover-tooltip-shell';
 	if (options.taskColor) wrapper.setCssProps({ '--operon-live-hover-border': options.taskColor });
 	wrapper.dataset.tooltipHorizontal = options.preferredHorizontal ?? 'auto';
+	wrapper.dataset.tooltipVertical = options.preferredVertical ?? 'auto';
 	wrapper.addEventListener('mouseenter', () => updateTooltipPlacement(wrapper));
 	wrapper.addEventListener('focusin', () => updateTooltipPlacement(wrapper));
 	return wrapper;
@@ -190,8 +200,15 @@ function updateTooltipPlacement(wrapper: HTMLElement): void {
 	const spaceBelow = viewportHeight - wrapperRect.bottom;
 	const spaceAbove = wrapperRect.top;
 	const viewportPadding = 8;
+	const preferredVertical = wrapper.dataset.tooltipVertical ?? 'auto';
+	const belowFits = spaceBelow >= tooltipHeight + 16;
+	const aboveFits = spaceAbove >= tooltipHeight + 16;
 
-	if (spaceBelow < tooltipHeight + 16 && spaceAbove > spaceBelow) {
+	if (
+		(preferredVertical === 'above' && (aboveFits || (!belowFits && spaceAbove > spaceBelow)))
+		|| (preferredVertical === 'below' && !belowFits && aboveFits)
+		|| (preferredVertical === 'auto' && !belowFits && spaceAbove > spaceBelow)
+	) {
 		wrapper.classList.remove('is-tooltip-below');
 		wrapper.classList.add('is-tooltip-above');
 	}
@@ -264,7 +281,11 @@ function bindInteractiveOpen(wrapper: HTMLElement, target: HTMLElement): void {
 	});
 }
 
-function positionFloatingTooltip(target: HTMLElement, tooltip: HTMLElement): void {
+function positionFloatingTooltip(
+	target: HTMLElement,
+	tooltip: HTMLElement,
+	preferredVertical: 'auto' | 'above' | 'below' = 'auto',
+): void {
 	const rect = target.getBoundingClientRect();
 	const tooltipWidth = tooltip.offsetWidth || 220;
 	const tooltipHeight = tooltip.offsetHeight || 56;
@@ -276,9 +297,19 @@ function positionFloatingTooltip(target: HTMLElement, tooltip: HTMLElement): voi
 	const left = Math.max(viewportPadding, Math.min(centeredLeft, ownerWindow.innerWidth - clampedWidth - viewportPadding));
 	const belowTop = rect.bottom + 8;
 	const aboveTop = rect.top - tooltipHeight - 8;
-	const placeAbove = belowTop + tooltipHeight > ownerWindow.innerHeight - viewportPadding && aboveTop >= viewportPadding;
+	const canPlaceAbove = aboveTop >= viewportPadding;
+	const belowOverflows = belowTop + tooltipHeight > ownerWindow.innerHeight - viewportPadding;
+	const placeAbove = preferredVertical === 'above'
+		? canPlaceAbove || belowOverflows
+		: preferredVertical === 'below'
+			? false
+			: belowOverflows && canPlaceAbove;
+	const maxTop = ownerWindow.innerHeight - tooltipHeight - viewportPadding;
+	const top = placeAbove
+		? Math.max(viewportPadding, aboveTop)
+		: Math.max(viewportPadding, Math.min(belowTop, maxTop));
 
 	tooltip.classList.toggle('is-tooltip-above', placeAbove);
 	tooltip.style.left = `${left}px`;
-	tooltip.style.top = `${placeAbove ? aboveTop : belowTop}px`;
+	tooltip.style.top = `${top}px`;
 }

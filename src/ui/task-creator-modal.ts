@@ -28,6 +28,11 @@ import {
 	setWindowInterval,
 	setWindowTimeout,
 } from '../core/dom-compat';
+import {
+	DEFAULT_INLINE_REPEAT_COMPLETION_MODE,
+	type InlineRepeatCompletionMode,
+	normalizeInlineCompletionMode,
+} from '../storage/repeat-series-store';
 
 const TASK_CREATOR_INHERITED_FIELD_KEYS = ['status', 'priority', 'taskIcon', 'taskColor'] as const;
 const TASK_CREATOR_NON_FIELD_SUBMIT_KEYS = new Set(['note', 'pinned', 'subtasks', 'tags']);
@@ -50,6 +55,7 @@ export interface TaskCreatorDraft {
 	taskColor: string;
 	noteOpen: boolean;
 	fileTemplateId: string;
+	inlineCompletionMode: InlineRepeatCompletionMode;
 }
 
 export interface TaskCreatorSubmitFieldSeed {
@@ -91,6 +97,7 @@ export function createEmptyTaskCreatorDraft(): TaskCreatorDraft {
 		taskColor: '',
 		noteOpen: false,
 		fileTemplateId: '',
+		inlineCompletionMode: DEFAULT_INLINE_REPEAT_COMPLETION_MODE,
 	};
 }
 
@@ -108,6 +115,7 @@ export function cloneTaskCreatorDraft(draft: TaskCreatorDraft | null | undefined
 		taskColor: base.taskColor ?? base.fieldValues?.['taskColor'] ?? '',
 		noteOpen: base.noteOpen === true || !!(base.note ?? '').trim(),
 		fileTemplateId: base.fileTemplateId ?? '',
+		inlineCompletionMode: normalizeInlineCompletionMode(base.inlineCompletionMode),
 	};
 }
 
@@ -274,6 +282,7 @@ export function buildTaskCreatorSnapshot(draft: TaskCreatorDraft): TaskCreatorDr
 		taskColor: draft.fieldValues['taskColor'] ?? draft.taskColor,
 		noteOpen: draft.noteOpen || !!note,
 		fileTemplateId: draft.fileTemplateId ?? '',
+		inlineCompletionMode: normalizeInlineCompletionMode(draft.inlineCompletionMode),
 	};
 }
 
@@ -940,19 +949,24 @@ export class TaskCreatorModal extends Modal {
 			app: this.app,
 			settings: this.options.settings,
 			allTasks: this.options.allTasks,
-				canonicalKey,
-				anchor,
-				currentFieldValues: { ...this.draft.fieldValues },
-				currentTags: [...this.draft.tags],
-				closeListPickerOnSelect: canonicalKey === 'assignees' || canonicalKey === 'tags' || canonicalKey === 'contexts',
-				onCommit: payload => {
-					this.applyPayloadToDraft(payload);
-					if (canonicalKey === 'assignees' || canonicalKey === 'tags' || canonicalKey === 'contexts' || canonicalKey === 'links') {
-						return;
-					}
-					this.closeActivePicker();
-					window.setTimeout(() => this.focusDescription(this.descriptionEl.selectionStart ?? this.descriptionEl.value.length), 0);
-				},
+			canonicalKey,
+			anchor,
+			currentFieldValues: { ...this.draft.fieldValues },
+			currentTags: [...this.draft.tags],
+			closeListPickerOnSelect: canonicalKey === 'assignees' || canonicalKey === 'tags' || canonicalKey === 'contexts',
+			taskFormat: this.activeCreateType === 'file' ? 'yaml' : 'inline',
+			repeatInlineCompletionMode: this.draft.inlineCompletionMode,
+			onCommit: payload => {
+				this.applyPayloadToDraft(payload);
+				if (canonicalKey === 'assignees' || canonicalKey === 'tags' || canonicalKey === 'contexts' || canonicalKey === 'links') {
+					return;
+				}
+				this.closeActivePicker();
+				window.setTimeout(() => this.focusDescription(this.descriptionEl.selectionStart ?? this.descriptionEl.value.length), 0);
+			},
+			onRepeatInlineCompletionModeChange: mode => {
+				this.draft.inlineCompletionMode = normalizeInlineCompletionMode(mode);
+			},
 			onOpenNote: () => {
 				this.openNote();
 				window.setTimeout(() => this.focusNote(), 0);

@@ -5,11 +5,13 @@ import { WriteQueue } from './write-queue';
 import { preserveInvalidJsonFile, writeJsonSafely } from './storage-file-ops';
 
 const REPEAT_SERIES_FILE = '.operon/repeat-series.json';
-const CURRENT_REPEAT_SERIES_VERSION = 4;
+const CURRENT_REPEAT_SERIES_VERSION = 5;
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/u;
 const TIME_RE = /^\d{2}:\d{2}(?::\d{2})?$/u;
 
 export type RepeatTemporalMode = 'timed' | 'allDay';
+export type InlineRepeatCompletionMode = 'keep-completed' | 'replace-completed';
+export const DEFAULT_INLINE_REPEAT_COMPLETION_MODE: InlineRepeatCompletionMode = 'keep-completed';
 
 export interface RepeatTemporalTemplate {
 	mode: RepeatTemporalMode;
@@ -61,6 +63,7 @@ export interface RepeatSeriesEntry {
 	yamlPropertyValueRemovalConfigured: boolean;
 	yamlPropertyValueRemovals: string[];
 	baseTemporalTemplate: RepeatTemporalTemplate | null;
+	inlineCompletionMode: InlineRepeatCompletionMode;
 	createdAt: string;
 	updatedAt: string;
 	overrides: RepeatSeriesOverrides;
@@ -79,6 +82,7 @@ export interface EnsureRepeatSeriesInput {
 	lastMaterializedTitle?: string | null;
 	naming?: RepeatSeriesNamingConfig | null;
 	baseTemporalTemplate?: RepeatTemporalTemplate | null;
+	inlineCompletionMode?: InlineRepeatCompletionMode | null;
 	now: string;
 }
 
@@ -111,6 +115,12 @@ function normalizeTime(value: unknown): string | null {
 function normalizeEstimate(value: unknown): string | null {
 	const trimmed = typeof value === 'string' ? value.trim() : '';
 	return trimmed || null;
+}
+
+export function normalizeInlineCompletionMode(value: unknown): InlineRepeatCompletionMode {
+	return value === 'replace-completed'
+		? 'replace-completed'
+		: DEFAULT_INLINE_REPEAT_COMPLETION_MODE;
 }
 
 function normalizeDateShiftDays(value: unknown): number {
@@ -348,6 +358,7 @@ export class RepeatSeriesStore {
 					lastMaterializedTitle: existing.lastMaterializedTitle ?? normalizeOptionalText(input.lastMaterializedTitle),
 					naming: existing.naming ?? normalizeNamingConfig(input.naming),
 					baseTemporalTemplate: cloneTemporalTemplate(existing.baseTemporalTemplate),
+					inlineCompletionMode: normalizeInlineCompletionMode(existing.inlineCompletionMode),
 					updatedAt: input.now,
 				};
 				await this.commit(next);
@@ -365,6 +376,7 @@ export class RepeatSeriesStore {
 				yamlPropertyValueRemovalConfigured: false,
 				yamlPropertyValueRemovals: [],
 				baseTemporalTemplate: cloneTemporalTemplate(input.baseTemporalTemplate ?? null),
+				inlineCompletionMode: normalizeInlineCompletionMode(input.inlineCompletionMode),
 				createdAt: input.now,
 				updatedAt: input.now,
 				overrides: {
@@ -388,6 +400,22 @@ export class RepeatSeriesStore {
 			await this.commit({
 				...existing,
 				baseTemporalTemplate: cloneTemporalTemplate(template),
+				updatedAt: now,
+			});
+		});
+	}
+
+	async updateInlineCompletionMode(
+		seriesId: string,
+		mode: InlineRepeatCompletionMode,
+		now: string,
+	): Promise<void> {
+		await this.mutate(async () => {
+			const existing = this.data.series[seriesId];
+			if (!existing) return;
+			await this.commit({
+				...existing,
+				inlineCompletionMode: normalizeInlineCompletionMode(mode),
 				updatedAt: now,
 			});
 		});
@@ -581,6 +609,7 @@ export class RepeatSeriesStore {
 					? normalizeYamlPropertyValueRemovals(src.yamlPropertyValueRemovals.filter((value): value is string => typeof value === 'string'))
 					: [],
 				baseTemporalTemplate: normalizeRepeatTemporalTemplate(src.baseTemporalTemplate),
+				inlineCompletionMode: normalizeInlineCompletionMode(src.inlineCompletionMode),
 				createdAt,
 				updatedAt,
 				overrides: normalizeOverrides(src.overrides),

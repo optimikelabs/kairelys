@@ -42,6 +42,7 @@ import {
 	normalizeOptimisticFieldValues,
 	type OptimisticTaskPatchInput,
 } from '../systems/optimistic-status-patch';
+import type { InlineRepeatCompletionMode } from '../storage/repeat-series-store';
 
 export const FILTER_VIEW_TYPE = 'operon-filter-view';
 const FILTER_PERF_DEBUG = false;
@@ -71,10 +72,12 @@ export class FilterView extends ItemView {
 	private getChildIds: (parentId: string) => string[];
 	private navigateToTask: (task: IndexedTask) => void;
 	private getSettings: () => OperonSettings;
-	private updateField: (operonId: string, key: string, value: string) => void;
-	private updateFields?: (operonId: string, payload: Record<string, string>) => void;
+	private updateField: (operonId: string, key: string, value: string) => void | Promise<void>;
+	private updateFields?: (operonId: string, payload: Record<string, string>) => void | Promise<void>;
 	private updateSubtasks?: (operonId: string, subtaskIds: string[]) => void;
 	private updateDependencyField?: (operonId: string, field: 'blocking' | 'blockedBy', value: string) => void;
+	private getRepeatSeriesInlineCompletionMode?: (repeatSeriesId: string) => InlineRepeatCompletionMode;
+	private updateRepeatSeriesInlineCompletionMode?: (operonId: string, mode: InlineRepeatCompletionMode) => void | Promise<void>;
 	private requestSubtask?: (operonId: string) => void | Promise<void>;
 	private onContextualAction: ((taskId: string, actionId: ContextualMenuActionId) => void | Promise<void>) | null = null;
 	private isTaskTracking?: (taskId: string) => boolean;
@@ -115,10 +118,12 @@ export class FilterView extends ItemView {
 		getChildIds: (parentId: string) => string[],
 		navigateToTask: (task: IndexedTask) => void,
 		getSettings: () => OperonSettings,
-		updateField: (operonId: string, key: string, value: string) => void,
-		updateFields?: (operonId: string, payload: Record<string, string>) => void,
+		updateField: (operonId: string, key: string, value: string) => void | Promise<void>,
+		updateFields?: (operonId: string, payload: Record<string, string>) => void | Promise<void>,
 		updateSubtasks?: (operonId: string, subtaskIds: string[]) => void,
 		updateDependencyField?: (operonId: string, field: 'blocking' | 'blockedBy', value: string) => void,
+		getRepeatSeriesInlineCompletionMode?: (repeatSeriesId: string) => InlineRepeatCompletionMode,
+		updateRepeatSeriesInlineCompletionMode?: (operonId: string, mode: InlineRepeatCompletionMode) => void | Promise<void>,
 		requestSubtask?: (operonId: string) => void | Promise<void>,
 		onContextualAction?: (taskId: string, actionId: ContextualMenuActionId) => void | Promise<void>,
 		pinnedCache?: PinnedCache,
@@ -143,6 +148,8 @@ export class FilterView extends ItemView {
 		this.updateFields = updateFields;
 		this.updateSubtasks = updateSubtasks;
 		this.updateDependencyField = updateDependencyField;
+		this.getRepeatSeriesInlineCompletionMode = getRepeatSeriesInlineCompletionMode;
+		this.updateRepeatSeriesInlineCompletionMode = updateRepeatSeriesInlineCompletionMode;
 		this.requestSubtask = requestSubtask;
 		this.onContextualAction = onContextualAction ?? null;
 		this.pinnedCache = pinnedCache ?? null;
@@ -288,6 +295,8 @@ export class FilterView extends ItemView {
 			updateFields: this.updateFields,
 			updateSubtasks: this.updateSubtasks,
 			updateDependencyField: this.updateDependencyField,
+			getRepeatSeriesInlineCompletionMode: this.getRepeatSeriesInlineCompletionMode,
+			updateRepeatSeriesInlineCompletionMode: this.updateRepeatSeriesInlineCompletionMode,
 			requestSubtask: this.requestSubtask,
 			onContextualAction: this.onContextualAction ?? undefined,
 			isTaskPinned: this.pinnedCache ? (taskId) => this.pinnedCache?.isPinned(taskId) === true : undefined,
@@ -336,8 +345,10 @@ export class FilterView extends ItemView {
 					getChildIds: this.getChildIds,
 					navigateToTask: this.navigateToTask,
 					getSettings: this.getSettings,
-					updateField: this.updateField,
-					updateFields: this.updateFields,
+					updateField: (operonId, key, value) => { void this.updateField(operonId, key, value); },
+					updateFields: this.updateFields
+						? (operonId, payload) => { void this.updateFields?.(operonId, payload); }
+						: undefined,
 					updateSubtasks: this.updateSubtasks,
 					updateDependencyField: this.updateDependencyField,
 					onContextualAction: this.onContextualAction ?? undefined,

@@ -10,6 +10,7 @@ import { serializeTask } from '../core/serializer';
 import { generateOperonId } from '../core/id-generator';
 import { t } from '../core/i18n';
 import { localNow } from '../core/local-time';
+import { extractDatePart } from '../core/scheduling-rules';
 import {
 	RepeatRule,
 	calculateNextRepeatDate,
@@ -18,7 +19,7 @@ import {
 	parseRepeatRule,
 	serializeRepeatRule,
 } from '../core/repeat-rule';
-import { RepeatSeriesEntry, RepeatTemporalTemplate } from '../storage/repeat-series-store';
+import { InlineRepeatCompletionMode, RepeatSeriesEntry, RepeatTemporalTemplate } from '../storage/repeat-series-store';
 import { resolveFileTaskDefaults } from '../core/file-task-defaults';
 import {
 	applyRawYamlValueRemovals,
@@ -110,7 +111,43 @@ export interface RecurrenceMaterializationResult {
 	nextDate?: string;
 	createdTaskId?: string;
 	createdFilePath?: string;
+	materializationMode?: InlineOccurrenceMaterializationMode;
 	summary?: string;
+}
+
+export type InlineOccurrenceMaterializationMode = 'inserted' | 'replaced';
+
+interface InlineOccurrenceMaterializationResult {
+	taskId: string;
+	mode: InlineOccurrenceMaterializationMode;
+}
+
+export interface InlineOccurrenceLineMaterializationOptions {
+	replaceCompleted: boolean;
+	newOccurrencePosition: 'above' | 'below';
+}
+
+export interface InlineOccurrenceLineMaterializationResult {
+	lines: string[];
+	mode: InlineOccurrenceMaterializationMode;
+}
+
+export function materializeInlineOccurrenceLines(
+	lines: string[],
+	sourceLineIndex: number,
+	newOccurrenceLine: string,
+	options: InlineOccurrenceLineMaterializationOptions,
+): InlineOccurrenceLineMaterializationResult {
+	const nextLines = [...lines];
+	if (options.replaceCompleted) {
+		nextLines.splice(sourceLineIndex, 1, newOccurrenceLine);
+		return { lines: nextLines, mode: 'replaced' };
+	}
+	const insertIndex = options.newOccurrencePosition === 'above'
+		? sourceLineIndex
+		: sourceLineIndex + 1;
+	nextLines.splice(insertIndex, 0, newOccurrenceLine);
+	return { lines: nextLines, mode: 'inserted' };
 }
 
 interface PlannedOccurrence {
@@ -126,6 +163,7 @@ interface PlannedOccurrence {
 	sourceTask: IndexedTask;
 	baseTitle: string | null;
 	naming: RepeatSeriesNamingConfig | null;
+	inlineCompletionMode: InlineRepeatCompletionMode;
 }
 
 export type RecurringBodyTaskKind = 'owned-subtask' | 'foreign-operon-task' | 'plain-content';
@@ -628,9 +666,7 @@ export class RecurrenceService {
 			const rule = parseRepeatRule(completedTask.fieldValues['repeat']);
 			if (!completedTask.fieldValues['repeat']) return { created: false, reason: 'not-recurring' };
 			if (!rule) return { created: false, reason: 'invalid-rule' };
-			const anchor = rule.mode === 'schedule'
-				? completedTask.fieldValues['dateScheduled']
-				: completionTimestamp;
+			const anchor = this.resolveNextOccurrenceAnchorDate(rule, completedTask, completionTimestamp);
 			if (!anchor) return { created: false, reason: 'missing-anchor' };
 			const next = calculateNextRepeatDate(rule, {
 				anchorDate: anchor,
@@ -645,14 +681,15 @@ export class RecurrenceService {
 		}
 
 		if (planned.sourceTask.primary.format === 'inline') {
-			const createdTaskId = await this.materializeInlineOccurrence(planned);
-			if (!createdTaskId) return { created: false, reason: 'source-missing', seriesId: planned.seriesId };
+			const created = await this.materializeInlineOccurrence(planned);
+			if (!created) return { created: false, reason: 'source-missing', seriesId: planned.seriesId };
 			return {
 				created: true,
 				reason: 'created',
 				seriesId: planned.seriesId,
 				nextDate: planned.nextDate,
-				createdTaskId,
+				createdTaskId: created.taskId,
+				materializationMode: created.mode,
 				summary: formatRepeatRuleSummary(planned.rule),
 			};
 		}
@@ -666,8 +703,26 @@ export class RecurrenceService {
 			nextDate: planned.nextDate,
 			createdTaskId: planned.fieldValues['operonId'],
 			createdFilePath: created,
+			materializationMode: 'inserted',
 			summary: formatRepeatRuleSummary(planned.rule),
 		};
+	}
+
+	private resolveNextOccurrenceAnchorDate(
+		rule: RepeatRule,
+		completedTask: IndexedTask,
+		completionTimestamp: string,
+	): string {
+		if (rule.mode === 'schedule' || rule.mode === 'count') {
+			return getTaskRepeatOccurrenceDate(completedTask);
+		}
+		if (completedTask.checkbox !== 'done') return completionTimestamp;
+		const occurrenceDate = getTaskRepeatOccurrenceDate(completedTask);
+		const completionDate = extractDatePart(completionTimestamp);
+		if (occurrenceDate && completionDate && occurrenceDate > completionDate) {
+			return occurrenceDate;
+		}
+		return completionTimestamp;
 	}
 
 	private async planNextOccurrence(
@@ -684,9 +739,7 @@ export class RecurrenceService {
 		const series = await this.ensureSeriesEntry(completedTask, completedTask.fieldValues['repeatSeriesId']);
 		if (!series) return null;
 
-		const anchorDate = rule.mode === 'schedule' || rule.mode === 'count'
-			? getTaskRepeatOccurrenceDate(completedTask)
-			: completionTimestamp;
+		const anchorDate = this.resolveNextOccurrenceAnchorDate(rule, completedTask, completionTimestamp);
 		if (!anchorDate) return null;
 
 		const nextOccurrenceDate = calculateNextRepeatDate(rule, {
@@ -728,6 +781,7 @@ export class RecurrenceService {
 			sourceTask: completedTask,
 			baseTitle: series.baseTitle,
 			naming: series.naming,
+			inlineCompletionMode: series.inlineCompletionMode,
 		};
 	}
 
@@ -899,7 +953,7 @@ export class RecurrenceService {
 		return displayDate ? renderRepeatSeriesTitle(naming, displayDate) : completedTask.description;
 	}
 
-	private async materializeInlineOccurrence(plan: PlannedOccurrence): Promise<string | null> {
+	private async materializeInlineOccurrence(plan: PlannedOccurrence): Promise<InlineOccurrenceMaterializationResult | null> {
 		const file = this.app.vault.getAbstractFileByPath(plan.sourceTask.primary.filePath);
 		if (!(file instanceof TFile)) return null;
 
@@ -909,18 +963,28 @@ export class RecurrenceService {
 		if (lineIndex === -1) return null;
 		const parsedSource = parseTaskLine(lines[lineIndex], lineIndex, plan.sourceTask.primary.filePath, this.getSettings().keyMappings);
 
-		const line = this.buildInlineTaskLine(plan, parsedSource?.timePrefix?.raw ?? null);
-		const insertIndex = this.getSettings().newOccurrencePosition === 'above'
-			? lineIndex
-			: lineIndex + 1;
-		lines.splice(insertIndex, 0, line);
-		await this.app.vault.modify(file, lines.join('\n'));
+		const line = this.buildInlineTaskLine(plan, parsedSource);
+		const shouldReplace = this.shouldReplaceCompletedInlineOccurrence(plan);
+		const materialized = materializeInlineOccurrenceLines(lines, lineIndex, line, {
+			replaceCompleted: shouldReplace,
+			newOccurrencePosition: this.getSettings().newOccurrencePosition,
+		});
+		await this.app.vault.modify(file, materialized.lines.join('\n'));
 		this.onBeforeCreatedTaskReindex(plan.fieldValues['operonId']);
 		await this.indexer.reindexFilePath(plan.sourceTask.primary.filePath);
-		return plan.fieldValues['operonId'];
+		return {
+			taskId: plan.fieldValues['operonId'],
+			mode: materialized.mode,
+		};
 	}
 
-	private buildInlineTaskLine(plan: PlannedOccurrence, sourceTimePrefix: string | null): string {
+	private shouldReplaceCompletedInlineOccurrence(plan: PlannedOccurrence): boolean {
+		return plan.rule.mode === 'done'
+			&& plan.sourceTask.checkbox === 'done'
+			&& plan.inlineCompletionMode === 'replace-completed';
+	}
+
+	private buildInlineTaskLine(plan: PlannedOccurrence, sourceTask: ParsedTask | null): string {
 		const fields: OperonField[] = Object.entries(plan.fieldValues).map(([key, value]) => ({
 			sourceKey: key,
 			key,
@@ -934,13 +998,9 @@ export class RecurrenceService {
 
 		const task: ParsedTask = {
 			checkbox: 'open',
-			checkboxRange: { from: 0, to: 0 },
-			timePrefix: sourceTimePrefix ? {
-				startTime: sourceTimePrefix.includes('-') ? sourceTimePrefix.split('-')[0] : sourceTimePrefix,
-				endTime: sourceTimePrefix.includes('-') ? sourceTimePrefix.split('-')[1] : null,
-				raw: sourceTimePrefix,
-			} : null,
-			timePrefixRange: null,
+			checkboxRange: sourceTask?.checkboxRange ?? { from: 0, to: 0 },
+			timePrefix: sourceTask?.timePrefix ?? null,
+			timePrefixRange: sourceTask?.timePrefixRange ?? null,
 			description: plan.description,
 			descriptionRange: { from: 0, to: 0 },
 			tags: [...plan.tags],
@@ -950,7 +1010,7 @@ export class RecurrenceService {
 			operonId: plan.fieldValues['operonId'],
 			filePath: plan.sourceTask.primary.filePath,
 			lineNumber: 0,
-			rawLine: '',
+			rawLine: sourceTask?.rawLine ?? '',
 		};
 
 		return serializeTask(task, this.getSettings().keyMappings);

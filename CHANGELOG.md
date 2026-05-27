@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Validation
 
+## [1.0.7] - 2026-05-27
+
+### New
+- Added a Completed copy option for When done recurring inline tasks, so users can replace the completed row with the next occurrence when past completed copies are not useful.
+
+### Improved
+- Improved Calendar touch dragging for timed tasks, so phone, tablet, and pen users can long-press a time-grid task and move it without changing desktop drag behavior.
+- Improved Kanban on narrow touch screens by compacting swimlanes and hiding board chrome while scrolling, leaving desktop Kanban unchanged.
+- Improved Calendar recurring previews so When done tasks can show future projected occurrences without backfilling overdue missed days, while matching the visual treatment of other projected timed tasks.
+- Improved the Repeat picker completed-copy tooltips so they use Operon's standard hover tooltip structure and avoid covering the picker action buttons.
+
+### Fixed
+- Fixed the Calendar sidebar on phones so Calendars, Task Pool, and Finished Tasks remain reachable below the quick actions.
+
+### Validation
+- Local validation passed `npm run check:local`, including strict linting, production build, release guard, and the full Phase 5 regression suite at 660/660 checks.
+
 ## [1.0.6] - 2026-05-26
 
 ### New

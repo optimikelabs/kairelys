@@ -22,6 +22,7 @@ import { splitTaskListValue } from '../core/task-field-patch';
 import { buildSubtaskExcludedIds } from '../core/task-hierarchy';
 import { collectHiddenKeys } from './compact-task-layout';
 import { asHTMLElement, getOwnerWindow } from '../core/dom-compat';
+import type { InlineRepeatCompletionMode } from '../storage/repeat-series-store';
 
 interface LivePreviewFieldMenuOptions {
 	app: App;
@@ -29,10 +30,12 @@ interface LivePreviewFieldMenuOptions {
 	parsedTask: ParsedTask;
 	settings: OperonSettings;
 	allTasks: IndexedTask[];
-	updateField: (key: string, value: string, restoreCursor?: LivePreviewCursorRestoreRequest) => void;
-	updateFields?: (payload: Record<string, string>, restoreCursor?: LivePreviewCursorRestoreRequest) => void;
+	updateField: (key: string, value: string, restoreCursor?: LivePreviewCursorRestoreRequest) => void | Promise<void>;
+	updateFields?: (payload: Record<string, string>, restoreCursor?: LivePreviewCursorRestoreRequest) => void | Promise<void>;
 	updateSubtasks?: (subtaskIds: string[]) => void;
 	updateDependencyField?: (field: 'blocking' | 'blockedBy', value: string) => void;
+	repeatInlineCompletionMode?: InlineRepeatCompletionMode;
+	onRepeatInlineCompletionModeChange?: (mode: InlineRepeatCompletionMode) => void | Promise<void>;
 	openEditor: () => void;
 	revealSource?: () => void;
 	visibleKeys?: Iterable<string>;
@@ -152,8 +155,8 @@ function openPicker(key: string, anchor: HTMLElement | DOMRect, options: LivePre
 				pipelines: options.settings.pipelines,
 				value: fieldValues['status'],
 				retainInputFocus: true,
-				onSelect: value => options.updateField('status', value, restoreCursor),
-				onClear: () => options.updateField('status', '', restoreCursor),
+				onSelect: value => { void options.updateField('status', value, restoreCursor); },
+				onClear: () => { void options.updateField('status', '', restoreCursor); },
 			});
 			return;
 		case 'priority':
@@ -161,8 +164,8 @@ function openPicker(key: string, anchor: HTMLElement | DOMRect, options: LivePre
 				priorities: options.settings.priorities,
 				value: fieldValues['priority'],
 				retainInputFocus: true,
-				onSelect: value => options.updateField('priority', value, restoreCursor),
-				onClear: () => options.updateField('priority', '', restoreCursor),
+				onSelect: value => { void options.updateField('priority', value, restoreCursor); },
+				onClear: () => { void options.updateField('priority', '', restoreCursor); },
 			});
 			return;
 		case 'dateDue':
@@ -175,9 +178,9 @@ function openPicker(key: string, anchor: HTMLElement | DOMRect, options: LivePre
 				fieldKey: key,
 				value: fieldValues[key],
 				retainInputFocus: true,
-				onSelect: value => options.updateField(key, value, restoreCursor),
+				onSelect: value => { void options.updateField(key, value, restoreCursor); },
 				canRemove: !!fieldValues[key],
-				onRemove: () => options.updateField(key, '', restoreCursor),
+				onRemove: () => { void options.updateField(key, '', restoreCursor); },
 			});
 			return;
 		case 'datetimeCreated':
@@ -193,12 +196,49 @@ function openPicker(key: string, anchor: HTMLElement | DOMRect, options: LivePre
 				fieldKey: key,
 				value: fieldValues[key],
 				retainInputFocus: true,
-				onSelect: value => options.updateField(key, value, restoreCursor),
+				onSelect: value => { void options.updateField(key, value, restoreCursor); },
 				canRemove: !!fieldValues[key],
-				onRemove: () => options.updateField(key, '', restoreCursor),
+				onRemove: () => { void options.updateField(key, '', restoreCursor); },
 			});
 			return;
-		case 'repeat':
+		case 'repeat': {
+			const saveRepeat = async (payload: {
+				repeat: string;
+				datetimeRepeatEnd: string;
+				dateScheduled?: string;
+				inlineCompletionMode: InlineRepeatCompletionMode;
+			}) => {
+				if (options.updateFields) {
+					await options.updateFields({
+						repeat: payload.repeat,
+						datetimeRepeatEnd: payload.datetimeRepeatEnd,
+						...(payload.dateScheduled ? { dateScheduled: payload.dateScheduled } : {}),
+					}, restoreCursor);
+					await options.onRepeatInlineCompletionModeChange?.(payload.inlineCompletionMode);
+					return;
+				}
+				await options.updateField('repeat', payload.repeat, restoreCursor);
+				await options.updateField('datetimeRepeatEnd', payload.datetimeRepeatEnd, restoreCursor);
+				if (payload.dateScheduled) {
+					await options.updateField('dateScheduled', payload.dateScheduled, restoreCursor);
+				}
+				await options.onRepeatInlineCompletionModeChange?.(payload.inlineCompletionMode);
+			};
+			const clearRepeat = async () => {
+				if (options.updateFields) {
+					await options.updateFields({
+						repeat: '',
+						datetimeRepeatEnd: '',
+						repeatSeriesId: '',
+					}, restoreCursor);
+					await options.onRepeatInlineCompletionModeChange?.('keep-completed');
+					return;
+				}
+				await options.updateField('repeat', '', restoreCursor);
+				await options.updateField('datetimeRepeatEnd', '', restoreCursor);
+				await options.updateField('repeatSeriesId', '', restoreCursor);
+				await options.onRepeatInlineCompletionModeChange?.('keep-completed');
+			};
 			showRepeatPicker(anchor, {
 				value: fieldValues['repeat'],
 				repeatEnd: fieldValues['datetimeRepeatEnd'],
@@ -206,85 +246,66 @@ function openPicker(key: string, anchor: HTMLElement | DOMRect, options: LivePre
 				taskColor: fieldValues['taskColor'],
 				dateScheduled: fieldValues['dateScheduled'],
 				dateDue: fieldValues['dateDue'],
+				taskFormat: options.task?.primary.format ?? 'inline',
+				inlineCompletionMode: options.repeatInlineCompletionMode,
 				onSave: payload => {
-					if (options.updateFields) {
-						options.updateFields({
-							repeat: payload.repeat,
-							datetimeRepeatEnd: payload.datetimeRepeatEnd,
-							...(payload.dateScheduled ? { dateScheduled: payload.dateScheduled } : {}),
-						}, restoreCursor);
-						return;
-					}
-					options.updateField('repeat', payload.repeat, restoreCursor);
-					options.updateField('datetimeRepeatEnd', payload.datetimeRepeatEnd, restoreCursor);
-					if (payload.dateScheduled) {
-						options.updateField('dateScheduled', payload.dateScheduled, restoreCursor);
-					}
+					void saveRepeat(payload);
 				},
 				onClear: () => {
-					if (options.updateFields) {
-						options.updateFields({
-							repeat: '',
-							datetimeRepeatEnd: '',
-							repeatSeriesId: '',
-						}, restoreCursor);
-						return;
-					}
-					options.updateField('repeat', '', restoreCursor);
-					options.updateField('datetimeRepeatEnd', '', restoreCursor);
-					options.updateField('repeatSeriesId', '', restoreCursor);
+					void clearRepeat();
 				},
 			});
 			return;
+		}
 		case 'tags':
 			showTagPicker(anchor, {
 				app: options.app,
-				value: options.parsedTask.tags,
-				closeOnSelect: true,
-				retainInputFocus: true,
-				onSave: values => options.updateField('_tags', values.join('; '), restoreCursor),
-			});
-			return;
+					value: options.parsedTask.tags,
+					closeOnSelect: true,
+					retainInputFocus: true,
+					onSave: values => { void options.updateField('_tags', values.join('; '), restoreCursor); },
+				});
+				return;
 		case 'contexts':
 			showContextsPicker(anchor, {
 				app: options.app,
 				settingsKeyMappings: options.settings.keyMappings,
 				allTasks: options.allTasks,
-				value: splitList(fieldValues['contexts']),
-				closeOnSelect: true,
-				retainInputFocus: true,
-				onSave: values => options.updateField('contexts', values.join('; '), restoreCursor),
-			});
-			return;
+					value: splitList(fieldValues['contexts']),
+					closeOnSelect: true,
+					retainInputFocus: true,
+					onSave: values => { void options.updateField('contexts', values.join('; '), restoreCursor); },
+				});
+				return;
 		case 'links':
 			showLinksPicker(anchor, {
 				app: options.app,
 				settingsKeyMappings: options.settings.keyMappings,
 				allTasks: options.allTasks,
-				value: splitList(fieldValues['links']),
-				closeOnSelect: !!options.editorView,
-				retainInputFocus: true,
-				onSave: values => options.updateField('links', values.join('; '), restoreCursor),
-			});
-			return;
+					value: splitList(fieldValues['links']),
+					closeOnSelect: !!options.editorView,
+					retainInputFocus: true,
+					onSave: values => { void options.updateField('links', values.join('; '), restoreCursor); },
+				});
+				return;
 		case 'assignees':
 			showAssigneesPicker(anchor, {
 				app: options.app,
 				settingsKeyMappings: options.settings.keyMappings,
 				allTasks: options.allTasks,
-				value: splitList(fieldValues['assignees']),
-				closeOnSelect: true,
-				retainInputFocus: true,
-				onSave: values => options.updateField('assignees', values.join('; '), restoreCursor),
-			});
-			return;
-		case 'taskColor':
-			showColorPicker(anchor, {
-				value: fieldValues['taskColor'],
-				onSelect: value => options.updateField('taskColor', value, restoreCursor),
-				onClear: () => options.updateField('taskColor', '', restoreCursor),
-			});
-			return;
+					value: splitList(fieldValues['assignees']),
+					closeOnSelect: true,
+					retainInputFocus: true,
+					onSave: values => { void options.updateField('assignees', values.join('; '), restoreCursor); },
+				});
+				return;
+			case 'taskColor':
+				showColorPicker(anchor, {
+					value: fieldValues['taskColor'],
+					onSelect: value => { void options.updateField('taskColor', value, restoreCursor); },
+					onClear: () => { void options.updateField('taskColor', '', restoreCursor); },
+				});
+				return;
 		case 'subtasks': {
 			const parentTaskId = options.task?.operonId?.trim() ?? '';
 			if (!parentTaskId || !options.updateSubtasks) {
@@ -301,12 +322,12 @@ function openPicker(key: string, anchor: HTMLElement | DOMRect, options: LivePre
 						allTasks: options.allTasks,
 						currentTaskId: parentTaskId,
 						parentTaskId: fieldValues['parentTask'],
-					}),
-					closeOnSelect: true,
-					onChange: operonIds => options.updateSubtasks?.(operonIds),
-				});
-			return;
-		}
+						}),
+						closeOnSelect: true,
+						onChange: operonIds => { options.updateSubtasks?.(operonIds); },
+					});
+				return;
+			}
 		case 'blocking':
 		case 'blockedBy':
 			showDependencyTaskPicker(anchor, {
@@ -318,13 +339,13 @@ function openPicker(key: string, anchor: HTMLElement | DOMRect, options: LivePre
 				closeOnSelect: true,
 				onSave: payload => {
 					const nextValue = payload[key] ?? '';
-					if (options.updateDependencyField) {
-						options.updateDependencyField(key, nextValue);
-						return;
-					}
-					options.updateField(key, nextValue, restoreCursor);
-				},
-			});
+						if (options.updateDependencyField) {
+							options.updateDependencyField(key, nextValue);
+							return;
+						}
+						void options.updateField(key, nextValue, restoreCursor);
+					},
+				});
 			return;
 		default:
 			options.openEditor();

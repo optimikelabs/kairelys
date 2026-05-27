@@ -76,6 +76,11 @@ import { enginePerfLog, enginePerfNow } from '../../core/engine-perf';
 export const KANBAN_VIEW_TYPE = 'operon-kanban-view';
 const KANBAN_CARD_RENDER_BATCH_SIZE = 10;
 const KANBAN_SEARCH_MIN_QUERY_LENGTH = 2;
+const KANBAN_MOBILE_LAYOUT_MEDIA_QUERY = '(hover: none) and (pointer: coarse)';
+const KANBAN_MOBILE_SWIMLANE_SCROLL_LEFT_THRESHOLD_PX = 8;
+const KANBAN_MOBILE_CHROME_TOP_REVEAL_THRESHOLD_PX = 8;
+const KANBAN_MOBILE_CHROME_TOP_HIDE_THRESHOLD_PX = 24;
+const KANBAN_MOBILE_CHROME_SCROLL_DELTA_PX = 8;
 const KANBAN_SEARCH_BOX_DISABLED_KEYS = new Set<TaskFinderDefaultScopeKey>(['recentModified']);
 const KANBAN_TRACKER_FIELD_KEYS = new Set(['activeTracker', 'datetimeModified', 'duration', 'totalDuration', 'trackers']);
 const KANBAN_SEARCH_SCOPE_GROUPS: TaskFinderDefaultScopeKey[][] = [
@@ -135,6 +140,7 @@ export class KanbanView extends ItemView {
 	private boardLayoutRefreshFrame: number | null = null;
 	private boardLayoutRefreshCleanup: (() => void) | null = null;
 	private toolbarLayoutCleanup: (() => void) | null = null;
+	private kanbanMobileLayoutCleanup: (() => void) | null = null;
 	private kanbanLazyObservers: IntersectionObserver[] = [];
 	private lastLaneColumnWidthPx: number | null = null;
 	private readonly hoverMenu = new ContextualHoverMenuController({
@@ -243,6 +249,7 @@ export class KanbanView extends ItemView {
 		this.clearLaneColumnWidthFrame();
 		this.clearBoardLayoutRefresh();
 		this.clearToolbarLayout();
+		this.clearKanbanMobileLayout();
 		this.clearKanbanLazyObservers();
 		this.hideHoverMenu(true);
 	}
@@ -276,6 +283,7 @@ export class KanbanView extends ItemView {
 		this.hideHoverMenu(true);
 		this.clearBoardLayoutRefresh();
 		this.clearToolbarLayout();
+		this.clearKanbanMobileLayout();
 		this.clearKanbanLazyObservers();
 		this.captureSearchFocusState(container);
 		this.captureBoardScrollState(container);
@@ -332,6 +340,9 @@ export class KanbanView extends ItemView {
 			fallbackTaskIconSource: settings.fallbackTaskIconSource,
 			fallbackStateIcons: settings.fallbackStateIcons,
 			maxVisibleTasksPerCell: settings.kanbanMaxVisibleTasksPerCell,
+			kanbanMobileLayoutChromeEnabled: settings.kanbanMobileLayoutChromeEnabled,
+			kanbanMobileLayoutMaxWidthPx: settings.kanbanMobileLayoutMaxWidthPx,
+			kanbanMobileCompactSwimlaneWidthPx: settings.kanbanMobileCompactSwimlaneWidthPx,
 			taskFinderShortcuts: settings.taskFinderShortcuts,
 			pinnedGeneration,
 			optimisticMoves: Array.from(this.optimisticMoves.entries())
@@ -857,7 +868,7 @@ export class KanbanView extends ItemView {
 		const gridViewport = boardEl.createDiv('operon-kanban-grid-viewport');
 		const gridContent = gridViewport.createDiv('operon-kanban-grid-content');
 		const fullColumnTemplate = hasSwimlanes
-			? `var(--operon-kanban-lane-column-width, 96px) ${columnTemplate}`
+			? `var(--operon-kanban-active-lane-column-width, var(--operon-kanban-lane-column-width, 96px)) ${columnTemplate}`
 			: columnTemplate;
 		const headerRow = gridContent.createDiv('operon-kanban-header-row');
 		headerRow.style.gridTemplateColumns = fullColumnTemplate;
@@ -1023,6 +1034,7 @@ export class KanbanView extends ItemView {
 			this.syncLaneHeights(laneLabelEls, gridRowEls);
 			this.refreshLaneColumnWidth(boardEl, laneTitleEls);
 		}
+		this.bindKanbanMobileLayout(boardEl, gridViewport, hasSwimlanes);
 		this.bindBoardLayoutRefresh(boardEl, laneLabelEls, gridRowEls, laneTitleEls, hasSwimlanes);
 	}
 
@@ -1816,6 +1828,10 @@ export class KanbanView extends ItemView {
 	}
 
 	private refreshLaneColumnWidth(boardEl: HTMLElement, laneTitles: HTMLElement[]): void {
+		if (boardEl.classList.contains('is-mobile-swimlane-overlay') && this.lastLaneColumnWidthPx !== null) {
+			boardEl.style.setProperty('--operon-kanban-lane-column-width', `${this.lastLaneColumnWidthPx}px`);
+			return;
+		}
 		const firstLabel = boardEl.querySelector<HTMLElement>('.operon-kanban-lane-label');
 		const countButton = boardEl.querySelector<HTMLElement>('.operon-kanban-lane-count-button');
 		if (!firstLabel || !countButton || laneTitles.length === 0) {
@@ -1890,6 +1906,109 @@ export class KanbanView extends ItemView {
 		}
 		this.boardLayoutRefreshCleanup?.();
 		this.boardLayoutRefreshCleanup = null;
+	}
+
+	private bindKanbanMobileLayout(boardEl: HTMLElement, gridViewport: HTMLElement, hasSwimlanes: boolean): void {
+		this.clearKanbanMobileLayout();
+		const root = boardEl.closest<HTMLElement>('.operon-kanban-root');
+		if (!root) return;
+
+		const toolbar = root.querySelector<HTMLElement>(':scope > .operon-kanban-toolbar');
+		const ownerWindow = getOwnerWindow(gridViewport);
+		const mediaQuery = ownerWindow.matchMedia(KANBAN_MOBILE_LAYOUT_MEDIA_QUERY);
+		let chromeHidden = false;
+		let lastScrollTop = gridViewport.scrollTop;
+		let applyFrame: number | null = null;
+
+		const isMobileLayoutEligible = (): boolean => {
+			const settings = this.getSettings();
+			return settings.kanbanMobileLayoutChromeEnabled === true
+				&& mediaQuery.matches
+				&& gridViewport.clientWidth <= settings.kanbanMobileLayoutMaxWidthPx;
+		};
+		const isToolbarFocused = (): boolean => {
+			if (!toolbar) return false;
+			const activeElement = asHTMLElement(getOwnerDocument(root).activeElement, root);
+			return activeElement !== null && toolbar.contains(activeElement);
+		};
+		const applyState = (): void => {
+			applyFrame = null;
+			const settings = this.getSettings();
+			boardEl.style.setProperty('--operon-kanban-mobile-lane-handle-width', `${settings.kanbanMobileCompactSwimlaneWidthPx}px`);
+			const mobileLayout = isMobileLayoutEligible();
+			root.classList.toggle('is-mobile-layout', mobileLayout);
+			boardEl.classList.toggle('is-mobile-layout', mobileLayout);
+
+			if (!mobileLayout) {
+				chromeHidden = false;
+				lastScrollTop = gridViewport.scrollTop;
+				root.classList.remove('is-mobile-chrome-hidden', 'is-mobile-swimlane-overlay');
+				boardEl.classList.remove('is-mobile-chrome-hidden', 'is-mobile-swimlane-overlay');
+				return;
+			}
+
+			const swimlaneOverlay = hasSwimlanes && gridViewport.scrollLeft > KANBAN_MOBILE_SWIMLANE_SCROLL_LEFT_THRESHOLD_PX;
+			root.classList.toggle('is-mobile-swimlane-overlay', swimlaneOverlay);
+			boardEl.classList.toggle('is-mobile-swimlane-overlay', swimlaneOverlay);
+
+			const scrollTop = gridViewport.scrollTop;
+			const deltaY = scrollTop - lastScrollTop;
+			if (isToolbarFocused()) {
+				chromeHidden = false;
+			} else if (this.draggedCardContext === null) {
+				if (scrollTop <= KANBAN_MOBILE_CHROME_TOP_REVEAL_THRESHOLD_PX) {
+					chromeHidden = false;
+				} else if (
+					scrollTop > KANBAN_MOBILE_CHROME_TOP_HIDE_THRESHOLD_PX
+					&& deltaY >= KANBAN_MOBILE_CHROME_SCROLL_DELTA_PX
+				) {
+					chromeHidden = true;
+				} else if (deltaY <= -KANBAN_MOBILE_CHROME_SCROLL_DELTA_PX) {
+					chromeHidden = false;
+				}
+			}
+
+			root.classList.toggle('is-mobile-chrome-hidden', chromeHidden);
+			boardEl.classList.toggle('is-mobile-chrome-hidden', chromeHidden);
+			lastScrollTop = scrollTop;
+		};
+		const scheduleApplyState = (): void => {
+			if (applyFrame !== null) return;
+			applyFrame = ownerWindow.requestAnimationFrame(applyState);
+		};
+		const handleEnvironmentChange = (): void => {
+			lastScrollTop = gridViewport.scrollTop;
+			scheduleApplyState();
+		};
+
+		gridViewport.addEventListener('scroll', scheduleApplyState, { passive: true });
+		toolbar?.addEventListener('focusin', scheduleApplyState);
+		toolbar?.addEventListener('focusout', scheduleApplyState);
+		mediaQuery.addEventListener('change', handleEnvironmentChange);
+		const resizeObserver = new ResizeObserver(handleEnvironmentChange);
+		resizeObserver.observe(gridViewport);
+
+		this.kanbanMobileLayoutCleanup = () => {
+			gridViewport.removeEventListener('scroll', scheduleApplyState);
+			toolbar?.removeEventListener('focusin', scheduleApplyState);
+			toolbar?.removeEventListener('focusout', scheduleApplyState);
+			mediaQuery.removeEventListener('change', handleEnvironmentChange);
+			resizeObserver.disconnect();
+			if (applyFrame !== null) {
+				ownerWindow.cancelAnimationFrame(applyFrame);
+				applyFrame = null;
+			}
+			root.classList.remove('is-mobile-layout', 'is-mobile-chrome-hidden', 'is-mobile-swimlane-overlay');
+			boardEl.classList.remove('is-mobile-layout', 'is-mobile-chrome-hidden', 'is-mobile-swimlane-overlay');
+			boardEl.style.removeProperty('--operon-kanban-mobile-lane-handle-width');
+		};
+
+		applyState();
+	}
+
+	private clearKanbanMobileLayout(): void {
+		this.kanbanMobileLayoutCleanup?.();
+		this.kanbanMobileLayoutCleanup = null;
 	}
 
 	private scheduleBoardLayoutRefreshFromCell(cell: HTMLElement): void {

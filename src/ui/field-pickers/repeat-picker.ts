@@ -12,11 +12,20 @@ import {
 import { formatRepeatRuleSummaryI18n } from '../../core/repeat-rule-i18n';
 import { localToday } from '../../core/local-time';
 import { t } from '../../core/i18n';
+import { normalizeColor } from '../../core/task-color-source';
+import {
+	DEFAULT_INLINE_REPEAT_COMPLETION_MODE,
+	InlineRepeatCompletionMode,
+	normalizeInlineCompletionMode,
+} from '../../storage/repeat-series-store';
+import { wrapWithOperonHoverTooltip } from '../operon-hover-tooltip';
+import { setAccessibleLabelWithoutTooltip } from '../accessibility-label';
 
 interface RepeatPickerSavePayload {
 	repeat: string;
 	datetimeRepeatEnd: string;
 	dateScheduled?: string;
+	inlineCompletionMode: InlineRepeatCompletionMode;
 }
 
 interface RepeatPickerOptions {
@@ -26,7 +35,9 @@ interface RepeatPickerOptions {
 	dateDue?: string;
 	repeatSeriesId?: string;
 	taskColor?: string;
-	onSave: (payload: RepeatPickerSavePayload) => void;
+	taskFormat?: 'inline' | 'yaml';
+	inlineCompletionMode?: InlineRepeatCompletionMode;
+	onSave: (payload: RepeatPickerSavePayload) => void | Promise<void>;
 	onClear?: () => void;
 	onCancel?: () => void;
 	onClose?: () => void;
@@ -112,6 +123,22 @@ function normalizeCount(value: number): number {
 
 function setButtonState(button: HTMLButtonElement, active: boolean): void {
 	button.classList.toggle('is-active', active);
+}
+
+function resolvePayloadInlineCompletionMode(
+	draft: RepeatDraft,
+	taskFormat: 'inline' | 'yaml',
+	mode: InlineRepeatCompletionMode,
+): InlineRepeatCompletionMode {
+	if (draft.mode !== 'done') return DEFAULT_INLINE_REPEAT_COMPLETION_MODE;
+	if (taskFormat !== 'inline') return DEFAULT_INLINE_REPEAT_COMPLETION_MODE;
+	return normalizeInlineCompletionMode(mode);
+}
+
+function resolvePickerAccent(panel: HTMLElement, taskColor: string | null | undefined): string {
+	return normalizeColor(taskColor)
+		|| normalizeColor(getComputedStyle(panel).getPropertyValue('--interactive-accent'))
+		|| 'var(--interactive-accent)';
 }
 
 function createDefaultDraft(options: RepeatPickerOptions): RepeatDraft {
@@ -281,6 +308,8 @@ export function showRepeatPicker(anchor: HTMLElement | DOMRect, options: RepeatP
 	const parsedRule = parseRepeatRule(rawValue);
 	const showInvalidState = !!rawValue && !parsedRule;
 	let draft = createDraftFromRule(parsedRule, options);
+	let inlineCompletionMode = normalizeInlineCompletionMode(options.inlineCompletionMode);
+	const taskFormat = options.taskFormat ?? 'inline';
 
 	const { panel, close } = createFloatingPanel(anchor, 'operon-floating-panel operon-repeat-picker-panel', () => {
 		if (!completed) options.onCancel?.();
@@ -289,7 +318,7 @@ export function showRepeatPicker(anchor: HTMLElement | DOMRect, options: RepeatP
 
 	const commit = (payload: RepeatPickerSavePayload) => {
 		completed = true;
-		options.onSave(payload);
+		void options.onSave(payload);
 		close();
 	};
 
@@ -331,13 +360,12 @@ export function showRepeatPicker(anchor: HTMLElement | DOMRect, options: RepeatP
 		panel.classList.add('operon-repeat-picker-panel');
 		panel.createDiv({ cls: 'operon-floating-title', text: t('taskEditor', 'repeat') });
 
+		const pickerAccent = resolvePickerAccent(panel, options.taskColor);
+		panel.style.setProperty('--operon-live-hover-border', pickerAccent);
 		const hero = panel.createDiv('operon-repeat-picker-hero');
-		const heroBorder = options.taskColor?.trim()
-			|| getComputedStyle(panel).getPropertyValue('--interactive-accent').trim()
-			|| 'var(--interactive-accent)';
-		hero.style.setProperty('--operon-repeat-picker-hero-border', heroBorder);
-		hero.style.borderColor = heroBorder;
-		hero.style.boxShadow = `0 0 0 1px ${heroBorder}, 0 2px 8px rgba(0, 0, 0, 0.08)`;
+		hero.style.setProperty('--operon-repeat-picker-hero-border', pickerAccent);
+		hero.style.borderColor = pickerAccent;
+		hero.style.boxShadow = `0 0 0 1px ${pickerAccent}, 0 2px 8px rgba(0, 0, 0, 0.08)`;
 		hero.createDiv({ cls: 'operon-repeat-picker-hero-label', text: t('taskEditor', 'repeatSummary') });
 		const heroValue = hero.createDiv('operon-repeat-picker-hero-value');
 
@@ -469,6 +497,49 @@ export function showRepeatPicker(anchor: HTMLElement | DOMRect, options: RepeatP
 			});
 		}
 
+		if (draft.mode === 'done') {
+			const completionSection = panel.createDiv('operon-repeat-picker-section operon-repeat-picker-completed-copy-section');
+			completionSection.createDiv({ cls: 'operon-floating-subtitle', text: t('taskEditor', 'repeatCompletedCopy') });
+			const completionWrap = completionSection.createDiv('operon-repeat-picker-segment operon-repeat-picker-completed-copy');
+			const keepBtn = createButton(t('taskEditor', 'repeatCompletedCopyKeep'), 'operon-repeat-picker-segment-btn', completionWrap);
+			const replaceBtn = createButton(t('taskEditor', 'repeatCompletedCopyReplace'), 'operon-repeat-picker-segment-btn', completionWrap);
+			const isInlineTask = taskFormat === 'inline';
+			const selectedMode = isInlineTask
+				? inlineCompletionMode
+				: DEFAULT_INLINE_REPEAT_COMPLETION_MODE;
+			setButtonState(keepBtn, selectedMode === 'keep-completed');
+			setButtonState(replaceBtn, selectedMode === 'replace-completed');
+			replaceBtn.setAttribute('aria-disabled', String(!isInlineTask));
+			replaceBtn.classList.toggle('is-disabled', !isInlineTask);
+			setAccessibleLabelWithoutTooltip(keepBtn, t('taskEditor', 'repeatCompletedCopyKeep'));
+			setAccessibleLabelWithoutTooltip(replaceBtn, t('taskEditor', 'repeatCompletedCopyReplace'));
+			const keepTooltipAnchor = wrapWithOperonHoverTooltip(keepBtn, {
+				content: t('taskEditor', 'repeatCompletedCopyKeepTooltip'),
+				taskColor: pickerAccent,
+				preferredHorizontal: 'center',
+				preferredVertical: 'above',
+			});
+			const replaceTooltipAnchor = wrapWithOperonHoverTooltip(replaceBtn, {
+				content: isInlineTask
+					? t('taskEditor', 'repeatCompletedCopyReplaceTooltip')
+					: t('taskEditor', 'repeatCompletedCopyInlineOnlyTooltip'),
+				taskColor: pickerAccent,
+				preferredHorizontal: 'center',
+				preferredVertical: 'above',
+			});
+			keepBtn.addEventListener('click', () => {
+				inlineCompletionMode = 'keep-completed';
+				renderBuilder();
+			});
+			replaceBtn.addEventListener('click', () => {
+				if (!isInlineTask) return;
+				inlineCompletionMode = 'replace-completed';
+				renderBuilder();
+			});
+			completionWrap.appendChild(keepTooltipAnchor);
+			completionWrap.appendChild(replaceTooltipAnchor);
+		}
+
 		const actions = panel.createDiv('operon-floating-actions');
 		if (options.onClear) {
 			const clear = createButton(t('taskEditor', 'repeatClear'), 'operon-floating-btn is-secondary', actions);
@@ -496,6 +567,7 @@ export function showRepeatPicker(anchor: HTMLElement | DOMRect, options: RepeatP
 						? `${nextDraft.endDate}T23:59:59`
 						: '',
 				dateScheduled: nextDraft.scheduleSeedDate,
+				inlineCompletionMode: resolvePayloadInlineCompletionMode(nextDraft, taskFormat, inlineCompletionMode),
 			});
 		});
 		actions.appendChild(apply);

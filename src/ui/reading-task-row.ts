@@ -32,6 +32,7 @@ import {
 import { t } from '../core/i18n';
 import { createOwnerElement } from '../core/dom-compat';
 import { resolveSubtaskActionIcon, resolveSubtaskActionLabelKey } from '../core/subtask-action';
+import type { InlineRepeatCompletionMode } from '../storage/repeat-series-store';
 
 export interface ReadingTaskRowCallbacks {
 	app: App;
@@ -42,15 +43,17 @@ export interface ReadingTaskRowCallbacks {
 	openEditor: (operonId: string) => void;
 	cycleStatus: (operonId: string) => void | Promise<void>;
 	navigateToTask: (task: IndexedTask) => void;
-	updateField: (operonId: string, key: string, value: string) => void;
+	updateField: (operonId: string, key: string, value: string) => void | Promise<void>;
 	onContextualAction?: (taskId: string, actionId: ContextualMenuActionId) => void | Promise<void>;
 	isTaskPinned?: (taskId: string) => boolean;
 	isTaskTracking?: (taskId: string) => boolean;
 	toggleTimer?: (taskId: string) => void | Promise<void>;
 	requestSubtask?: (operonId: string) => void | Promise<void>;
-	updateFields?: (operonId: string, payload: Record<string, string>) => void;
+	updateFields?: (operonId: string, payload: Record<string, string>) => void | Promise<void>;
 	updateSubtasks?: (operonId: string, subtaskIds: string[]) => void;
 	updateDependencyField?: (operonId: string, field: 'blocking' | 'blockedBy', value: string) => void;
+	getRepeatSeriesInlineCompletionMode?: (repeatSeriesId: string) => InlineRepeatCompletionMode;
+	updateRepeatSeriesInlineCompletionMode?: (operonId: string, mode: InlineRepeatCompletionMode) => void | Promise<void>;
 }
 
 export interface ReadingTaskRowOptions {
@@ -223,6 +226,8 @@ export function buildReadingTaskRowElement(
 				updateDependencyField: callbacks.updateDependencyField
 					? (field, value) => callbacks.updateDependencyField?.(task.operonId, field, value)
 					: undefined,
+				repeatInlineCompletionMode: callbacks.getRepeatSeriesInlineCompletionMode?.(task.fieldValues['repeatSeriesId'] ?? ''),
+				onRepeatInlineCompletionModeChange: mode => callbacks.updateRepeatSeriesInlineCompletionMode?.(task.operonId, mode),
 				openEditor: () => callbacks.openEditor(task.operonId),
 				visibleKeys: getInlineTaskCompactVisibleKeys(callbacks.getSettings(), options?.chipItems),
 			});
@@ -376,17 +381,17 @@ function attachReadingChipAction(
 				onCommit?.();
 				break;
 			case 'priority':
-				showPriorityPicker(chip, {
-					priorities: callbacks.getPriorities(),
-					value: task.fieldValues['priority'],
-					onSelect: (next) => {
-						callbacks.updateField(task.operonId, 'priority', next);
-						onCommit?.();
-					},
-					onClear: () => {
-						callbacks.updateField(task.operonId, 'priority', '');
-						onCommit?.();
-					},
+					showPriorityPicker(chip, {
+						priorities: callbacks.getPriorities(),
+						value: task.fieldValues['priority'],
+						onSelect: (next) => {
+							void callbacks.updateField(task.operonId, 'priority', next);
+							onCommit?.();
+						},
+						onClear: () => {
+							void callbacks.updateField(task.operonId, 'priority', '');
+							onCommit?.();
+						},
 				});
 				break;
 			case 'dateStarted':
@@ -394,17 +399,17 @@ function attachReadingChipAction(
 			case 'dateScheduled':
 				showDatePicker(chip, {
 					app: callbacks.app,
-					fieldKey: entry.key,
-					value: task.fieldValues[entry.key],
-					onSelect: (next) => {
-						callbacks.updateField(task.operonId, entry.key, next);
-						onCommit?.();
-					},
-					canRemove: !!task.fieldValues[entry.key],
-					onRemove: () => {
-						callbacks.updateField(task.operonId, entry.key, '');
-						onCommit?.();
-					},
+						fieldKey: entry.key,
+						value: task.fieldValues[entry.key],
+						onSelect: (next) => {
+							void callbacks.updateField(task.operonId, entry.key, next);
+							onCommit?.();
+						},
+						canRemove: !!task.fieldValues[entry.key],
+						onRemove: () => {
+							void callbacks.updateField(task.operonId, entry.key, '');
+							onCommit?.();
+						},
 				});
 				break;
 			case 'assignees':
@@ -424,17 +429,17 @@ function attachReadingChipAction(
 				onCommit?.();
 				break;
 			case 'estimate':
-				showEstimatePicker(chip, {
-					value: task.fieldValues['estimate'],
-					onSelect: (next) => {
-						callbacks.updateField(task.operonId, 'estimate', next);
-						onCommit?.();
-					},
-					canRemove: !!task.fieldValues['estimate'],
-					onRemove: () => {
-						callbacks.updateField(task.operonId, 'estimate', '');
-						onCommit?.();
-					},
+					showEstimatePicker(chip, {
+						value: task.fieldValues['estimate'],
+						onSelect: (next) => {
+							void callbacks.updateField(task.operonId, 'estimate', next);
+							onCommit?.();
+						},
+						canRemove: !!task.fieldValues['estimate'],
+						onRemove: () => {
+							void callbacks.updateField(task.operonId, 'estimate', '');
+							onCommit?.();
+						},
 				});
 				break;
 			case 'duration':

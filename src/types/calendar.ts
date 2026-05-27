@@ -69,6 +69,7 @@ export interface CalendarLeafStateNormalizationOptions {
 
 export type CalendarItemKind = 'timed' | 'allDayScheduled' | 'dueMarker' | 'finishedMarker';
 export type CalendarItemOrigin = 'materialized' | 'projected' | 'external';
+export type CalendarProjectionKind = 'scheduled' | 'doneRolling';
 
 export interface CalendarRenderSnapshot {
 	description: string;
@@ -84,6 +85,7 @@ export interface CalendarRepeatOccurrenceRef {
 	occurrenceDate: string;
 	isLatestMaterialized: boolean;
 	isProjected: boolean;
+	projectionKind?: CalendarProjectionKind;
 }
 
 export interface CalendarExternalEventRef {

@@ -1096,6 +1096,21 @@
 	gap: 6px;
 }
 
+.operon-repeat-picker-completed-copy {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.operon-repeat-picker-completed-copy > .operon-hover-tooltip-anchor {
+	display: flex;
+	min-width: 0;
+	width: 100%;
+}
+
+.operon-repeat-picker-completed-copy > .operon-hover-tooltip-anchor > .operon-repeat-picker-segment-btn {
+	width: 100%;
+}
+
 .operon-repeat-picker-mode-segment {
 	display: grid;
 	grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1123,6 +1138,16 @@
 .operon-repeat-skip-picker-nav:hover {
 	background: var(--background-modifier-hover);
 	border-color: var(--interactive-accent);
+}
+
+.operon-repeat-picker-segment-btn.is-disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
+.operon-repeat-picker-segment-btn.is-disabled:hover {
+	background: var(--background-secondary);
+	border-color: var(--background-modifier-border);
 }
 
 .operon-repeat-picker-dynamic {
@@ -1925,6 +1950,9 @@
 	cursor: default;
 }
 
+/* Operon tooltip gradient contract:
+   callers set --operon-live-hover-border from a task color or resolved surface accent
+   before using the standard hover tooltip shell. */
 .operon-hover-tooltip {
 	--operon-tooltip-shift-x: -50%;
 	--operon-tooltip-shift-y: -4px;
@@ -9855,6 +9883,18 @@ body.operon-calendar-sidebar-is-resizing {
 	}
 }
 
+@media (max-width: 720px) and (hover: none), (max-width: 720px) and (pointer: coarse) {
+	.operon-calendar-sidebar-pools-wrapper {
+		flex: 0 0 auto;
+		min-height: auto;
+		overflow: visible;
+	}
+
+	.operon-calendar-sidebar-managed-section.is-open {
+		overflow: visible;
+	}
+}
+
 .operon-calendar-day-header-row,
 .operon-calendar-all-day-row,
 .operon-calendar-timed-section {
@@ -10871,6 +10911,21 @@ body.operon-calendar-sidebar-is-resizing {
 	cursor: grab;
 }
 
+@media (pointer: coarse) {
+	.operon-calendar-timed-item.is-draggable {
+		touch-action: none;
+		user-select: none;
+		-webkit-user-select: none;
+		-webkit-user-drag: none;
+		-webkit-touch-callout: none;
+	}
+}
+
+body.operon-calendar-touch-drag-active {
+	user-select: none;
+	-webkit-user-select: none;
+}
+
 .operon-calendar-timed-item.can-hover-raise:hover,
 .operon-calendar-timed-item.can-hover-raise:focus-within {
 	z-index: 10000;
@@ -11293,6 +11348,11 @@ body.operon-calendar-sidebar-is-resizing {
 
 .operon-calendar-timed-resize-handle.is-end::before {
 	bottom: 0;
+}
+
+.operon-calendar-timed-resize-handle.is-visual-only {
+	cursor: default;
+	pointer-events: none;
 }
 
 .operon-calendar-timed-drag-label {
@@ -12327,6 +12387,94 @@ body.operon-calendar-sidebar-is-resizing {
 	min-width: 0;
 	min-height: 0;
 	overscroll-behavior: contain;
+}
+
+.operon-kanban-root.is-mobile-layout {
+	transition: gap 160ms ease;
+}
+
+.operon-kanban-root.is-mobile-layout .operon-kanban-toolbar {
+	max-height: 128px;
+	overflow: visible;
+	transform-origin: top center;
+	transition: opacity 160ms ease, transform 160ms ease, max-height 160ms ease;
+}
+
+.operon-kanban-root.is-mobile-layout .operon-kanban-header-row {
+	transition: opacity 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.operon-kanban-root.is-mobile-layout.is-mobile-chrome-hidden {
+	gap: 4px;
+}
+
+.operon-kanban-root.is-mobile-layout.is-mobile-chrome-hidden .operon-kanban-toolbar {
+	max-height: 0;
+	overflow: hidden;
+	opacity: 0;
+	pointer-events: none;
+	transform: translateY(-8px);
+}
+
+.operon-kanban-root.is-mobile-layout.is-mobile-chrome-hidden .operon-kanban-header-row {
+	opacity: 0;
+	pointer-events: none;
+	transform: translateY(-10px);
+	box-shadow: none;
+}
+
+.operon-kanban-board.is-mobile-layout {
+	--operon-kanban-active-lane-column-width: var(--operon-kanban-lane-column-width, 96px);
+	--operon-kanban-mobile-lane-handle-width: 24px;
+}
+
+.operon-kanban-board.is-mobile-swimlane-overlay {
+	--operon-kanban-active-lane-column-width: var(--operon-kanban-mobile-lane-handle-width, 24px);
+}
+
+.operon-kanban-board.is-mobile-swimlane-overlay .operon-kanban-corner-cell,
+.operon-kanban-board.is-mobile-swimlane-overlay .operon-kanban-lane-label {
+	width: var(--operon-kanban-mobile-lane-handle-width, 24px);
+	min-width: var(--operon-kanban-mobile-lane-handle-width, 24px);
+	max-width: var(--operon-kanban-mobile-lane-handle-width, 24px);
+	padding-inline: 0;
+	overflow: hidden;
+	border-radius: 10px;
+	box-shadow: 0 0 0 1px color-mix(in srgb, var(--operon-kanban-surface-main) 84%, transparent);
+}
+
+.operon-kanban-board.is-mobile-swimlane-overlay .operon-kanban-lane-label {
+	display: flex;
+	justify-content: center;
+	background:
+		linear-gradient(90deg, color-mix(in srgb, var(--operon-kanban-lane-color, var(--interactive-accent)) 28%, transparent), transparent 76%),
+		color-mix(in srgb, var(--operon-kanban-surface-soft) 90%, transparent);
+}
+
+.operon-kanban-board.is-mobile-swimlane-overlay .operon-kanban-lane-label::before,
+.operon-kanban-board.is-mobile-swimlane-overlay .operon-kanban-corner-cell::before {
+	content: '';
+	display: block;
+	width: 5px;
+	height: calc(100% - 16px);
+	min-height: 34px;
+	border-radius: 999px;
+	background: var(--operon-kanban-lane-color, var(--interactive-accent));
+}
+
+.operon-kanban-board.is-mobile-swimlane-overlay .operon-kanban-corner-cell::before {
+	background: color-mix(in srgb, var(--interactive-accent) 72%, var(--text-muted));
+}
+
+.operon-kanban-board.is-mobile-swimlane-overlay .operon-kanban-lane-title,
+.operon-kanban-board.is-mobile-swimlane-overlay .operon-kanban-lane-count-button,
+.operon-kanban-board.is-mobile-swimlane-overlay .operon-kanban-corner-total {
+	width: 0;
+	min-width: 0;
+	max-width: 0;
+	overflow: hidden;
+	opacity: 0;
+	pointer-events: none;
 }
 
 .operon-kanban-row.is-collapsed {

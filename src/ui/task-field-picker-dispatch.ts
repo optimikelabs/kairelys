@@ -18,6 +18,7 @@ import { showIconPicker } from './field-pickers/icon-picker';
 import { showRepeatPicker } from './field-pickers/repeat-picker';
 import { showEstimatePicker } from './field-pickers/estimate-picker';
 import { showParentTaskPicker } from './field-pickers/parent-task-picker';
+import type { InlineRepeatCompletionMode } from '../storage/repeat-series-store';
 
 export interface TaskFieldPickerDispatchOptions {
 	app: App;
@@ -29,7 +30,10 @@ export interface TaskFieldPickerDispatchOptions {
 	currentTags: string[];
 	closeListPickerOnSelect?: boolean;
 	retainInputFocus?: boolean;
+	taskFormat?: 'inline' | 'yaml';
+	repeatInlineCompletionMode?: InlineRepeatCompletionMode;
 	onCommit: (payload: Record<string, string | string[]>) => void;
+	onRepeatInlineCompletionModeChange?: (mode: InlineRepeatCompletionMode) => void | Promise<void>;
 	onOpenNote?: () => void;
 	onCancel?: () => void;
 	onClose?: () => void;
@@ -111,7 +115,10 @@ export function openTaskFieldPicker(options: TaskFieldPickerDispatchOptions): ((
 				taskColor: currentFieldValues['taskColor'],
 				dateScheduled: currentFieldValues['dateScheduled'],
 				dateDue: currentFieldValues['dateDue'],
+				taskFormat: options.taskFormat,
+				inlineCompletionMode: options.repeatInlineCompletionMode,
 				onSave: payload => {
+					void options.onRepeatInlineCompletionModeChange?.(payload.inlineCompletionMode);
 					options.onCommit({
 						repeat: payload.repeat,
 						datetimeRepeatEnd: payload.datetimeRepeatEnd,
@@ -119,6 +126,7 @@ export function openTaskFieldPicker(options: TaskFieldPickerDispatchOptions): ((
 					});
 				},
 				onClear: () => {
+					void options.onRepeatInlineCompletionModeChange?.('keep-completed');
 					options.onCommit({
 						repeat: '',
 						datetimeRepeatEnd: '',

@@ -83,11 +83,17 @@ import {
 	setWindowTimeout,
 } from '../core/dom-compat';
 import { asyncHandler, runAsyncAction } from '../core/async-action';
+import {
+	DEFAULT_INLINE_REPEAT_COMPLETION_MODE,
+	InlineRepeatCompletionMode,
+	normalizeInlineCompletionMode,
+} from '../storage/repeat-series-store';
 
 /** Callback to persist editor state. Returning false/null aborts the save. */
 export interface TaskEditorSaveRequest {
 	taskLine: string;
 	isNew: boolean;
+	inlineCompletionMode: InlineRepeatCompletionMode;
 	fileBody: {
 		filePath: string;
 		content: string;
@@ -118,6 +124,7 @@ export interface TaskEditorContentOptions {
 	onUpdateExistingSubtaskParent?: (childId: string, parentId: string | null) => void | Promise<void>;
 	getRepeatSkipDates?: (repeatSeriesId: string) => string[];
 	onUpdateRepeatSkips?: (request: TaskEditorRepeatSkipUpdateRequest) => Promise<TaskEditorRepeatSkipUpdateResult> | TaskEditorRepeatSkipUpdateResult;
+	getRepeatSeriesInlineCompletionMode?: (repeatSeriesId: string) => InlineRepeatCompletionMode;
 	onApplyEstimateReallocation?: (request: TaskEditorEstimateReallocationRequest) => Promise<boolean>;
 	pinnedCache?: PinnedCache;
 	fileBody?: TaskEditorFileBodyContext | null;
@@ -188,6 +195,7 @@ interface TaskEditorSemanticSnapshot {
 	tags: string[];
 	fieldValues: Record<string, string>;
 	fileBodyDraft: string | null;
+	inlineCompletionMode: InlineRepeatCompletionMode;
 }
 
 function formatDuration(seconds: number): string {
@@ -240,6 +248,8 @@ export class TaskEditorContent {
 	private persistedCheckbox: 'open' | 'done' | 'cancelled' = 'open';
 	fieldValues: Record<string, string> = {};
 	private persistedFieldValues: Record<string, string> = {};
+	private inlineCompletionMode: InlineRepeatCompletionMode = DEFAULT_INLINE_REPEAT_COMPLETION_MODE;
+	private persistedInlineCompletionMode: InlineRepeatCompletionMode = DEFAULT_INLINE_REPEAT_COMPLETION_MODE;
 	private estimateReallocationBaseSeconds = 0;
 	private tags: string[] = [];
 	private persistedTags: string[] = [];
@@ -339,6 +349,12 @@ export class TaskEditorContent {
 			// Pre-populate priority for new tasks
 			this.fieldValues['priority'] = settings.defaultPriority;
 		}
+
+		const repeatSeriesId = (this.fieldValues['repeatSeriesId'] ?? '').trim();
+		this.inlineCompletionMode = normalizeInlineCompletionMode(
+			repeatSeriesId ? options.getRepeatSeriesInlineCompletionMode?.(repeatSeriesId) : null,
+		);
+		this.persistedInlineCompletionMode = this.inlineCompletionMode;
 	}
 
 	private hasFileBodyContext(): boolean {
@@ -2368,7 +2384,9 @@ export class TaskEditorContent {
 				taskColor: this.fieldValues['taskColor'],
 				dateScheduled: this.fieldValues['dateScheduled'],
 				dateDue: this.fieldValues['dateDue'],
-				onSave: ({ repeat, datetimeRepeatEnd, dateScheduled }) => {
+				taskFormat: this.fileBodyContext?.format ?? 'inline',
+				inlineCompletionMode: this.inlineCompletionMode,
+				onSave: ({ repeat, datetimeRepeatEnd, dateScheduled, inlineCompletionMode }) => {
 					this.fieldValues['repeat'] = repeat;
 					if (datetimeRepeatEnd) this.fieldValues['datetimeRepeatEnd'] = datetimeRepeatEnd;
 					else delete this.fieldValues['datetimeRepeatEnd'];
@@ -2378,6 +2396,7 @@ export class TaskEditorContent {
 					if (parseRepeatRule(repeat) && !this.fieldValues['repeatSeriesId']) {
 						this.fieldValues['repeatSeriesId'] = generateRepeatSeriesId();
 					}
+					this.inlineCompletionMode = inlineCompletionMode;
 					this.syncDerivedRepeatFieldsFromDraft();
 					this.markEdited();
 					refresh();
@@ -2386,6 +2405,7 @@ export class TaskEditorContent {
 					delete this.fieldValues['repeat'];
 					delete this.fieldValues['datetimeRepeatEnd'];
 					delete this.fieldValues['repeatSeriesId'];
+					this.inlineCompletionMode = DEFAULT_INLINE_REPEAT_COMPLETION_MODE;
 					this.markEdited();
 					refresh();
 				},
@@ -3489,6 +3509,7 @@ export class TaskEditorContent {
 			tags: normalizeListValues(this.tags.map(tag => tag.replace(/^#/, ''))),
 			fieldValues: this.normalizeSemanticFieldValues(this.fieldValues),
 			fileBodyDraft: this.fileBodyContext ? this.fileBodyDraft : null,
+			inlineCompletionMode: this.inlineCompletionMode,
 		};
 	}
 
@@ -3499,6 +3520,7 @@ export class TaskEditorContent {
 			tags: normalizeListValues(this.persistedTags.map(tag => tag.replace(/^#/, ''))),
 			fieldValues: this.normalizeSemanticFieldValues(this.persistedFieldValues),
 			fileBodyDraft: this.fileBodyContext ? this.persistedFileBodyDraft : null,
+			inlineCompletionMode: this.persistedInlineCompletionMode,
 		};
 	}
 
@@ -3510,6 +3532,7 @@ export class TaskEditorContent {
 		if (draft.checkbox !== persisted.checkbox) return true;
 		if (!areStringArraysEqual(draft.tags, persisted.tags)) return true;
 		if (draft.fileBodyDraft !== persisted.fileBodyDraft) return true;
+		if (draft.inlineCompletionMode !== persisted.inlineCompletionMode) return true;
 
 		const draftEntries = Object.entries(draft.fieldValues).sort(([left], [right]) => left.localeCompare(right));
 		const persistedEntries = Object.entries(persisted.fieldValues).sort(([left], [right]) => left.localeCompare(right));
@@ -3529,6 +3552,7 @@ export class TaskEditorContent {
 		this.persistedTags = [...this.tags];
 		this.persistedFieldValues = { ...this.fieldValues };
 		this.persistedFileBodyDraft = this.fileBodyDraft;
+		this.persistedInlineCompletionMode = this.inlineCompletionMode;
 		this.isFileBodyDirty = false;
 		this.hasBeenEdited = false;
 	}
@@ -3746,6 +3770,7 @@ export class TaskEditorContent {
 			const saveResult = await this.onSave({
 				taskLine,
 				isNew: this.isNewTask,
+				inlineCompletionMode: this.inlineCompletionMode,
 				fileBody: this.fileBodyContext
 					? {
 						filePath: this.fileBodyContext.filePath,
@@ -3762,6 +3787,7 @@ export class TaskEditorContent {
 			this.persistedTags = [...this.tags];
 			this.persistedFieldValues = { ...this.fieldValues };
 			this.persistedFileBodyDraft = this.fileBodyDraft;
+			this.persistedInlineCompletionMode = this.inlineCompletionMode;
 			this.isFileBodyDirty = false;
 			const autoReallocationResult = await this.maybeApplyAutomaticEstimateReallocation(reason);
 			if (!autoReallocationResult.attempted && reason === 'explicit-save') {

@@ -145,6 +145,7 @@ export interface ContextualMenuRepeatRef {
 	occurrenceDate: string;
 	isLatestMaterialized: boolean;
 	isProjected: boolean;
+	projectionKind?: 'scheduled' | 'doneRolling';
 }
 
 export interface ContextualMenuCalendarItemSource {
@@ -164,6 +165,7 @@ export interface ContextualMenuCalendarItemSource {
 export interface ContextualMenuProjectedRef {
 	seriesId: string;
 	occurrenceDate: string;
+	projectionKind?: 'scheduled' | 'doneRolling';
 }
 
 export interface ContextualMenuContext {
@@ -473,12 +475,19 @@ function isContextualMenuActionAvailable(
 		return !hasTrackedCoverageForScheduledRange(getTrackerValue(context), range.start, range.end);
 	}
 	if (actionId === 'skipThisOccurrence') {
-		return context.surface === 'calendarProjectedOccurrence' && !!context.projectedRef;
+		return context.surface === 'calendarProjectedOccurrence'
+			&& !!context.projectedRef
+			&& !isDoneRollingProjectedContext(context);
 	}
 	if (actionId === 'clearDueDate') {
 		return getDueValue(context).length > 0;
 	}
 	return true;
+}
+
+function isDoneRollingProjectedContext(context: ContextualMenuContext): boolean {
+	return context.calendarItem?.repeatRef?.projectionKind === 'doneRolling'
+		|| context.projectedRef?.projectionKind === 'doneRolling';
 }
 
 function hasSchedule(context: ContextualMenuContext): boolean {
