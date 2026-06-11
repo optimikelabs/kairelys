@@ -99,7 +99,7 @@ export class PinnedTasksDock extends Component {
 		});
 
 		// Restore visibility
-		if (!this.isDisabledOnCurrentDevice() && this.settings.pinnedDockVisible) {
+		if (this.shouldUseFloatingDock() && this.settings.pinnedDockVisible) {
 			this.showInternal(false);
 		}
 	}
@@ -116,7 +116,10 @@ export class PinnedTasksDock extends Component {
 	// ---- Public API ----
 
 	toggle(): void {
-		if (this.isDisabledOnCurrentDevice()) return;
+		if (!this.shouldUseFloatingDock()) {
+			this.hideWithoutSaving();
+			return;
+		}
 		if (this.containerEl?.classList.contains('is-hidden')) {
 			this.show();
 		} else {
@@ -125,7 +128,7 @@ export class PinnedTasksDock extends Component {
 	}
 
 	show(): void {
-		if (this.isDisabledOnCurrentDevice()) return;
+		if (!this.shouldUseFloatingDock()) return;
 		this.showInternal(true);
 	}
 
@@ -139,7 +142,7 @@ export class PinnedTasksDock extends Component {
 
 	render(): void {
 		if (!this.bodyEl || !this.containerEl) return;
-		if (this.isDisabledOnCurrentDevice()) {
+		if (!this.shouldUseFloatingDock()) {
 			this.containerEl.classList.add('is-hidden');
 			this.clearAutoClose();
 			return;
@@ -198,10 +201,11 @@ export class PinnedTasksDock extends Component {
 			if (this.settings.pinnedDockColorSource === 'noColor') {
 				card.setCssProps({ '--operon-card-color': 'var(--background-modifier-border)' });
 			} else if (color) {
-				card.style.backgroundColor = /^#[0-9a-fA-F]{6}$/.test(color)
-					? `${color}20`
-					: `color-mix(in srgb, ${color} 12%, transparent)`;
 				card.style.setProperty('--operon-card-color', color);
+				card.setCssProps({
+					'--operon-pinned-card-bg': `color-mix(in srgb, ${color} 5%, transparent)`,
+					'--operon-pinned-card-hover-border': color,
+				});
 			}
 
 			// Status icon (left side) — clickable to cycle status
@@ -268,7 +272,7 @@ export class PinnedTasksDock extends Component {
 	}
 
 	refreshLayout(): void {
-		if (this.isDisabledOnCurrentDevice()) {
+		if (!this.shouldUseFloatingDock()) {
 			this.containerEl?.classList.add('is-hidden');
 			this.clearAutoClose();
 			return;
@@ -289,7 +293,7 @@ export class PinnedTasksDock extends Component {
 
 	private showInternal(save: boolean): void {
 		if (!this.containerEl) return;
-		if (this.isDisabledOnCurrentDevice()) return;
+		if (!this.shouldUseFloatingDock()) return;
 		this.containerEl.classList.remove('is-hidden');
 		this.render();
 		this.startAutoClose();
@@ -462,5 +466,18 @@ export class PinnedTasksDock extends Component {
 
 	private isDisabledOnCurrentDevice(): boolean {
 		return this.settings.pinnedDockDisableOnMobile && Platform.isPhone;
+	}
+
+	private shouldUseFloatingDock(): boolean {
+		return this.settings.pinnedTasksDesktopSurface === 'floating'
+			&& !Platform.isMobile
+			&& !Platform.isMobileApp
+			&& !this.isDisabledOnCurrentDevice();
+	}
+
+	private hideWithoutSaving(): void {
+		if (!this.containerEl) return;
+		this.containerEl.classList.add('is-hidden');
+		this.clearAutoClose();
 	}
 }

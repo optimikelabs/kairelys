@@ -20,6 +20,7 @@ export type ContextualMenuStoreSettings = Pick<
 	| 'contextualMenuMobileEnabled'
 	| 'contextualMenuMobileLongPressMs'
 	| 'contextualMenuMobileTransitionGraceMs'
+	| 'contextualMenuMobileAutoHideMs'
 >;
 
 interface ContextualMenuStoreData {
@@ -30,6 +31,7 @@ interface ContextualMenuStoreData {
 	mobileEnabled: boolean;
 	mobileLongPressMs: number;
 	mobileTransitionGraceMs: number;
+	mobileAutoHideMs: number;
 }
 
 function cloneActionAllowlist(actionAllowlist: ContextualMenuActionId[]): ContextualMenuActionId[] {
@@ -52,6 +54,7 @@ function cloneSettings(settings: ContextualMenuStoreSettings): ContextualMenuSto
 		contextualMenuMobileEnabled: settings.contextualMenuMobileEnabled,
 		contextualMenuMobileLongPressMs: settings.contextualMenuMobileLongPressMs,
 		contextualMenuMobileTransitionGraceMs: settings.contextualMenuMobileTransitionGraceMs,
+		contextualMenuMobileAutoHideMs: settings.contextualMenuMobileAutoHideMs,
 	};
 }
 
@@ -83,6 +86,10 @@ function readStoreData(
 			&& Number.isFinite(raw.mobileTransitionGraceMs)
 			? raw.mobileTransitionGraceMs
 			: fallback.contextualMenuMobileTransitionGraceMs,
+		contextualMenuMobileAutoHideMs: typeof raw.mobileAutoHideMs === 'number'
+			&& Number.isFinite(raw.mobileAutoHideMs)
+			? raw.mobileAutoHideMs
+			: fallback.contextualMenuMobileAutoHideMs,
 	};
 }
 
@@ -179,6 +186,7 @@ export class ContextualMenuStore {
 			mobileEnabled: this.settings.contextualMenuMobileEnabled,
 			mobileLongPressMs: this.settings.contextualMenuMobileLongPressMs,
 			mobileTransitionGraceMs: this.settings.contextualMenuMobileTransitionGraceMs,
+			mobileAutoHideMs: this.settings.contextualMenuMobileAutoHideMs,
 		};
 		await this.writeQueue.enqueue(CONTEXTUAL_MENU_STORE_QUEUE_KEY, async () => {
 			await writeJsonSafely(adapter, CONTEXTUAL_MENU_FILE, data);

@@ -3,7 +3,7 @@
  * Based on Spec Section 0.1 Core Key-Value Index.
  */
 
-export type ValueType = 'text' | 'number' | 'date' | 'datetime' | 'list';
+export type ValueType = 'text' | 'number' | 'date' | 'datetime' | 'list' | 'checkbox';
 export type SyncPolicy = 'yes' | 'no' | 'auto';
 export type KeyGroup = 'core' | 'scheduling' | 'workflow' | 'dependencies';
 
@@ -104,6 +104,11 @@ export const INTERNAL_CANONICAL_KEY_SET = new Set(
 
 /** Map from key name to definition for O(1) access */
 export const CANONICAL_KEY_MAP = new Map(CANONICAL_KEYS.map(k => [k.name, k]));
+
+/** Legacy source keys that still read as their modern canonical key. */
+export const LEGACY_CANONICAL_KEY_ALIASES: Record<string, readonly string[]> = {
+	datetimeCreated: ['dateCreated'],
+};
 
 /** Keys sorted by canonical position for serialization */
 export const CANONICAL_KEY_ORDER = [...CANONICAL_KEYS].sort((a, b) => a.position - b.position);

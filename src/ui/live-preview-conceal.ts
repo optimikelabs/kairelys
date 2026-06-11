@@ -48,6 +48,8 @@ import {
 import { t } from '../core/i18n';
 import { resolveSubtaskActionIcon, resolveSubtaskActionLabelKey } from '../core/subtask-action';
 import type { InlineRepeatCompletionMode } from '../storage/repeat-series-store';
+import { openTaskFieldPicker } from './task-field-picker-dispatch';
+import { getCustomFieldMapping, isProjectedCustomFieldType } from './custom-field-surfaces';
 
 export const operonIndexRefreshEffect = StateEffect.define<void>();
 export const operonEditorCloseRefreshEffect = StateEffect.define<void>();
@@ -278,6 +280,10 @@ class MetadataTailWidget extends WidgetType {
 		const operonId = this.task.operonId;
 		const tasks = this.callbacks.getAllTasks();
 		const taskColor = normalizeTaskColor(fieldValues['taskColor']);
+		if (taskColor) tailWrap.setCssProps({
+			'--operon-live-hover-border': taskColor,
+			'--operon-task-chip-hover-accent': taskColor,
+		});
 		const terminalVisualState = resolveTerminalVisualState(this.task, fieldValues, this.callbacks.getPipelines());
 		if (terminalVisualState === 'done') {
 			tailWrap.classList.add('is-done');
@@ -328,8 +334,9 @@ class MetadataTailWidget extends WidgetType {
 				} else {
 					bindIconOnlyChipPreview(chip);
 				}
-				if (entry.linkTarget) {
-					bindCompactChipLinkPreview(this.callbacks.app, chip, entry.linkTarget, this.callbacks.getFilePath(view));
+				const previewLinkTarget = entry.previewLinkTarget ?? entry.linkTarget;
+				if (previewLinkTarget) {
+					bindCompactChipLinkPreview(this.callbacks.app, chip, previewLinkTarget, this.callbacks.getFilePath(view));
 				}
 				row.appendChild(chip);
 				continue;
@@ -357,8 +364,9 @@ class MetadataTailWidget extends WidgetType {
 			if (entry.externalUrl) {
 				bindExternalLinkContextMenu(chip, entry.externalUrl, entry.externalRawValue);
 			}
-			if (entry.linkTarget) {
-				bindCompactChipLinkPreview(this.callbacks.app, chip, entry.linkTarget, this.callbacks.getFilePath(view));
+			const previewLinkTarget = entry.previewLinkTarget ?? entry.linkTarget;
+			if (previewLinkTarget) {
+				bindCompactChipLinkPreview(this.callbacks.app, chip, previewLinkTarget, this.callbacks.getFilePath(view));
 			}
 			row.appendChild(chipNode);
 		}
@@ -467,7 +475,9 @@ class MetadataTailWidget extends WidgetType {
 				preferredHorizontal: 'right',
 				owner: actions,
 			});
-			noteIndicator.querySelector('.operon-hover-trigger')?.classList.add('operon-task-chip-action');
+			const noteTrigger = noteIndicator.querySelector<HTMLElement>('.operon-hover-trigger');
+			noteTrigger?.classList.add('operon-task-chip-action');
+			if (noteTrigger) bindLivePreviewChipHoverState(noteTrigger);
 			actions.appendChild(noteIndicator);
 		}
 
@@ -751,6 +761,7 @@ export function buildMetadataTailRenderSignature(
 			entry.colorRole,
 			entry.iconTone ?? '',
 			entry.linkTarget ?? '',
+			entry.previewLinkTarget ?? '',
 			entry.externalUrl ?? '',
 			entry.externalRawValue ?? '',
 			entry.locationCoordinate ?? '',
@@ -972,6 +983,45 @@ function attachLivePreviewChipAction(
 			case 'totalDuration':
 			case 'totalEstimate':
 				break;
+			default: {
+				const settings = callbacks.getSettings();
+				const customMapping = getCustomFieldMapping(settings.keyMappings, entry.key);
+				if (!customMapping || !isProjectedCustomFieldType(customMapping)) return;
+				if (entry.linkTarget) {
+					void callbacks.app.workspace.openLinkText(entry.linkTarget, callbacks.getFilePath(view), false);
+					onCommit?.();
+					return;
+				}
+				openTaskFieldPicker({
+					app: callbacks.app,
+					settings,
+					allTasks: callbacks.getAllTasks(),
+					canonicalKey: entry.key,
+					anchor: pickerAnchor,
+					currentFieldValues: fieldValues,
+					currentTags: task.tags,
+					sourcePath: task.filePath,
+					retainInputFocus: true,
+					taskFormat: 'inline',
+					onCommit: payload => {
+						const normalizedPayload = Object.fromEntries(
+							Object.entries(payload).map(([key, value]) => [
+								key,
+								Array.isArray(value) ? value.join('; ') : value,
+							]),
+						);
+						if (callbacks.updateFields) {
+							void callbacks.updateFields(operonId, normalizedPayload, restoreCursor());
+						} else {
+							for (const [key, value] of Object.entries(normalizedPayload)) {
+								void callbacks.updateField(operonId, key, value, restoreCursor());
+							}
+						}
+						onCommit?.();
+					},
+				});
+				break;
+			}
 		}
 	});
 	if (taskColor) chip.setCssProps({ '--operon-live-hover-border': taskColor });

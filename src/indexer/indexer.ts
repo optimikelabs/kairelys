@@ -39,10 +39,11 @@ import {
 } from '../core/engine-perf';
 import { WindowTimeoutHandle, clearWindowTimeout, setWindowTimeout } from '../core/dom-compat';
 import { parseTaskStatsReadModel } from '../core/task-stats-read-model';
+import { isManagedTaskFieldCanonicalKey } from '../core/managed-task-fields';
 
 const WARM_THRESHOLD_DAYS = 90;
 // Bump when index semantics change (e.g., scanner exclusions) so stale cache is discarded.
-const INDEX_VERSION = 5;
+const INDEX_VERSION = 6;
 const AGGREGATE_FIELD_PATCH_KEYS = new Set([
 	'progress',
 	...TASK_STATS_CANONICAL_KEYS,
@@ -593,11 +594,6 @@ export class OperonIndexer {
 		}
 
 		const keyMappings = this.storage.getSettings().keyMappings;
-		const reverseMap = new Map<string, string>();
-		for (const mapping of keyMappings) {
-			if (!mapping.visiblePropertyName) continue;
-			reverseMap.set(mapping.visiblePropertyName, mapping.canonicalKey);
-		}
 
 		const result = await scanFileWithMappings(this.app, file, keyMappings);
 		state.fileMtimes.set(file.path, result.mtime);
@@ -611,7 +607,7 @@ export class OperonIndexer {
 			const fieldValues: Record<string, string> = {};
 			const inlineTags = new Set(parsed.tags.map(tag => tag.trim()).filter(Boolean));
 			for (const f of parsed.fields) {
-				const canonicalKey = reverseMap.get(f.key) ?? f.key;
+				const canonicalKey = f.key;
 				if (canonicalKey === 'pinned') continue;
 				if (canonicalKey === 'tags') {
 					for (const tag of f.value.split(/[;,]/)) {
@@ -620,6 +616,7 @@ export class OperonIndexer {
 					}
 					continue;
 				}
+				if (!isManagedTaskFieldCanonicalKey(canonicalKey, keyMappings)) continue;
 				fieldValues[canonicalKey] = f.value;
 			}
 			const workflowState = resolveWorkflowStatus(this.storage.getSettings().pipelines, fieldValues['status']);

@@ -9,6 +9,8 @@ import {
 	KanbanSortMode,
 	KanbanSortRule,
 	KanbanSwimlaneBy,
+	isBuiltInKanbanSwimlaneBy,
+	normalizeKanbanCustomFieldReference,
 } from '../../types/kanban';
 import { OperonSettings } from '../../types/settings';
 import { CalendarFilterPickerModal } from '../calendar/calendar-filter-picker-modal';
@@ -22,6 +24,7 @@ import { getNormalFilterSets } from '../../core/dynamic-file-task-filter';
 import { t } from '../../core/i18n';
 import { runSettingsAsync, settingsAsyncHandler } from '../settings/async-settings-action';
 import { parsePresetNumber } from '../settings/preset-control-helpers';
+import { getKanbanSwimlaneCustomFieldOptions, getManagedCustomFieldOptionMapping, getManagedCustomFieldOptions } from '../../core/managed-task-fields';
 
 interface KanbanPresetQuickSettingsModalOptions {
 	getSettings: () => OperonSettings;
@@ -282,13 +285,13 @@ export class KanbanPresetQuickSettingsModal extends Modal {
 			row.createSpan({ cls: 'operon-kanban-sort-label', text: t('settings', 'kanbanSortBy') });
 
 			const fieldSelect = row.createEl('select', { cls: 'operon-kanban-sort-select' });
-			for (const option of KANBAN_SORT_FIELD_OPTIONS) {
-				fieldSelect.add(new Option(this.getKanbanSortFieldLabel(option), option.value));
+			for (const option of this.getKanbanSortFieldOptions()) {
+				fieldSelect.add(new Option(option.label, option.value));
 			}
 			fieldSelect.value = rule.field;
 			fieldSelect.addEventListener('change', settingsAsyncHandler('kanban preset sort field change failed', async () => {
 				await this.updatePreset(current => {
-					current.sortRules[index].field = fieldSelect.value as KanbanSortRule['field'];
+					current.sortRules[index].field = fieldSelect.value;
 				});
 			}));
 
@@ -439,10 +442,30 @@ export class KanbanPresetQuickSettingsModal extends Modal {
 		dropdown.addOption('assignees', this.getSwimlaneLabel('assignees'));
 		dropdown.addOption('dateDue', this.getSwimlaneLabel('dateDue'));
 		dropdown.addOption('dateScheduled', this.getSwimlaneLabel('dateScheduled'));
+		for (const option of getKanbanSwimlaneCustomFieldOptions(this.options.getSettings().keyMappings)) {
+			dropdown.addOption(option.field, option.label);
+		}
 	}
 
 	private getSwimlaneLabel(value: KanbanSwimlaneBy): string {
-		return t('settings', `kanbanSwimlane_${value}`);
+		const customMapping = getManagedCustomFieldOptionMapping(value, this.options.getSettings().keyMappings);
+		if (customMapping) return customMapping.visiblePropertyName?.trim() || customMapping.canonicalKey;
+		const key = `kanbanSwimlane_${value}`;
+		const localized = t('settings', key);
+		return localized === key ? value : localized;
+	}
+
+	private getKanbanSortFieldOptions(): Array<{ value: KanbanSortRule['field']; label: string }> {
+		return [
+			...KANBAN_SORT_FIELD_OPTIONS.map(option => ({
+				value: option.value,
+				label: this.getKanbanSortFieldLabel(option),
+			})),
+			...getManagedCustomFieldOptions(this.options.getSettings().keyMappings).map(option => ({
+				value: option.field,
+				label: option.label,
+			})),
+		];
 	}
 
 	private getKanbanSortFieldLabel(option: typeof KANBAN_SORT_FIELD_OPTIONS[number]): string {
@@ -452,14 +475,8 @@ export class KanbanPresetQuickSettingsModal extends Modal {
 	}
 
 	private parseSwimlaneBy(value: string): KanbanSwimlaneBy | null {
-		return value === 'priority'
-			|| value === 'tags'
-			|| value === 'contexts'
-			|| value === 'assignees'
-			|| value === 'dateDue'
-			|| value === 'dateScheduled'
-			? value
-			: null;
+		if (isBuiltInKanbanSwimlaneBy(value)) return value;
+		return normalizeKanbanCustomFieldReference(value);
 	}
 
 	private formatSortDirection(direction: KanbanSortDirection): string {

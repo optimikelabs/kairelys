@@ -500,6 +500,7 @@ export class TaskFinderModal extends Modal {
 		const scopedTasks = this.getVisibleScopeTasks(projectScopeTasks);
 		const query = this.query.trim();
 		const queryMeetsThreshold = query.length >= TASK_FINDER_MIN_QUERY_LENGTH;
+		const keyMappings = this.getSettings().keyMappings;
 
 		if (this.showRecentModifiedTasks && !query && !this.projectMode) {
 			return this.computeRecentModifiedResults(scopedTasks);
@@ -521,6 +522,7 @@ export class TaskFinderModal extends Modal {
 				visibleTaskIds: new Set(scopedTasks.map(task => task.operonId)),
 				visibilityMode: this.projectMode,
 				candidateFilter: task => this.matchesCurrentFormatScope(task),
+				keyMappings,
 			})
 				.map(candidate => ({ kind: 'project', candidate }));
 		}
@@ -541,6 +543,7 @@ export class TaskFinderModal extends Modal {
 				tasks: visibleTasks,
 				query,
 				includeAllTasks: true,
+				keyMappings,
 			}).map(result => ({ kind: 'task', task: result.task, score: result.score }));
 		}
 
@@ -549,6 +552,7 @@ export class TaskFinderModal extends Modal {
 			tasks: scopedTasks,
 			query,
 			includeAllTasks: true,
+			keyMappings,
 		}).map(result => ({ kind: 'task', task: result.task, score: result.score }));
 	}
 
@@ -805,7 +809,9 @@ export class TaskFinderModal extends Modal {
 			'operon-live-preview-chip',
 			'operon-inline-compact-chip',
 			'operon-task-finder-chip',
+			'operon-task-chip',
 			'operon-task-finder-overflow-chip',
+			'operon-task-chip-overflow',
 		].join(' ');
 		chip.setText('+0');
 		row.appendChild(chip);
@@ -980,7 +986,7 @@ export class TaskFinderModal extends Modal {
 	}
 
 	private renderTaskChipLine(body: HTMLElement, task: IndexedTask): void {
-		const chips = body.createDiv('operon-task-finder-chip-row');
+		const chips = body.createDiv('operon-task-finder-chip-row operon-task-chip-surface');
 		this.renderTaskChips(chips, task);
 		if (chips.childElementCount === 0) {
 			chips.createSpan({ cls: 'operon-task-finder-result-id', text: task.operonId });
@@ -1025,7 +1031,11 @@ export class TaskFinderModal extends Modal {
 				externalRawValue: null,
 				locationCoordinate: null,
 			};
-			const chip = createInlineTaskCompactChipElement(visualEntry, 'operon-task-finder-chip', { forceFull: true });
+			const chip = createInlineTaskCompactChipElement(
+				visualEntry,
+				'operon-task-finder-chip operon-task-chip',
+				{ forceFull: true },
+			);
 			this.applyChipVisualStyles(chip, visualEntry, task);
 			if (visualEntry.tooltipContent) {
 				bindOperonHoverTooltip(chip, {
@@ -1196,6 +1206,7 @@ export class TaskFinderModal extends Modal {
 			visibleTaskIds: new Set(scopedTasks.map(scopedTask => scopedTask.operonId)),
 			visibilityMode: this.projectMode,
 			candidateFilter: candidateTask => this.matchesCurrentFormatScope(candidateTask),
+			keyMappings: this.getSettings().keyMappings,
 		}).some(candidate => candidate.task.operonId === task.operonId);
 	}
 
@@ -1335,7 +1346,7 @@ function mergePreferredDateEntries(
 	forced: InlineTaskCompactChipEntry[],
 	order: InlineTaskCompactChipKey[],
 ): InlineTaskCompactChipEntry[] {
-	const merged = new Map<InlineTaskCompactChipKey, InlineTaskCompactChipEntry>();
+	const merged = new Map<string, InlineTaskCompactChipEntry>();
 	for (const entry of forced) {
 		merged.set(entry.key, entry);
 	}

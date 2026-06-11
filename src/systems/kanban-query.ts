@@ -5,8 +5,9 @@ import { IndexedTask } from '../types/fields';
 import { composeStatusValue, parseStatusValue, Pipeline, StatusDefinition } from '../types/pipeline';
 import { PinnedCache } from '../storage/pinned-cache';
 import { KanbanPreset, KanbanSortField, KanbanSortRule, KanbanSwimlaneBy } from '../types/kanban';
-import { FilterSet } from '../types/settings';
+import { FilterSet, KeyMapping } from '../types/settings';
 import { t } from '../core/i18n';
+import { getManagedCustomFieldOptionMapping, normalizeManagedFieldValue } from '../core/managed-task-fields';
 
 export const KANBAN_NO_VALUE_KEY = '__kanban_no_value__';
 export function getKanbanNoValueLabel(): string {
@@ -55,11 +56,13 @@ export function queryKanbanBoard(options: {
 	skippedLaneKeys?: Iterable<string>;
 	pinnedCache?: PinnedCache | null;
 	manualOrder?: Record<string, string[]>;
+	keyMappings?: readonly KeyMapping[];
 }): KanbanBoardData {
 	const { preset, pipeline, filterSet, priorities, pinnedCache } = options;
+	const keyMappings = options.keyMappings ?? [];
 	const normalizedSearchQuery = (options.searchQuery ?? '').trim().toLocaleLowerCase();
 	const allowedTaskIds = options.taskIdFilter ? new Set(options.taskIdFilter) : null;
-	const searchMatcher = buildTaskSearchMatcher(options.tasks);
+	const searchMatcher = buildTaskSearchMatcher(options.tasks, keyMappings);
 	const scopedTasks = filterTasksForCalendar(filterSet, options.tasks, priorities, pinnedCache ?? null);
 	const relevantTasks = pipeline
 		? scopedTasks
@@ -78,17 +81,17 @@ export function queryKanbanBoard(options: {
 				count: relevantTasks.filter(task => task.fieldValues['status'] === composeStatusValue(pipeline.name, status.label)).length,
 			}))
 		: [];
-	const lanes = buildKanbanLanes(relevantTasks, preset.swimlaneBy, priorities);
+	const lanes = buildKanbanLanes(relevantTasks, preset.swimlaneBy, priorities, keyMappings);
 	const skippedStatusIds = new Set(options.skippedStatusIds ?? []);
 	const skippedLaneKeys = new Set(options.skippedLaneKeys ?? []);
 	const cellCountMap = new Map<string, number>();
 	const cellMap = new Map<string, IndexedTask[]>();
-	const taskComparator = buildKanbanTaskComparator({ preset, priorities });
+	const taskComparator = buildKanbanTaskComparator({ preset, priorities, keyMappings });
 
 	for (const task of relevantTasks) {
 		const statusId = pipeline?.statuses.find(status => composeStatusValue(pipeline.name, status.label) === task.fieldValues['status'])?.id;
 		if (!statusId) continue;
-		for (const laneKey of extractLaneKeys(task, preset.swimlaneBy)) {
+		for (const laneKey of extractLaneKeys(task, preset.swimlaneBy, keyMappings)) {
 			const cellKey = buildKanbanCellKey(statusId, laneKey);
 			cellCountMap.set(cellKey, (cellCountMap.get(cellKey) ?? 0) + 1);
 			if (skippedStatusIds.has(statusId)) continue;
@@ -144,15 +147,17 @@ export function applyManualKanbanTaskOrder(
 export function buildKanbanTaskComparator(options: {
 	preset: KanbanPreset;
 	priorities: { label: string; color?: string }[];
+	keyMappings?: readonly KeyMapping[];
 }): (left: IndexedTask, right: IndexedTask) => number {
 	const priorityRank = new Map(options.priorities.map((priority, index) => [priority.label.trim().toLocaleLowerCase(), index] as const));
+	const keyMappings = options.keyMappings ?? [];
 	const rules = options.preset.sortRules.length > 0
 		? options.preset.sortRules
 		: [{ field: 'alphabetical', direction: 'asc', empty: 'last' } as KanbanSortRule];
 
 	return (left: IndexedTask, right: IndexedTask): number => {
 		for (const rule of rules) {
-			const comparison = compareByKanbanSortRule(left, right, rule, priorityRank);
+			const comparison = compareByKanbanSortRule(left, right, rule, priorityRank, keyMappings);
 			if (comparison !== 0) return comparison;
 		}
 		return left.description.localeCompare(right.description, undefined, { sensitivity: 'base' })
@@ -169,9 +174,10 @@ function compareByKanbanSortRule(
 	right: IndexedTask,
 	rule: KanbanSortRule,
 	priorityRank: Map<string, number>,
+	keyMappings: readonly KeyMapping[],
 ): number {
-	const leftValue = resolveKanbanSortValue(left, rule.field, priorityRank);
-	const rightValue = resolveKanbanSortValue(right, rule.field, priorityRank);
+	const leftValue = resolveKanbanSortValue(left, rule.field, priorityRank, keyMappings);
+	const rightValue = resolveKanbanSortValue(right, rule.field, priorityRank, keyMappings);
 	const leftEmpty = leftValue === null;
 	const rightEmpty = rightValue === null;
 	if (leftEmpty || rightEmpty) {
@@ -193,6 +199,7 @@ function resolveKanbanSortValue(
 	task: IndexedTask,
 	field: KanbanSortField,
 	priorityRank: Map<string, number>,
+	keyMappings: readonly KeyMapping[],
 ): string | number | null {
 	if (field === 'alphabetical') {
 		const value = task.description.trim().toLocaleLowerCase();
@@ -211,7 +218,34 @@ function resolveKanbanSortValue(
 	if (field === 'datetimeModified') {
 		return parseDateSortValue(task.datetimeModified || task.fieldValues['datetimeModified'] || '');
 	}
+	const customMapping = getManagedCustomFieldOptionMapping(field, keyMappings);
+	if (customMapping) {
+		return resolveCustomKanbanSortValue(task, customMapping);
+	}
+	if (!isBuiltInKanbanDateSortField(field)) return null;
 	return parseDateSortValue(task.fieldValues[field] ?? '');
+}
+
+function resolveCustomKanbanSortValue(task: IndexedTask, mapping: KeyMapping): string | number | null {
+	const value = normalizeManagedFieldValue((task.fieldValues as Record<string, unknown>)[mapping.canonicalKey]);
+	if (!value) return null;
+	if (mapping.type === 'number') return parseNumericSortValue(value);
+	if (mapping.type === 'date') return parseDateSortValue(value);
+	if (mapping.type === 'datetime') return parseDateTimeSortValue(value);
+	if (mapping.type === 'list') {
+		const listValue = parseListValue(value).join('; ').trim();
+		return listValue || null;
+	}
+	return value.toLocaleLowerCase();
+}
+
+function isBuiltInKanbanDateSortField(field: KanbanSortField): boolean {
+	return field === 'dateDue'
+		|| field === 'dateScheduled'
+		|| field === 'dateStarted'
+		|| field === 'dateCompleted'
+		|| field === 'dateCancelled'
+		|| field === 'datetimeCreated';
 }
 
 function parseNumericSortValue(raw: string | undefined): number | null {
@@ -226,6 +260,13 @@ function parseDateSortValue(raw: string | undefined): number | null {
 	if (!value) return null;
 	const dateOnly = extractDateOnlyValue(value);
 	const parsed = Date.parse(dateOnly);
+	return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseDateTimeSortValue(raw: string | undefined): number | null {
+	const value = (raw ?? '').trim();
+	if (!value) return null;
+	const parsed = Date.parse(value);
 	return Number.isFinite(parsed) ? parsed : null;
 }
 
@@ -256,7 +297,11 @@ export function resolveTaskStatusDefinition(task: IndexedTask, pipeline: Pipelin
 	return pipeline.statuses.find(status => status.label === parsed.status) ?? null;
 }
 
-export function extractLaneKeys(task: IndexedTask, swimlaneBy: KanbanSwimlaneBy | null): string[] {
+export function extractLaneKeys(
+	task: IndexedTask,
+	swimlaneBy: KanbanSwimlaneBy | null,
+	keyMappings: readonly KeyMapping[] = [],
+): string[] {
 	if (!swimlaneBy) return [KANBAN_NO_VALUE_KEY];
 
 	if (swimlaneBy === 'tags') {
@@ -270,14 +315,32 @@ export function extractLaneKeys(task: IndexedTask, swimlaneBy: KanbanSwimlaneBy 
 		return values.length > 0 ? Array.from(new Set(values)) : [KANBAN_NO_VALUE_KEY];
 	}
 
+	const customMapping = getManagedCustomFieldOptionMapping(swimlaneBy, keyMappings);
+	if (customMapping) {
+		const rawValue = normalizeManagedFieldValue((task.fieldValues as Record<string, unknown>)[customMapping.canonicalKey]);
+		if (customMapping.type === 'list') {
+			const values = parseListValue(rawValue);
+			return values.length > 0 ? Array.from(new Set(values)) : [KANBAN_NO_VALUE_KEY];
+		}
+		const value = rawValue;
+		return value ? [value] : [KANBAN_NO_VALUE_KEY];
+	}
+
+	if (!isBuiltInKanbanScalarSwimlane(swimlaneBy)) return [KANBAN_NO_VALUE_KEY];
+
 	const value = (task.fieldValues[swimlaneBy] ?? '').trim();
 	return value ? [value] : [KANBAN_NO_VALUE_KEY];
+}
+
+function isBuiltInKanbanScalarSwimlane(swimlaneBy: KanbanSwimlaneBy): boolean {
+	return swimlaneBy === 'priority' || swimlaneBy === 'dateDue' || swimlaneBy === 'dateScheduled';
 }
 
 function buildKanbanLanes(
 	tasks: IndexedTask[],
 	swimlaneBy: KanbanSwimlaneBy | null,
 	priorities: { label: string; color?: string }[],
+	keyMappings: readonly KeyMapping[],
 ): KanbanLane[] {
 	if (!swimlaneBy) {
 		return [{
@@ -292,7 +355,7 @@ function buildKanbanLanes(
 
 	const laneCounts = new Map<string, number>();
 	for (const task of tasks) {
-		for (const key of extractLaneKeys(task, swimlaneBy)) {
+		for (const key of extractLaneKeys(task, swimlaneBy, keyMappings)) {
 			laneCounts.set(key, (laneCounts.get(key) ?? 0) + 1);
 		}
 	}

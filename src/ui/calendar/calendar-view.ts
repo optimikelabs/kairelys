@@ -6703,6 +6703,7 @@ export class CalendarView extends ItemView {
 			mobileInteraction: mobileInteraction
 				? {
 					transitionGraceMs: this.getSettings().contextualMenuMobileTransitionGraceMs,
+					autoHideMs: this.getSettings().contextualMenuMobileAutoHideMs,
 					guardTargets: [anchorEl],
 				}
 				: undefined,

@@ -483,22 +483,22 @@ export class KanbanView extends ItemView {
 		return false;
 	}
 
-		private renderBoardContent(
-			container: HTMLElement,
-			state: KanbanLeafState,
-			preset: KanbanPreset,
-			pipeline: Pipeline | null,
-			filterSet: FilterSet | null,
-			settings: OperonSettings,
-			parentSearchUi: KanbanParentSearchUiState | null,
-		): void {
-			if (!pipeline) {
-				this.renderEmptyState(container, t('notifications', 'kanbanChoosePipeline'));
-				return;
-			}
+	private renderBoardContent(
+		container: HTMLElement,
+		state: KanbanLeafState,
+		preset: KanbanPreset,
+		pipeline: Pipeline | null,
+		filterSet: FilterSet | null,
+		settings: OperonSettings,
+		parentSearchUi: KanbanParentSearchUiState | null,
+	): void {
+		if (!pipeline) {
+			this.renderEmptyState(container, t('notifications', 'kanbanChoosePipeline'));
+			return;
+		}
 
-			const activeSearchQuery = this.getActiveSearchQuery(state.searchQuery, parentSearchUi);
-			const taskIdFilter = this.resolveKanbanSearchTaskIdFilter(this.searchScope, filterSet, pipeline, settings, parentSearchUi);
+		const activeSearchQuery = this.getActiveSearchQuery(state.searchQuery, parentSearchUi);
+		const taskIdFilter = this.resolveKanbanSearchTaskIdFilter(this.searchScope, filterSet, pipeline, settings, parentSearchUi);
 		const searchActive = !!activeSearchQuery
 			|| !!parentSearchUi?.selectedParentId
 			|| this.hasKanbanSearchScopeFilters(this.searchScope);
@@ -514,26 +514,27 @@ export class KanbanView extends ItemView {
 			priorities: settings.priorities,
 			searchQuery: activeSearchQuery,
 			taskIdFilter,
-				skippedStatusIds,
-				skippedLaneKeys: searchActive || !hasVisibleSwimlanes ? undefined : state.collapsedLaneKeys,
-				pinnedCache: this.getPinnedCache(),
-				manualOrder: preset.sortMode === 'manual'
-					? this.callbacks.getManualOrder?.(preset.id) ?? {}
-					: undefined,
-				});
-			this.reconcileOptimisticMoves(board, pipeline, preset);
-			this.applyOptimisticMoves(board, settings);
-			if (board.columns.length === 0) {
-				this.renderEmptyState(container, t('notifications', 'kanbanNoColumns'));
-				return;
-			}
-			if (board.lanes.length === 0) {
-				this.renderEmptyState(container, t('notifications', 'kanbanNoTasks'));
-				return;
-			}
-
-			this.renderBoard(container, board, searchActive);
+			skippedStatusIds,
+			skippedLaneKeys: searchActive || !hasVisibleSwimlanes ? undefined : state.collapsedLaneKeys,
+			pinnedCache: this.getPinnedCache(),
+			manualOrder: preset.sortMode === 'manual'
+				? this.callbacks.getManualOrder?.(preset.id) ?? {}
+				: undefined,
+			keyMappings: settings.keyMappings,
+		});
+		this.reconcileOptimisticMoves(board, pipeline, preset);
+		this.applyOptimisticMoves(board, settings);
+		if (board.columns.length === 0) {
+			this.renderEmptyState(container, t('notifications', 'kanbanNoColumns'));
+			return;
 		}
+		if (board.lanes.length === 0) {
+			this.renderEmptyState(container, t('notifications', 'kanbanNoTasks'));
+			return;
+		}
+
+		this.renderBoard(container, board, searchActive);
+	}
 
 	private renderToolbar(
 		container: HTMLElement,
@@ -1442,6 +1443,7 @@ export class KanbanView extends ItemView {
 		const comparator = buildKanbanTaskComparator({
 			preset: this.resolveCurrentPreset(),
 			priorities: this.getSettings().priorities,
+			keyMappings: this.getSettings().keyMappings,
 		});
 		return [...this.indexer.secondary.getChildIds(parentId)]
 			.map(childId => this.indexer.getTask(childId))
@@ -1496,7 +1498,7 @@ export class KanbanView extends ItemView {
 				this.optimisticMoves.delete(taskId);
 				continue;
 			}
-			if (isKanbanOptimisticMoveSatisfied(task, pipeline, preset, move)) {
+			if (isKanbanOptimisticMoveSatisfied(task, pipeline, preset, move, this.getSettings().keyMappings)) {
 				this.optimisticMoves.delete(taskId);
 			}
 		}
@@ -1508,7 +1510,7 @@ export class KanbanView extends ItemView {
 	}
 
 	private applyOptimisticMoves(board: KanbanBoardData, settings: OperonSettings): void {
-		applyKanbanOptimisticMovesToBoard(board, settings.priorities, this.optimisticMoves.values());
+		applyKanbanOptimisticMovesToBoard(board, settings.priorities, this.optimisticMoves.values(), settings.keyMappings);
 	}
 
 	private bindCellDropTarget(
@@ -1694,7 +1696,10 @@ export class KanbanView extends ItemView {
 	}
 
 	private registerOptimisticMove(context: KanbanDropContext): void {
-		this.optimisticMoves.set(context.taskId, createKanbanDropOptimisticMove(context));
+		this.optimisticMoves.set(context.taskId, createKanbanDropOptimisticMove(context, {
+			task: this.indexer.getTask(context.taskId),
+			keyMappings: this.getSettings().keyMappings,
+		}));
 	}
 
 	private bindCellQuickAdd(
@@ -1871,6 +1876,7 @@ export class KanbanView extends ItemView {
 			pipeline,
 			preset,
 			pipelines: this.getSettings().pipelines,
+			keyMappings: this.getSettings().keyMappings,
 			sourceStatusId: statusId,
 			sourceLaneKey: laneKey,
 		});
@@ -1897,7 +1903,7 @@ export class KanbanView extends ItemView {
 				.then(() => {
 					if (applied) {
 						const freshTask = this.indexer.getTask(task.operonId);
-						if (!freshTask || !pipeline || !isKanbanOptimisticMoveSatisfied(freshTask, pipeline, preset, plan.move)) {
+						if (!freshTask || !pipeline || !isKanbanOptimisticMoveSatisfied(freshTask, pipeline, preset, plan.move, this.getSettings().keyMappings)) {
 							this.optimisticMoves.delete(task.operonId);
 						}
 						this.markDirty();
@@ -1977,6 +1983,7 @@ export class KanbanView extends ItemView {
 			mobileInteraction: mobileInteraction
 				? {
 					transitionGraceMs: this.getSettings().contextualMenuMobileTransitionGraceMs,
+					autoHideMs: this.getSettings().contextualMenuMobileAutoHideMs,
 					guardTargets: [anchorEl],
 				}
 				: undefined,
@@ -3287,7 +3294,7 @@ export class KanbanView extends ItemView {
 		return buildProjectSearchCandidates(scopedTasks, normalizedQuery, {
 			getChildIds: parentId => this.indexer.secondary.getChildIds(parentId),
 			getAllDescendantIds: parentId => this.indexer.secondary.getAllDescendantIds(parentId),
-		});
+		}, { keyMappings: this.getSettings().keyMappings });
 	}
 
 	private resolveParentSearchVisibleTaskIds(

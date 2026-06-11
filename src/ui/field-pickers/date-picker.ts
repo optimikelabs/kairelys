@@ -18,6 +18,23 @@ export interface ManualDatePickerOptions {
 	showWeekNumbers: boolean;
 }
 
+interface DatePickerClassNames {
+	useBaseClasses?: boolean;
+	panel?: string;
+	query?: string;
+	results?: string;
+	dayPickerHost?: string;
+	native?: string;
+	item?: string;
+	itemLabel?: string;
+	itemDate?: string;
+	itemWeekday?: string;
+	empty?: string;
+	actions?: string;
+	removeButton?: string;
+	applyButton?: string;
+}
+
 interface DatePickerOptions {
 	app?: App;
 	fieldKey?: string;
@@ -25,6 +42,7 @@ interface DatePickerOptions {
 	value?: string;
 	manualDatePicker?: ManualDatePickerOptions;
 	retainInputFocus?: boolean;
+	classNames?: DatePickerClassNames;
 	onSelect: (value: string) => void;
 	onRemove?: () => void;
 	canRemove?: boolean;
@@ -42,7 +60,8 @@ export function showDatePicker(anchor: HTMLElement | DOMRect, options: DatePicke
 		language,
 		referenceDate: new Date(),
 	};
-	const { panel, close } = createFloatingPanel(anchor, 'operon-floating-panel operon-date-picker-panel', () => {
+	const useBaseClasses = options.classNames?.useBaseClasses !== false;
+	const { panel, close } = createFloatingPanel(anchor, joinDatePickerClasses('operon-floating-panel', baseDatePickerClass('operon-date-picker-panel', useBaseClasses), options.classNames?.panel), () => {
 		if (!completed) options.onCancel?.();
 		options.onClose?.();
 	}, {
@@ -50,14 +69,14 @@ export function showDatePicker(anchor: HTMLElement | DOMRect, options: DatePicke
 		repositionOnPanelResize: options.manualDatePicker ? false : undefined,
 	});
 
-	panel.classList.add('operon-date-picker-panel');
+	if (useBaseClasses) panel.classList.add('operon-date-picker-panel');
 
 	const input = panel.createEl('input');
 	input.type = 'text';
-	input.className = 'operon-floating-input operon-date-picker-query';
+	input.className = joinDatePickerClasses('operon-floating-input', baseDatePickerClass('operon-date-picker-query', useBaseClasses), options.classNames?.query);
 	input.placeholder = strings.searchPlaceholder;
 
-	const results = panel.createDiv('operon-date-picker-results');
+	const results = panel.createDiv(joinDatePickerClasses(baseDatePickerClass('operon-date-picker-results', useBaseClasses), options.classNames?.results));
 
 	const manualLabel = panel.createDiv('operon-floating-subtitle');
 	manualLabel.textContent = strings.manualDate;
@@ -103,7 +122,7 @@ export function showDatePicker(anchor: HTMLElement | DOMRect, options: DatePicke
 
 	if (options.manualDatePicker) {
 		panel.classList.add('has-day-picker');
-		const dayPickerHost = panel.createDiv('operon-date-picker-day-picker-host');
+		const dayPickerHost = panel.createDiv(joinDatePickerClasses(baseDatePickerClass('operon-date-picker-day-picker-host', useBaseClasses), options.classNames?.dayPickerHost));
 		dayPicker = renderOperonDayPicker(dayPickerHost, {
 			value: options.value,
 			weekStart: options.manualDatePicker.weekStart,
@@ -128,15 +147,15 @@ export function showDatePicker(anchor: HTMLElement | DOMRect, options: DatePicke
 	} else {
 		nativeInput = panel.createEl('input');
 		nativeInput.type = 'date';
-		nativeInput.className = 'operon-floating-input operon-date-picker-native';
+		nativeInput.className = joinDatePickerClasses('operon-floating-input', baseDatePickerClass('operon-date-picker-native', useBaseClasses), options.classNames?.native);
 		nativeInput.value = options.value ?? '';
 	}
 
 	if (!options.manualDatePicker) {
-		const actions = panel.createDiv('operon-floating-actions');
+		const actions = panel.createDiv(joinDatePickerClasses('operon-floating-actions', options.classNames?.actions));
 
 		if (options.onRemove && options.canRemove) {
-			const removeButton = createButton(t('buttons', 'remove'), 'operon-floating-btn is-secondary', actions);
+			const removeButton = createButton(t('buttons', 'remove'), joinDatePickerClasses('operon-floating-btn is-secondary', options.classNames?.removeButton), actions);
 			removeButton.addEventListener('click', () => {
 				completed = true;
 				options.onRemove?.();
@@ -145,7 +164,7 @@ export function showDatePicker(anchor: HTMLElement | DOMRect, options: DatePicke
 			actions.appendChild(removeButton);
 		}
 
-		const applyButton = createButton(strings.apply, 'operon-floating-btn', actions);
+		const applyButton = createButton(strings.apply, joinDatePickerClasses('operon-floating-btn', options.classNames?.applyButton), actions);
 		applyButton.addEventListener('click', applyCurrentSelection);
 		actions.appendChild(applyButton);
 		panel.appendChild(actions);
@@ -158,7 +177,7 @@ export function showDatePicker(anchor: HTMLElement | DOMRect, options: DatePicke
 
 		if (visibleCandidates.length === 0) {
 			if (hiddenCalendarDate) return;
-			const empty = results.createDiv('operon-date-picker-empty');
+			const empty = results.createDiv(joinDatePickerClasses(baseDatePickerClass('operon-date-picker-empty', useBaseClasses), options.classNames?.empty));
 			empty.textContent = strings.quickSuggestions;
 			return;
 		}
@@ -167,9 +186,13 @@ export function showDatePicker(anchor: HTMLElement | DOMRect, options: DatePicke
 		for (const [index, candidate] of visibleCandidates.entries()) {
 			const button = results.createEl('button');
 			button.type = 'button';
-			button.className = 'operon-field-menu-item operon-date-picker-item';
+			button.className = joinDatePickerClasses('operon-field-menu-item', baseDatePickerClass('operon-date-picker-item', useBaseClasses), options.classNames?.item);
 			if (index === activeIndex) button.classList.add('is-active');
-			appendDatePickerCandidateRow(button, candidate, language);
+			appendDatePickerCandidateRow(button, candidate, language, {
+				label: useBaseClasses ? undefined : options.classNames?.itemLabel,
+				date: useBaseClasses ? undefined : options.classNames?.itemDate,
+				weekday: useBaseClasses ? undefined : options.classNames?.itemWeekday,
+			});
 
 			button.addEventListener('mousemove', () => {
 				if (activeIndex === index) return;
@@ -256,4 +279,16 @@ export function showDatePicker(anchor: HTMLElement | DOMRect, options: DatePicke
 
 function normalizeManualDateValue(value: string | null | undefined): string {
 	return normalizeOperonDateKey(value) ?? '';
+}
+
+function baseDatePickerClass(className: string, useBaseClasses: boolean): string {
+	return useBaseClasses ? className : '';
+}
+
+function joinDatePickerClasses(...classes: Array<string | undefined>): string {
+	return classes
+		.flatMap(value => value?.split(/\s+/u) ?? [])
+		.map(value => value.trim())
+		.filter(Boolean)
+		.join(' ');
 }

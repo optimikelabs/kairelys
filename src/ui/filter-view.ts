@@ -429,7 +429,7 @@ export class FilterView extends ItemView {
 			if (searchActive) {
 				const tasks = sortFilterTasks(
 					currentFs,
-					applyFilterSearch(treeScopeTasks, this.searchQuery),
+					applyFilterSearch(treeScopeTasks, this.searchQuery, this.getSettings().keyMappings),
 					this.getPriorities(),
 					this.pinnedCache,
 				);
@@ -522,7 +522,7 @@ export class FilterView extends ItemView {
 			const tasks = searchActive
 				? sortFilterTasks(
 					currentFs,
-					applyFilterSearch(treeScopeTasks, this.searchQuery),
+					applyFilterSearch(treeScopeTasks, this.searchQuery, this.getSettings().keyMappings),
 					this.getPriorities(),
 					this.pinnedCache,
 				)

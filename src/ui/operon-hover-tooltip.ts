@@ -36,7 +36,7 @@ export function createOperonHoverIndicator(options: OperonHoverIndicatorOptions)
 	wrapper.classList.add('operon-hover-indicator');
 
 	const button = createOwnerElement(wrapper, 'span');
-	button.className = 'operon-live-preview-edit operon-live-preview-action operon-hover-trigger is-active';
+	button.className = 'operon-live-preview-edit operon-live-preview-action operon-hover-trigger operon-task-note-action is-active';
 	button.setAttribute('role', 'img');
 	setIcon(button, options.icon);
 	setAccessibleLabelWithoutTooltip(button, options.title ?? '');

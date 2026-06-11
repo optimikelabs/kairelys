@@ -2,6 +2,7 @@ import { App } from 'obsidian';
 import {
 	buildCompatibilityTaskEditorWorkflowPickerItems,
 	InlineExpandedTaskChips,
+	normalizeTaskEditorMobileCoreTools,
 	normalizeTaskEditorWorkflowPickers,
 	OperonSettings,
 } from '../types/settings';
@@ -17,6 +18,7 @@ export type TaskUiPreferenceStoreSettings = Pick<
 	| 'taskCreatorToolbar'
 	| 'taskEditorShowLineNumbers'
 	| 'taskEditorWorkflowPickers'
+	| 'taskEditorMobileCoreTools'
 	| 'inlineExpandedTaskChips'
 	| 'inlineTaskCompactChips'
 	| 'filterTaskCompactChips'
@@ -49,6 +51,7 @@ function cloneSettings(settings: TaskUiPreferenceStoreSettings): TaskUiPreferenc
 		taskCreatorToolbar: settings.taskCreatorToolbar.map(item => ({ ...item })),
 		taskEditorShowLineNumbers: settings.taskEditorShowLineNumbers,
 		taskEditorWorkflowPickers: settings.taskEditorWorkflowPickers.map(item => ({ ...item })),
+		taskEditorMobileCoreTools: settings.taskEditorMobileCoreTools.map(item => ({ ...item })),
 		inlineExpandedTaskChips: { ...settings.inlineExpandedTaskChips },
 		inlineTaskCompactChips: settings.inlineTaskCompactChips.map(item => ({ ...item })),
 		filterTaskCompactChips: settings.filterTaskCompactChips.map(item => ({ ...item })),
@@ -119,6 +122,10 @@ function readStoreData(
 			raw.taskEditorWorkflowPickers === undefined
 				? buildCompatibilityTaskEditorWorkflowPickerItems()
 				: fallback.taskEditorWorkflowPickers,
+		),
+		taskEditorMobileCoreTools: normalizeTaskEditorMobileCoreTools(
+			raw.taskEditorMobileCoreTools,
+			fallback.taskEditorMobileCoreTools,
 		),
 		inlineExpandedTaskChips: readInlineExpandedTaskChips(
 			raw.inlineExpandedTaskChips ?? raw.taskBarChips,

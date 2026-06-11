@@ -2,7 +2,7 @@ import { setIcon } from 'obsidian';
 import { createOwnerElement } from '../core/dom-compat';
 import { getConfiguredKeyMappingIcon } from '../core/key-mapping-icons';
 import { splitTaskListValue } from '../core/task-field-patch';
-import { OperonSettings, InlineTaskCompactChipItem, InlineTaskCompactChipKey, INLINE_TASK_COMPACT_CHIP_ORDER, INLINE_TASK_COMPACT_FALLBACK_ICONS } from '../types/settings';
+import { OperonSettings, InlineTaskCompactChipItem, InlineTaskCompactChipKey, INLINE_TASK_COMPACT_CHIP_ORDER, INLINE_TASK_COMPACT_FALLBACK_ICONS, KeyMapping } from '../types/settings';
 import { isInternalCanonicalKey } from '../types/keys';
 import { IndexedTask } from '../types/fields';
 import { formatAssigneeDisplay } from './field-pickers/assignees-picker';
@@ -13,8 +13,15 @@ import { t } from '../core/i18n';
 import { formatShortLocationCoordinate, parseLocationCoordinate } from '../core/location-coordinates';
 import { normalizeTaskFieldColor } from '../core/task-color-source';
 import { normalizeTaskIconValue } from '../core/task-icon-value';
+import {
+	getCustomFieldIcon,
+	getCustomFieldLabel,
+	getCustomFieldMapping,
+	isProjectedCustomFieldType,
+	normalizeCustomFieldRawValue,
+} from './custom-field-surfaces';
 
-export type CompactVisibleChipKey = InlineTaskCompactChipKey;
+export type CompactVisibleChipKey = string;
 
 export interface LocationChipMatch {
 	label: string;
@@ -43,7 +50,7 @@ export const COMPACT_VISIBLE_CHIP_KEYS = [
 const COMPACT_INTERNAL_VISIBLE_KEYS = ['operonId', 'datetimeModified', 'taskColor', 'taskIcon'] as const;
 
 export interface InlineTaskCompactChipEntry {
-	key: InlineTaskCompactChipKey;
+	key: string;
 	label: string;
 	icon: string;
 	iconOnly: boolean;
@@ -51,6 +58,7 @@ export interface InlineTaskCompactChipEntry {
 	colorRole: 'default' | 'priority' | 'status';
 	iconTone?: 'default' | 'today' | 'overdue';
 	linkTarget: string | null;
+	previewLinkTarget?: string | null;
 	externalUrl?: string | null;
 	externalRawValue?: string | null;
 	locationCoordinate?: string | null;
@@ -71,10 +79,11 @@ function getCompactChipItems(
 export function getInlineTaskCompactVisibleChipKeys(
 	settings: OperonSettings,
 	chipItems?: InlineTaskCompactChipItem[],
-): InlineTaskCompactChipKey[] {
+): string[] {
 	return getCompactChipItems(settings, chipItems)
 		.filter(item => item.visible)
-		.map(item => item.key);
+		.map(item => item.key)
+		.filter(key => isRenderableCompactSurfaceKey(settings, key));
 }
 
 export function shouldResolveLocationCompactChips(
@@ -113,6 +122,12 @@ export function buildInlineTaskCompactChipEntries(
 	const taskById = new Map(allTasks.map(task => [task.operonId, task]));
 	for (const key of getInlineTaskCompactVisibleChipKeys(settings, chipItems)) {
 		const item = itemMap.get(key);
+		const customMapping = getCustomFieldMapping(settings.keyMappings, key);
+		if (customMapping && isProjectedCustomFieldType(customMapping)) {
+			pushCustomChipEntries(entries, customMapping, fieldValues, settings, item?.iconOnly === true);
+			continue;
+		}
+		if (!isBuiltInCompactChipKey(key)) continue;
 		if (isSuppressedByTerminalDate(key, fieldValues)) continue;
 		switch (key) {
 			case 'priority': {
@@ -309,6 +324,52 @@ export function buildInlineTaskCompactChipEntries(
 	return entries;
 }
 
+function isBuiltInCompactChipKey(key: string): key is InlineTaskCompactChipKey {
+	return (INLINE_TASK_COMPACT_CHIP_ORDER as readonly string[]).includes(key);
+}
+
+function isRenderableCompactSurfaceKey(settings: OperonSettings, key: string): boolean {
+	if (isBuiltInCompactChipKey(key)) return true;
+	const mapping = getCustomFieldMapping(settings.keyMappings, key);
+	return !!mapping && isProjectedCustomFieldType(mapping);
+}
+
+function pushCustomChipEntries(
+	entries: InlineTaskCompactChipEntry[],
+	mapping: KeyMapping,
+	fieldValues: Record<string, string>,
+	settings: Pick<OperonSettings, 'timeFormat'>,
+	iconOnly: boolean,
+): void {
+	const rawValue = normalizeCustomFieldRawValue((fieldValues as Record<string, unknown>)[mapping.canonicalKey]);
+	if (!rawValue) return;
+	if (mapping.type === 'list') {
+		for (const value of splitTaskListValue(rawValue)) {
+			const wikiLink = parseCompactWikiLinkValue(value);
+			const displayValue = wikiLink?.displayValue ?? value;
+			const label = truncateCompactLabel(displayValue);
+			const entry = createCustomEntry(mapping, label, iconOnly, wikiLink?.linkTarget ?? null);
+			if (label !== displayValue) {
+				entry.tooltipTitle = getCustomFieldLabel(mapping);
+				entry.tooltipContent = displayValue;
+			}
+			entries.push(entry);
+		}
+		return;
+	}
+	const wikiLink = mapping.type === 'text' ? parseCompactWikiLinkValue(rawValue) : null;
+	const displayValue = mapping.type === 'datetime'
+		? formatCompactDatetimeTime(rawValue, settings)
+		: wikiLink?.displayValue ?? rawValue;
+	const label = truncateCompactLabel(displayValue);
+	const entry = createCustomEntry(mapping, label, iconOnly, null, wikiLink?.linkTarget ?? null);
+	if (label !== displayValue) {
+		entry.tooltipTitle = getCustomFieldLabel(mapping);
+		entry.tooltipContent = displayValue;
+	}
+	entries.push(entry);
+}
+
 export function getInlineTaskCompactHiddenCount(
 	fieldValues: Record<string, string>,
 	tags: string[],
@@ -389,7 +450,7 @@ export function createInlineTaskCompactChipElement(
 		'operon-chip',
 		'operon-live-preview-chip',
 		'operon-inline-compact-chip',
-		entry.linkTarget || entry.externalUrl ? 'is-linked' : '',
+		entry.linkTarget || entry.previewLinkTarget || entry.externalUrl ? 'is-linked' : '',
 		entry.locationCoordinate ? 'is-location' : '',
 		iconOnly ? 'is-icon-only' : '',
 		entry.key === 'priority' ? 'operon-chip-priority' : 'operon-chip-date',
@@ -429,8 +490,29 @@ function createEntry(
 		interactive,
 		colorRole,
 		linkTarget,
+		previewLinkTarget: linkTarget,
 		externalUrl,
 		externalRawValue,
+	};
+}
+
+function createCustomEntry(
+	mapping: KeyMapping,
+	label: string,
+	iconOnly = false,
+	linkTarget: string | null = null,
+	previewLinkTarget: string | null = linkTarget,
+): InlineTaskCompactChipEntry {
+	return {
+		key: mapping.canonicalKey,
+		label,
+		icon: getCustomFieldIcon(mapping),
+		iconOnly,
+		interactive: true,
+		colorRole: 'default',
+		linkTarget,
+		previewLinkTarget,
+		tooltipTitle: getCustomFieldLabel(mapping),
 	};
 }
 
@@ -503,6 +585,38 @@ function extractWikiLinkTarget(rawValue: string): string | null {
 	const trimmed = rawValue.trim();
 	const match = trimmed.match(/^\[\[([^\]|]+)(?:\|([^\]]+))?\]\]$/);
 	return match?.[1]?.trim() || null;
+}
+
+interface CompactWikiLinkValue {
+	linkTarget: string;
+	displayValue: string;
+}
+
+function parseCompactWikiLinkValue(rawValue: string): CompactWikiLinkValue | null {
+	const trimmed = rawValue.trim();
+	const match = /^!?\[\[([^\]]+)\]\]$/u.exec(trimmed);
+	if (!match) return null;
+	const body = match[1]?.trim() ?? '';
+	if (!body) return null;
+	const pipeIndex = body.indexOf('|');
+	if (pipeIndex < 0) {
+		return {
+			linkTarget: body,
+			displayValue: formatCompactWikiLinkTargetLabel(body) || trimmed,
+		};
+	}
+	const linkTarget = body.slice(0, pipeIndex).trim();
+	if (!linkTarget) return null;
+	const alias = body.slice(pipeIndex + 1).trim();
+	return {
+		linkTarget,
+		displayValue: alias || formatCompactWikiLinkTargetLabel(linkTarget) || trimmed,
+	};
+}
+
+function formatCompactWikiLinkTargetLabel(linkTarget: string): string {
+	const lastSegment = linkTarget.split('/').pop()?.trim() ?? linkTarget.trim();
+	return lastSegment.replace(/\.md$/i, '');
 }
 
 function truncateCompactLabel(value: string, maxLength = 37): string {

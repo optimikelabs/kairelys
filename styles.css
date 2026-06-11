@@ -48,7 +48,7 @@
 }
 
 .operon-release-notes-settings-card-desc {
-	color: var(--text-muted);
+	color: var(--text-faint);
 	font-size: var(--font-ui-medium);
 	font-weight: 600;
 	line-height: 1.35;
@@ -381,6 +381,13 @@
 	flex-shrink: 0;
 }
 
+.operon-key-mapping-actions {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	flex-shrink: 0;
+}
+
 .operon-key-mapping-control-label {
 	font-size: 12px;
 	font-weight: 600;
@@ -480,9 +487,32 @@
 	align-items: center;
 }
 
+.operon-key-mapping-surface-row {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 14px;
+	flex-wrap: wrap;
+	padding-top: 2px;
+}
+
+.operon-key-mapping-surface-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
 .operon-key-mapping-icon-preview {
 	width: 20px;
 	height: 20px;
+}
+
+.operon-key-mapping-custom-heading {
+	margin: 14px 0 8px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	font-weight: 700;
+	letter-spacing: 0;
 }
 
 .operon-key-mapping-explanation-box {
@@ -530,15 +560,230 @@
 	padding: 0 24px 18px;
 }
 
+.operon-settings-native-page-root .operon-native-settings-section-card.operon-custom-keys-section {
+	overflow: visible;
+	border: 0;
+	border-radius: 0;
+	background-color: transparent;
+}
+
+.operon-settings-native-page-root .operon-custom-keys-section > .operon-key-mapping-list {
+	padding: 0 0 18px;
+}
+
+.operon-settings-native-page-root .operon-key-mapping-add-row {
+	padding: 0 24px 16px;
+}
+
+.operon-settings-native-page-root .operon-custom-keys-section > .operon-key-mapping-add-row {
+	padding: 0;
+	border-top: 0;
+}
+
 .operon-key-mapping-empty-note {
 	margin: 8px 0 0;
 }
 
+.operon-key-mapping-reorder-button,
 .operon-key-mapping-delete-button {
-	width: 28px;
-	height: 28px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
 	padding: 0;
+	border-radius: 8px;
+	border: 1px solid var(--background-modifier-border);
+	background: transparent;
 	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.operon-key-mapping-reorder-button:hover:not(:disabled) {
+	border-color: var(--interactive-accent);
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+
+.operon-key-mapping-reorder-button:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.operon-key-mapping-delete-button:hover {
+	border-color: var(--text-error);
+	color: var(--text-error);
+	background: color-mix(in srgb, var(--text-error) 10%, transparent);
+}
+
+.operon-key-mapping-description-setting.setting-item {
+	display: grid;
+	grid-template-columns: minmax(140px, 220px) minmax(0, 1fr);
+	align-items: center;
+	gap: 16px;
+	margin: 0;
+	padding: 2px 16px 0 20px;
+	border: 0;
+}
+
+.operon-key-mapping-description-setting .setting-item-info {
+	max-width: none;
+	align-self: center;
+	margin: 0;
+}
+
+.operon-key-mapping-description-setting .setting-item-control {
+	width: 100%;
+	justify-content: stretch;
+}
+
+.operon-key-mapping-description-input {
+	width: min(520px, 100%);
+	min-height: 58px;
+	border-radius: 8px;
+	resize: vertical;
+}
+
+@container (max-width: 680px) {
+	.operon-key-mapping-description-setting.setting-item {
+		grid-template-columns: 1fr;
+		gap: 6px;
+		padding-right: 0;
+		padding-left: 0;
+	}
+}
+
+.modal.operon-custom-key-mapping-modal-shell {
+	width: min(92vw, 680px);
+	max-height: calc(100dvh - 48px);
+	border-radius: 12px;
+	overflow: hidden;
+}
+
+.operon-custom-key-mapping-modal {
+	max-height: inherit;
+	overflow-y: auto;
+}
+
+.operon-custom-key-mapping-modal-desc {
+	margin: 0 0 12px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	line-height: 1.45;
+}
+
+.operon-custom-key-mapping-error {
+	margin: 0 0 12px;
+	padding: 8px 10px;
+	border: 1px solid color-mix(in srgb, var(--text-error) 48%, transparent);
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--text-error) 10%, transparent);
+	color: var(--text-error);
+	font-size: var(--font-ui-small);
+	line-height: 1.4;
+}
+
+.operon-custom-key-mapping-error[hidden] {
+	display: none;
+}
+
+.operon-custom-key-mapping-card {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	margin-top: 12px;
+	padding: 8px 10px;
+	border: 1px solid color-mix(in srgb, var(--background-modifier-border) 88%, transparent);
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--background-secondary) 62%, var(--background-primary));
+}
+
+.operon-custom-key-mapping-card-title {
+	padding: 8px 8px 2px;
+	color: var(--text-muted);
+	font-size: 12px;
+	font-weight: 700;
+	line-height: 1.3;
+	text-transform: uppercase;
+	letter-spacing: 0;
+}
+
+.operon-custom-key-mapping-card > .setting-item {
+	display: grid;
+	align-items: center;
+	gap: 8px 18px;
+	grid-template-columns: minmax(0, 1fr) minmax(180px, 320px);
+	min-height: 52px;
+	margin: 0;
+	padding: 12px 8px;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+}
+
+.operon-custom-key-mapping-card > .setting-item + .setting-item {
+	border-top: 1px solid color-mix(in srgb, var(--background-modifier-border) 54%, transparent);
+}
+
+.operon-custom-key-mapping-card .setting-item-info,
+.operon-custom-key-mapping-card .setting-item-control {
+	width: 100%;
+	min-width: 0;
+}
+
+.operon-custom-key-mapping-card .setting-item-control {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	justify-content: flex-start;
+}
+
+.operon-custom-key-mapping-canonical-input,
+.operon-custom-key-mapping-property-input,
+.operon-custom-key-mapping-description-input {
+	width: min(320px, 100%);
+	max-width: 100%;
+	border-radius: 8px;
+}
+
+.operon-custom-key-mapping-description-input {
+	min-height: 74px;
+	resize: vertical;
+}
+
+.operon-custom-key-mapping-icon-trigger {
+	width: 38px;
+	height: 38px;
+}
+
+.operon-custom-key-mapping-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-top: 18px;
+}
+
+.operon-custom-key-mapping-footer button {
+	border-radius: 8px;
+}
+
+@media (max-width: 640px) {
+	.modal.operon-custom-key-mapping-modal-shell {
+		width: min(94vw, 680px);
+		max-height: calc(100dvh - 24px);
+	}
+
+	.operon-custom-key-mapping-card > .setting-item {
+		display: flex;
+		flex-direction: column;
+		align-items: stretch;
+		gap: 8px;
+	}
+
+	.operon-custom-key-mapping-card .setting-item-control {
+		justify-content: stretch;
+	}
 }
 
 /* ========================================
@@ -1038,16 +1283,22 @@
 
 .operon-plain-checkbox-popover-panel {
 	--operon-plain-checkbox-popover-accent: var(--interactive-accent);
+	--operon-plain-checkbox-popover-border: color-mix(in srgb, var(--background-modifier-border) 64%, transparent);
+	--operon-plain-checkbox-popover-hover-border: color-mix(in srgb, var(--operon-plain-checkbox-popover-accent) 46%, var(--background-modifier-border));
+	--operon-plain-checkbox-popover-focus-ring: color-mix(in srgb, var(--operon-plain-checkbox-popover-accent) 12%, transparent);
+	--operon-plain-checkbox-popover-danger: color-mix(in srgb, var(--color-red) 88%, var(--text-normal));
+	--operon-plain-checkbox-popover-control-bg: transparent;
 	width: min(520px, 92vw);
 	max-width: min(520px, 92vw);
 	max-height: min(430px, 82vh);
 	padding: 0;
 	overflow: hidden;
-	border-color: color-mix(in srgb, var(--operon-plain-checkbox-popover-accent) 42%, var(--background-modifier-border));
+	border: 1px solid var(--operon-plain-checkbox-popover-hover-border);
 	border-radius: 12px;
+	background: color-mix(in srgb, var(--background-primary) 96%, transparent);
 	box-shadow:
-		0 14px 40px rgb(0 0 0 / 22%),
-		0 0 0 1px color-mix(in srgb, var(--operon-plain-checkbox-popover-accent) 18%, transparent);
+		0 14px 34px rgb(0 0 0 / 18%),
+		0 0 0 2px var(--operon-plain-checkbox-popover-focus-ring);
 }
 
 .operon-plain-checkbox-popover-body {
@@ -1056,18 +1307,18 @@
 	flex-direction: column;
 	gap: 8px;
 	max-height: inherit;
-	padding: 12px 12px 10px;
-	background: var(--background-primary);
+	padding: 14px 14px 12px;
+	background: transparent;
 }
 
 .operon-plain-checkbox-popover-title {
-	min-height: 28px;
-	margin: 0 40px 4px;
+	min-height: 32px;
+	margin: 0 44px 4px;
 	overflow: hidden;
 	color: var(--text-normal);
 	font-size: var(--font-ui-medium);
-	font-weight: 750;
-	line-height: 28px;
+	font-weight: 700;
+	line-height: 32px;
 	text-align: center;
 	text-overflow: ellipsis;
 	cursor: grab;
@@ -1089,13 +1340,13 @@
 	min-height: 220px;
 	max-height: min(310px, 58vh);
 	padding: 8px 10px;
-	border: 1px solid color-mix(in srgb, var(--background-modifier-border) 84%, transparent);
+	border: 1px solid var(--operon-plain-checkbox-popover-border);
 	border-radius: 8px;
-	background: color-mix(in srgb, var(--background-primary) 92%, var(--background-secondary));
+	background: var(--operon-plain-checkbox-popover-control-bg);
 	color: var(--text-normal);
 	font-family: var(--font-text);
 	font-size: var(--font-ui-medium);
-	font-weight: 600;
+	font-weight: 550;
 	line-height: 1.7;
 	resize: vertical;
 	overflow: auto;
@@ -1107,9 +1358,9 @@
 
 .operon-plain-checkbox-popover-editor:hover,
 .operon-plain-checkbox-popover-editor:focus {
-	border-color: color-mix(in srgb, var(--operon-plain-checkbox-popover-accent) 42%, var(--background-modifier-border-hover));
-	background: var(--background-primary);
-	box-shadow: none;
+	border-color: var(--operon-plain-checkbox-popover-hover-border);
+	background: var(--operon-plain-checkbox-popover-control-bg);
+	box-shadow: 0 0 0 2px var(--operon-plain-checkbox-popover-focus-ring);
 	outline: none;
 }
 
@@ -1119,15 +1370,16 @@
 	min-height: 220px;
 	max-height: min(310px, 58vh);
 	overflow: hidden;
-	border: 1px solid color-mix(in srgb, var(--background-modifier-border) 84%, transparent);
+	border: 1px solid var(--operon-plain-checkbox-popover-border);
 	border-radius: 8px;
-	background: color-mix(in srgb, var(--background-primary) 92%, var(--background-secondary));
+	background: var(--operon-plain-checkbox-popover-control-bg);
 }
 
 .operon-plain-checkbox-popover-cm-host:hover,
 .operon-plain-checkbox-popover-cm-host:focus-within {
-	border-color: color-mix(in srgb, var(--operon-plain-checkbox-popover-accent) 42%, var(--background-modifier-border-hover));
-	background: var(--background-primary);
+	border-color: var(--operon-plain-checkbox-popover-hover-border);
+	background: var(--operon-plain-checkbox-popover-control-bg);
+	box-shadow: 0 0 0 2px var(--operon-plain-checkbox-popover-focus-ring);
 }
 
 .operon-plain-checkbox-popover-cm-editor,
@@ -1144,7 +1396,7 @@
 	overflow: auto;
 	font-family: var(--font-text);
 	font-size: var(--font-ui-medium);
-	font-weight: 600;
+	font-weight: 550;
 	line-height: 1.7;
 	scrollbar-gutter: stable;
 }
@@ -1166,62 +1418,85 @@
 	overflow-wrap: anywhere;
 }
 
-.operon-plain-checkbox-popover-close,
-.operon-plain-checkbox-popover-drag-handle {
+.operon-plain-checkbox-popover-cm-editor .cm-activeLine {
+	background: color-mix(in srgb, var(--operon-plain-checkbox-popover-accent) 7%, transparent);
+}
+
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-close,
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-drag-handle {
+	appearance: none;
+	-webkit-appearance: none;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	width: 28px;
-	height: 28px;
-	min-width: 28px;
-	min-height: 28px;
+	width: 34px;
+	height: 34px;
+	min-width: 34px;
+	min-height: 34px;
 	padding: 0;
-	border: 1px solid color-mix(in srgb, var(--operon-plain-checkbox-popover-accent) 38%, var(--background-modifier-border));
-	border-radius: 7px;
-	background: color-mix(in srgb, var(--background-primary) 88%, transparent);
-	color: color-mix(in srgb, var(--operon-plain-checkbox-popover-accent) 68%, var(--text-normal));
-	box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
-	-webkit-backdrop-filter: blur(8px);
-	backdrop-filter: blur(8px);
+	border: 1px solid var(--operon-plain-checkbox-popover-border);
+	border-radius: 8px;
+	background: transparent;
+	background-color: transparent;
+	background-image: none;
+	color: var(--text-muted);
+	box-shadow: none;
+	--button-bg: transparent;
+	--button-hover-bg: transparent;
+	--button-active-bg: transparent;
+	--button-shadow: none;
+	transition: border-color 0.12s ease, box-shadow 0.12s ease, color 0.12s ease, background 0.12s ease;
 }
 
-.operon-plain-checkbox-popover-close svg,
-.operon-plain-checkbox-popover-drag-handle svg {
-	width: 15px;
-	height: 15px;
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-close svg,
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-drag-handle svg {
+	width: 17px;
+	height: 17px;
 }
 
-.operon-plain-checkbox-popover-close {
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-close {
 	position: absolute;
-	top: 10px;
-	right: 12px;
+	top: 14px;
+	right: 14px;
 	z-index: 2;
+}
+
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-close:hover,
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-close:focus-visible,
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-drag-handle:hover,
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-drag-handle:focus-visible {
+	border-color: var(--operon-plain-checkbox-popover-hover-border);
+	background: transparent;
+	background-color: transparent;
+	background-image: none;
+	box-shadow: 0 0 0 2px var(--operon-plain-checkbox-popover-focus-ring);
+	color: color-mix(in srgb, var(--operon-plain-checkbox-popover-accent) 74%, var(--text-normal));
 }
 
 .operon-plain-checkbox-popover-left-controls {
 	position: absolute;
-	top: 10px;
-	left: 12px;
+	top: 14px;
+	left: 14px;
 	z-index: 2;
 	display: flex;
 	align-items: center;
 	gap: 6px;
 }
 
-.operon-plain-checkbox-popover-drag-handle {
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-drag-handle {
 	cursor: grab;
 	touch-action: none;
 }
 
-.operon-plain-checkbox-popover-drag-handle.is-dragging,
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-drag-handle.is-dragging,
 .operon-plain-checkbox-popover-title.is-dragging,
 .operon-plain-checkbox-popover-panel.is-dragging .operon-plain-checkbox-popover-title,
-.operon-plain-checkbox-popover-panel.is-dragging .operon-plain-checkbox-popover-drag-handle {
+.operon-plain-checkbox-popover-panel.is-dragging button.operon-plain-checkbox-popover-drag-handle {
 	cursor: grabbing;
 }
 
 .operon-plain-checkbox-popover-panel.is-pinned {
-	border-color: color-mix(in srgb, var(--operon-plain-checkbox-popover-accent) 68%, var(--background-modifier-border));
+	border-color: var(--operon-plain-checkbox-popover-hover-border);
 }
 
 .operon-plain-checkbox-popover-footer {
@@ -1229,72 +1504,96 @@
 	grid-template-columns: minmax(0, 1fr) auto auto;
 	gap: 8px;
 	align-items: center;
-	padding-top: 4px;
+	padding-top: 6px;
 }
 
-.operon-plain-checkbox-popover-add,
-.operon-plain-checkbox-popover-cancel,
-.operon-plain-checkbox-popover-save {
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-add,
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-cancel,
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-save {
+	appearance: none;
+	-webkit-appearance: none;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
 	gap: 6px;
-	min-height: 30px;
-	padding: 4px 9px;
-	border: 1px dashed color-mix(in srgb, var(--operon-plain-checkbox-popover-accent) 42%, var(--background-modifier-border));
+	min-height: 34px;
+	padding: 5px 12px;
+	border: 1px solid var(--operon-plain-checkbox-popover-border);
 	border-radius: 8px;
-	background: color-mix(in srgb, var(--background-primary) 80%, transparent);
+	background: transparent;
+	background-color: transparent;
+	background-image: none;
 	color: var(--text-muted);
 	font-size: 12px;
 	font-weight: 650;
+	box-shadow: none;
+	--button-bg: transparent;
+	--button-hover-bg: transparent;
+	--button-active-bg: transparent;
+	--button-shadow: none;
+	transition: border-color 0.12s ease, box-shadow 0.12s ease, color 0.12s ease, background 0.12s ease;
 }
 
-.operon-plain-checkbox-popover-add {
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-add {
 	width: 100%;
 }
 
-.operon-plain-checkbox-popover-cancel {
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-cancel {
 	min-width: 76px;
-	border-style: solid;
-	background: var(--background-secondary);
-	color: var(--text-muted);
 }
 
-.operon-plain-checkbox-popover-save {
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-save {
 	min-width: 86px;
-	border-style: solid;
-	background: color-mix(in srgb, var(--interactive-accent) 18%, var(--background-primary));
-	color: var(--text-normal);
+	color: color-mix(in srgb, var(--operon-plain-checkbox-popover-accent) 70%, var(--text-normal));
+	border-color: var(--operon-plain-checkbox-popover-hover-border);
 }
 
-.operon-plain-checkbox-popover-save:disabled {
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-save:disabled {
 	opacity: 0.48;
+	color: var(--text-muted);
+	border-color: var(--operon-plain-checkbox-popover-border);
 }
 
-.operon-plain-checkbox-popover-add:hover,
-.operon-plain-checkbox-popover-add:focus-visible {
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-add:hover,
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-add:focus-visible {
 	color: color-mix(in srgb, var(--operon-plain-checkbox-popover-accent) 76%, var(--text-normal));
-	background: color-mix(in srgb, var(--operon-plain-checkbox-popover-accent) 12%, var(--background-primary));
+	border-color: var(--operon-plain-checkbox-popover-hover-border);
+	background: transparent;
+	background-color: transparent;
+	background-image: none;
+	box-shadow: 0 0 0 2px var(--operon-plain-checkbox-popover-focus-ring);
 }
 
-.operon-plain-checkbox-popover-cancel:hover,
-.operon-plain-checkbox-popover-cancel:focus-visible {
-	border-color: color-mix(in srgb, var(--color-red) 68%, var(--background-modifier-border));
-	color: var(--color-red);
-	background: color-mix(in srgb, var(--color-red) 14%, var(--background-primary));
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-cancel:hover,
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-cancel:focus-visible {
+	border-color: var(--operon-plain-checkbox-popover-danger);
+	color: var(--operon-plain-checkbox-popover-danger);
+	background: transparent;
+	background-color: transparent;
+	background-image: none;
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-red) 7%, transparent);
 }
 
-.operon-plain-checkbox-popover-save:not(:disabled):hover,
-.operon-plain-checkbox-popover-save:not(:disabled):focus-visible {
-	border-color: var(--interactive-accent);
-	color: var(--text-on-accent);
-	background: var(--interactive-accent);
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-save:not(:disabled):hover,
+.operon-plain-checkbox-popover-panel button.operon-plain-checkbox-popover-save:not(:disabled):focus-visible {
+	border-color: var(--operon-plain-checkbox-popover-hover-border);
+	color: color-mix(in srgb, var(--operon-plain-checkbox-popover-accent) 78%, var(--text-normal));
+	background: transparent;
+	background-color: transparent;
+	background-image: none;
+	box-shadow: 0 0 0 2px var(--operon-plain-checkbox-popover-focus-ring);
 }
 
 .operon-date-picker-panel .operon-floating-input:focus,
 .operon-date-picker-panel .operon-floating-input:focus-visible,
+.operon-custom-field-picker--date .operon-floating-input:focus,
+.operon-custom-field-picker--date .operon-floating-input:focus-visible,
+.operon-custom-field-picker--list .operon-floating-input:focus,
+.operon-custom-field-picker--list .operon-floating-input:focus-visible,
 .operon-datetime-picker-panel .operon-floating-input:focus,
 .operon-datetime-picker-panel .operon-floating-input:focus-visible,
+.operon-custom-field-picker--datetime .operon-floating-input:focus,
+.operon-custom-field-picker--datetime .operon-floating-input:focus-visible,
 .operon-time-picker-panel .operon-floating-input:focus,
 .operon-time-picker-panel .operon-floating-input:focus-visible {
 	outline: none;
@@ -1441,6 +1740,9 @@
 
 .operon-field-menu-item,
 .operon-list-picker-item,
+.operon-custom-field-picker-option,
+.operon-custom-text-picker-option,
+.operon-custom-list-picker-option,
 .operon-status-dropdown-item {
 	width: 100%;
 	border: none;
@@ -1454,6 +1756,9 @@
 
 .operon-field-menu-item.is-active,
 .operon-list-picker-item.is-active,
+.operon-custom-field-picker-option.is-active,
+.operon-custom-text-picker-option.is-active,
+.operon-custom-list-picker-option.is-active,
 .operon-status-dropdown-item.is-active {
 	background: color-mix(in srgb, var(--operon-task-creator-accent, var(--interactive-accent)) 12%, var(--background-secondary));
 	outline: 1px solid color-mix(in srgb, var(--operon-task-creator-accent, var(--interactive-accent)) 32%, var(--background-modifier-border));
@@ -1481,6 +1786,101 @@
 	display: flex;
 	flex-direction: column;
 	gap: 4px;
+}
+
+.operon-custom-field-picker {
+	min-width: 240px;
+	max-width: 360px;
+}
+
+.operon-custom-field-picker--text {
+	width: min(360px, calc(100vw - 24px));
+	min-width: min(280px, calc(100vw - 24px));
+	max-width: min(360px, calc(100vw - 24px));
+}
+
+.operon-custom-text-picker-option {
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+	flex: 0 0 auto;
+	box-sizing: border-box;
+	min-height: 33px;
+	text-align: left;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.operon-custom-text-picker-suggestions {
+	max-height: calc((33px * 7) + (4px * 6) + 8px);
+	overflow-y: auto;
+	scroll-padding-block: 4px;
+}
+
+.operon-custom-text-picker-actions {
+	justify-content: space-between;
+}
+
+.operon-custom-text-picker-count {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--text-muted);
+	white-space: nowrap;
+}
+
+.operon-custom-text-picker-button-wrap {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 6px;
+}
+
+.operon-custom-field-picker--number {
+	min-width: 220px;
+	max-width: 260px;
+}
+
+.operon-custom-number-picker-input {
+	width: 100%;
+}
+
+.operon-custom-number-picker-actions {
+	justify-content: flex-end;
+}
+
+.operon-custom-field-picker--date {
+	min-width: 320px;
+	max-width: 420px;
+}
+
+.operon-custom-field-picker--datetime {
+	width: min(440px, 100%);
+	max-width: 100%;
+}
+
+.operon-custom-date-picker-query,
+.operon-custom-date-picker-native {
+	width: 100%;
+}
+
+.operon-custom-date-picker-actions {
+	justify-content: flex-end;
+}
+
+.operon-custom-field-picker--list {
+	width: min(360px, calc(100vw - 24px));
+	min-width: min(280px, calc(100vw - 24px));
+	max-width: min(360px, calc(100vw - 24px));
+}
+
+.operon-custom-field-picker-suggestions {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	max-height: calc((33px * 7) + (4px * 6) + 8px);
+	overflow-y: auto;
+	scroll-padding-block: 4px;
 }
 
 .operon-estimate-picker-panel {
@@ -1520,7 +1920,8 @@
 	font-variant-numeric: tabular-nums;
 }
 
-.operon-datetime-picker-panel {
+.operon-datetime-picker-panel,
+.operon-custom-field-picker--datetime {
 	width: min(440px, 100%);
 	max-width: 100%;
 }
@@ -1530,18 +1931,21 @@
 	max-width: 300px;
 }
 
-.operon-datetime-picker-top-row {
+.operon-datetime-picker-top-row,
+.operon-custom-datetime-picker-top-row {
 	display: grid;
 	grid-template-columns: minmax(0, 1.35fr) minmax(156px, 0.85fr);
 	gap: 8px;
 	align-items: start;
 }
 
-.operon-datetime-picker-query {
+.operon-datetime-picker-query,
+.operon-custom-datetime-picker-query {
 	min-width: 0;
 }
 
-.operon-datetime-picker-top-time {
+.operon-datetime-picker-top-time,
+.operon-custom-datetime-picker-top-time {
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -1550,29 +1954,35 @@
 	z-index: 1;
 }
 
-.operon-datetime-picker-top-time:focus-within {
+.operon-datetime-picker-top-time:focus-within,
+.operon-custom-datetime-picker-top-time:focus-within {
 	z-index: 7;
 }
 
-.operon-datetime-picker-controls-row {
+.operon-datetime-picker-controls-row,
+.operon-custom-datetime-picker-controls-row {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr);
 	gap: 8px;
 	align-items: start;
 }
 
-.operon-datetime-picker-control-section {
+.operon-datetime-picker-control-section,
+.operon-custom-datetime-picker-control-section {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
 	min-width: 0;
 }
 
-.operon-datetime-picker-control-label {
+.operon-datetime-picker-control-label,
+.operon-custom-datetime-picker-control-label {
 	margin-top: 0;
 }
 
-.operon-date-picker-results {
+.operon-date-picker-results,
+.operon-custom-date-picker-results,
+.operon-custom-datetime-picker-date-results {
 	--operon-date-picker-gap: 4px;
 	--operon-date-picker-row-height: 36px;
 	display: flex;
@@ -1583,7 +1993,9 @@
 	scroll-padding-block: var(--operon-date-picker-gap);
 }
 
-.operon-date-picker-item {
+.operon-date-picker-item,
+.operon-custom-date-picker-item,
+.operon-custom-datetime-picker-date-item {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) 10ch 4ch;
 	gap: 8px;
@@ -1595,14 +2007,18 @@
 	line-height: 1.2;
 }
 
-.operon-date-picker-item-label {
+.operon-date-picker-item-label,
+.operon-custom-date-picker-item-label,
+.operon-custom-datetime-picker-date-item-label {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	font-weight: 600;
 }
 
-.operon-date-picker-item-date {
+.operon-date-picker-item-date,
+.operon-custom-date-picker-item-date,
+.operon-custom-datetime-picker-date-item-date {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -1611,7 +2027,9 @@
 	text-align: right;
 }
 
-.operon-date-picker-item-weekday {
+.operon-date-picker-item-weekday,
+.operon-custom-date-picker-item-weekday,
+.operon-custom-datetime-picker-date-item-weekday {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -1620,13 +2038,16 @@
 	text-align: right;
 }
 
-.operon-date-picker-empty {
+.operon-date-picker-empty,
+.operon-custom-date-picker-empty,
+.operon-custom-datetime-picker-empty {
 	font-size: 11px;
 	color: var(--text-faint);
 	padding: 4px 8px;
 }
 
-.operon-date-picker-panel.has-day-picker {
+.operon-date-picker-panel.has-day-picker,
+.operon-custom-field-picker--date.has-day-picker {
 	width: min(340px, 100%);
 	max-width: 100%;
 }
@@ -1640,7 +2061,8 @@
 	min-width: 0;
 }
 
-.operon-date-picker-day-picker-host {
+.operon-date-picker-day-picker-host,
+.operon-custom-date-picker-day-picker-host {
 	min-width: 0;
 }
 
@@ -1806,7 +2228,8 @@
 	font-weight: 800;
 }
 
-.operon-day-picker-footer {
+.operon-day-picker-footer,
+.operon-custom-datetime-picker-actions {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 8px;
@@ -1817,7 +2240,9 @@
 	grid-template-columns: minmax(0, 1fr);
 }
 
-.operon-day-picker-footer-button {
+.operon-day-picker-footer-button,
+.operon-custom-datetime-picker-clear,
+.operon-custom-datetime-picker-today {
 	width: 100%;
 	min-width: 0;
 	height: 30px;
@@ -1835,40 +2260,54 @@
 }
 
 .operon-day-picker-footer-button:hover,
-.operon-day-picker-footer-button:focus-visible {
+.operon-day-picker-footer-button:focus-visible,
+.operon-custom-datetime-picker-clear:hover,
+.operon-custom-datetime-picker-clear:focus-visible,
+.operon-custom-datetime-picker-today:hover,
+.operon-custom-datetime-picker-today:focus-visible {
 	border-color: color-mix(in srgb, var(--interactive-accent) 34%, var(--background-modifier-border));
 	background: color-mix(in srgb, var(--interactive-accent) 8%, transparent);
 	outline: none;
 }
 
-.operon-day-picker-footer-button:disabled {
+.operon-day-picker-footer-button:disabled,
+.operon-custom-datetime-picker-clear:disabled,
+.operon-custom-datetime-picker-today:disabled {
 	color: var(--text-faint);
 	cursor: default;
 }
 
 .operon-day-picker-footer-button:disabled:hover,
-.operon-day-picker-footer-button:disabled:focus-visible {
+.operon-day-picker-footer-button:disabled:focus-visible,
+.operon-custom-datetime-picker-clear:disabled:hover,
+.operon-custom-datetime-picker-clear:disabled:focus-visible,
+.operon-custom-datetime-picker-today:disabled:hover,
+.operon-custom-datetime-picker-today:disabled:focus-visible {
 	border-color: transparent;
 	background: transparent;
 }
 
-.operon-datetime-picker-time-input {
+.operon-datetime-picker-time-input,
+.operon-custom-datetime-picker-time-input {
 	flex: 1 1 auto;
 	font-variant-numeric: tabular-nums;
 	letter-spacing: 0.08em;
 }
 
-.operon-datetime-picker-day-picker-host {
+.operon-datetime-picker-day-picker-host,
+.operon-custom-datetime-picker-day-picker-host {
 	min-width: 0;
 }
 
-.operon-datetime-picker-meridiem {
+.operon-datetime-picker-meridiem,
+.operon-custom-datetime-picker-meridiem {
 	display: inline-flex;
 	align-items: center;
 	gap: 4px;
 }
 
-.operon-datetime-picker-meridiem-btn {
+.operon-datetime-picker-meridiem-btn,
+.operon-custom-datetime-picker-meridiem-btn {
 	min-width: 44px;
 	padding: 6px 8px;
 	border: 1px solid var(--background-modifier-border);
@@ -1878,13 +2317,15 @@
 	cursor: pointer;
 }
 
-.operon-datetime-picker-meridiem-btn.is-active {
+.operon-datetime-picker-meridiem-btn.is-active,
+.operon-custom-datetime-picker-meridiem-btn.is-active {
 	border-color: var(--interactive-accent);
 	background: color-mix(in srgb, var(--interactive-accent) 14%, var(--background-primary));
 	color: var(--text-normal);
 }
 
-.operon-datetime-picker-time-results {
+.operon-datetime-picker-time-results,
+.operon-custom-datetime-picker-time-results {
 	display: none;
 	flex-direction: column;
 	gap: 4px;
@@ -1904,21 +2345,25 @@
 	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
 }
 
-.operon-datetime-picker-time-results.is-open {
+.operon-datetime-picker-time-results.is-open,
+.operon-custom-datetime-picker-time-results.is-open {
 	display: flex;
 }
 
-.operon-datetime-picker-time-item {
+.operon-datetime-picker-time-item,
+.operon-custom-datetime-picker-time-item {
 	font-variant-numeric: tabular-nums;
 	text-align: center;
 }
 
-.operon-datetime-picker-time-item.is-active {
+.operon-datetime-picker-time-item.is-active,
+.operon-custom-datetime-picker-time-item.is-active {
 	background: color-mix(in srgb, var(--interactive-accent) 14%, var(--background-secondary));
 	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 34%, var(--background-modifier-border));
 }
 
-.operon-datetime-picker-time-notice {
+.operon-datetime-picker-time-notice,
+.operon-custom-datetime-picker-time-notice {
 	display: none;
 	position: absolute;
 	top: calc(100% + 272px);
@@ -1930,7 +2375,8 @@
 	z-index: 6;
 }
 
-.operon-datetime-picker-time-notice.is-open {
+.operon-datetime-picker-time-notice.is-open,
+.operon-custom-datetime-picker-time-notice.is-open {
 	display: block;
 }
 
@@ -1944,7 +2390,9 @@
 
 @media (max-width: 640px) {
 	.operon-datetime-picker-top-row,
-	.operon-datetime-picker-controls-row {
+	.operon-custom-datetime-picker-top-row,
+	.operon-datetime-picker-controls-row,
+	.operon-custom-datetime-picker-controls-row {
 		grid-template-columns: minmax(0, 1fr);
 	}
 }
@@ -3277,6 +3725,12 @@
 
 .operon-task-creator-modal {
 	--operon-task-creator-accent: var(--interactive-accent);
+	--operon-task-creator-control-radius: 8px;
+	--operon-task-creator-control-border: color-mix(in srgb, var(--text-muted) 28%, var(--background-modifier-border));
+	--operon-task-creator-control-bg: transparent;
+	--operon-task-creator-control-hover-border: color-mix(in srgb, var(--operon-task-creator-accent) 34%, var(--background-modifier-border));
+	--operon-task-creator-control-hover-bg: transparent;
+	--operon-task-creator-control-focus-ring: color-mix(in srgb, var(--operon-task-creator-accent) 12%, transparent);
 	width: min(92vw, 680px);
 	margin: 0;
 	max-height: calc(100dvh - 20vh - 24px);
@@ -3447,40 +3901,70 @@ body .operon-native-modal-close-hidden {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	flex: 0 0 38px;
-	width: 38px;
-	height: 38px;
+	flex: 0 0 34px;
+	width: 34px;
+	height: 34px;
 	padding: 0;
-	border: 1px solid transparent;
-	border-radius: 8px;
-	background: transparent;
+	border: 1px solid var(--operon-task-creator-control-border);
+	border-radius: var(--operon-task-creator-control-radius);
+	background: var(--operon-task-creator-control-bg);
+	background-color: var(--operon-task-creator-control-bg);
+	box-shadow: none;
 	color: var(--text-muted);
 	cursor: pointer;
-	transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease, transform 0.12s ease;
+	transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease, color 0.12s ease;
 }
 
-.operon-task-creator-tool:hover {
-	border-color: color-mix(in srgb, var(--operon-task-creator-accent) 40%, transparent);
-	background: color-mix(in srgb, var(--operon-task-creator-accent) 10%, transparent);
+.modal.operon-task-creator-modal button.operon-task-creator-tool,
+.modal.operon-task-creator-modal button.operon-task-creator-action {
+	appearance: none;
+	background: transparent;
+	background-color: transparent;
+	box-shadow: none;
+}
+
+.operon-task-creator-tool:hover,
+.operon-task-creator-tool:focus-visible {
+	border-color: var(--operon-task-creator-control-hover-border);
+	background: var(--operon-task-creator-control-hover-bg);
+	background-color: var(--operon-task-creator-control-hover-bg);
+	box-shadow: 0 0 0 2px var(--operon-task-creator-control-focus-ring);
 	color: var(--text-normal);
-	transform: translateY(-1px);
+	outline: none;
 }
 
 .operon-task-creator-tool.is-active {
-	border-color: color-mix(in srgb, var(--operon-task-creator-accent) 48%, transparent);
-	background: color-mix(in srgb, var(--operon-task-creator-accent) 15%, transparent);
+	border-color: var(--operon-task-creator-control-hover-border);
+	background: var(--operon-task-creator-control-hover-bg);
+	background-color: var(--operon-task-creator-control-hover-bg);
 	color: var(--operon-task-creator-accent);
 }
 
 .operon-task-creator-tool.is-picker-open {
 	border-color: var(--operon-task-creator-accent);
-	background: color-mix(in srgb, var(--operon-task-creator-accent) 16%, transparent);
+	box-shadow: 0 0 0 2px var(--operon-task-creator-control-focus-ring);
 }
 
 .operon-task-creator-tool-icon,
 .operon-task-creator-tool svg {
-	width: 18px;
-	height: 18px;
+	width: 17px;
+	height: 17px;
+}
+
+:where(
+	.modal.mod-operon-task-finder,
+	.operon-task-finder-modal,
+	.operon-kanban-search-scope-popover
+) {
+	--operon-task-finder-control-radius: 8px;
+	--operon-task-finder-control-border: color-mix(in srgb, var(--text-muted) 28%, var(--background-modifier-border));
+	--operon-task-finder-control-bg: transparent;
+	--operon-task-finder-control-hover-border: color-mix(in srgb, var(--operon-task-finder-accent) 34%, var(--background-modifier-border));
+	--operon-task-finder-control-hover-bg: transparent;
+	--operon-task-finder-control-focus-ring: color-mix(in srgb, var(--operon-task-finder-accent) 12%, transparent);
+	--operon-task-finder-row-border: color-mix(in srgb, var(--background-modifier-border) 88%, transparent);
+	--operon-task-finder-row-hover-border: color-mix(in srgb, var(--operon-task-finder-accent) 34%, var(--background-modifier-border));
+	--operon-task-finder-row-focus-ring: color-mix(in srgb, var(--operon-task-finder-accent) 10%, transparent);
 }
 
 .modal.mod-operon-task-finder,
@@ -3575,16 +4059,17 @@ body .modal.operon-task-finder-modal .modal-close-button {
 	padding-top: 23px;
 	padding-bottom: 23px;
 	padding-left: 66px;
-	border: 1px solid color-mix(in srgb, var(--operon-task-finder-accent) 28%, var(--background-modifier-border));
+	border: 1px solid var(--operon-task-finder-control-border);
 	border-radius: 10px;
-	background: color-mix(in srgb, var(--background-secondary) 70%, transparent);
+	background: transparent;
+	background-color: transparent;
 	color: var(--text-normal);
 	font-family: inherit;
 	font-size: 16px;
 	line-height: 1.55;
 	resize: none;
 	overflow: hidden;
-	box-shadow: inset 0 1px 0 color-mix(in srgb, var(--background-primary) 70%, transparent);
+	box-shadow: none;
 	transition: border-color 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
 }
 
@@ -3592,7 +4077,8 @@ body .modal.operon-task-finder-modal .modal-close-button {
 	outline: none;
 	border-color: var(--operon-task-finder-accent);
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--operon-task-finder-accent) 14%, transparent);
-	background: var(--background-primary);
+	background: transparent;
+	background-color: transparent;
 }
 
 .operon-task-finder-toolbar {
@@ -3631,29 +4117,43 @@ body .modal.operon-task-finder-modal .modal-close-button {
 	min-width: 44px;
 	height: 40px;
 	padding: 0 13px;
-	border: 1px solid transparent;
-	border-color: color-mix(in srgb, var(--background-modifier-border) 72%, transparent);
-	border-radius: 8px;
-	background: color-mix(in srgb, var(--background-secondary) 78%, transparent);
+	border: 1px solid var(--operon-task-finder-control-border);
+	border-radius: var(--operon-task-finder-control-radius);
+	background: var(--operon-task-finder-control-bg);
+	background-color: var(--operon-task-finder-control-bg);
 	color: var(--text-muted);
-	box-shadow: inset 0 1px 0 color-mix(in srgb, var(--background-primary) 68%, transparent);
+	box-shadow: none;
 	cursor: pointer;
-	transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease, transform 0.12s ease;
+	transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease, color 0.12s ease;
 }
 
-.operon-task-finder-tool:hover {
-	border-color: color-mix(in srgb, var(--operon-task-finder-accent) 40%, var(--background-modifier-border));
-	background: color-mix(in srgb, var(--operon-task-finder-accent) 10%, var(--background-secondary));
+.modal.operon-task-finder-modal button.operon-task-finder-tool,
+.modal.operon-task-finder-modal button.operon-task-finder-result,
+.modal.operon-task-finder-modal button.operon-task-finder-selected-clear,
+.operon-kanban-search-scope-popover button.operon-kanban-search-scope-button {
+	appearance: none;
+	background: transparent;
+	background-color: transparent;
+	box-shadow: none;
+	filter: none;
+}
+
+.operon-task-finder-tool:hover,
+.operon-task-finder-tool:focus-visible {
+	border-color: var(--operon-task-finder-control-hover-border);
+	background: var(--operon-task-finder-control-hover-bg);
+	background-color: var(--operon-task-finder-control-hover-bg);
+	box-shadow: 0 0 0 2px var(--operon-task-finder-control-focus-ring);
 	color: var(--text-normal);
-	transform: translateY(-1px);
+	outline: none;
 }
 
 .operon-task-finder-tool.is-active {
 	border-color: var(--operon-task-finder-accent);
-	background: color-mix(in srgb, var(--operon-task-finder-accent) 20%, var(--background-secondary));
+	background: var(--operon-task-finder-control-hover-bg);
+	background-color: var(--operon-task-finder-control-hover-bg);
 	color: var(--operon-task-finder-accent);
-	box-shadow: 0 0 0 2px color-mix(in srgb, var(--operon-task-finder-accent) 16%, transparent),
-		inset 0 1px 0 color-mix(in srgb, var(--background-primary) 62%, transparent);
+	box-shadow: 0 0 0 2px var(--operon-task-finder-control-focus-ring);
 }
 
 .operon-task-finder-tool-icon,
@@ -3682,9 +4182,10 @@ body .modal.operon-task-finder-modal .modal-close-button {
 	gap: 12px;
 	min-height: 70px;
 	padding: 12px 14px;
-	border: 1px solid color-mix(in srgb, var(--interactive-accent) 32%, var(--background-modifier-border));
-	border-radius: 8px;
-	background: color-mix(in srgb, var(--interactive-accent) 8%, var(--background-secondary));
+	border: 1px solid var(--operon-task-finder-row-hover-border);
+	border-radius: var(--operon-task-finder-control-radius);
+	background: transparent;
+	background-color: transparent;
 }
 
 .operon-task-finder-selected-project.is-visible {
@@ -3698,7 +4199,7 @@ body .modal.operon-task-finder-modal .modal-close-button {
 	flex: 0 0 34px;
 	width: 34px;
 	height: 34px;
-	color: var(--interactive-accent);
+	color: var(--operon-task-finder-accent);
 }
 
 .operon-task-finder-selected-icon svg {
@@ -3738,15 +4239,21 @@ body .modal.operon-task-finder-modal .modal-close-button {
 	width: 30px;
 	height: 30px;
 	padding: 0;
-	border: 1px solid transparent;
-	border-radius: 8px;
+	border: 1px solid var(--operon-task-finder-control-border);
+	border-radius: var(--operon-task-finder-control-radius);
 	background: transparent;
+	background-color: transparent;
 	color: var(--text-muted);
 }
 
-.operon-task-finder-selected-clear:hover {
-	border-color: color-mix(in srgb, var(--interactive-accent) 28%, var(--background-modifier-border));
-	color: var(--interactive-accent);
+.operon-task-finder-selected-clear:hover,
+.operon-task-finder-selected-clear:focus-visible {
+	border-color: var(--operon-task-finder-control-hover-border);
+	background: transparent;
+	background-color: transparent;
+	box-shadow: 0 0 0 2px var(--operon-task-finder-control-focus-ring);
+	color: var(--operon-task-finder-accent);
+	outline: none;
 }
 
 .operon-task-finder-results {
@@ -3771,9 +4278,10 @@ body .modal.operon-task-finder-modal .modal-close-button {
 	min-width: 0;
 	min-height: 66px;
 	padding: 9px 12px;
-	border: 1px solid transparent;
-	border-radius: 8px;
+	border: 1px solid var(--operon-task-finder-row-border);
+	border-radius: var(--operon-task-finder-control-radius);
 	background: transparent;
+	background-color: transparent;
 	color: var(--text-normal);
 	font: inherit;
 	line-height: normal;
@@ -3794,9 +4302,20 @@ body .modal.operon-task-finder-modal .modal-close-button {
 }
 
 .operon-task-finder-result:hover,
+.operon-task-finder-result:focus-visible,
 .operon-task-finder-result.is-active {
-	border-color: color-mix(in srgb, var(--interactive-accent) 42%, var(--background-modifier-border));
-	background: color-mix(in srgb, var(--interactive-accent) 10%, var(--background-secondary));
+	border-color: var(--operon-task-finder-row-hover-border);
+	background: transparent;
+	background-color: transparent;
+	box-shadow: 0 0 0 2px var(--operon-task-finder-row-focus-ring);
+	outline: none;
+}
+
+.operon-task-finder-result.is-active {
+	border-color: var(--operon-task-finder-accent);
+	box-shadow:
+		inset 0 0 0 1px var(--operon-task-finder-accent),
+		0 0 0 2px var(--operon-task-finder-row-focus-ring);
 }
 
 .operon-task-finder-result-icon {
@@ -3843,7 +4362,7 @@ body .modal.operon-task-finder-modal .modal-close-button {
 	align-items: center;
 	flex-wrap: nowrap;
 	gap: 6px;
-	min-height: 22px;
+	min-height: var(--operon-task-chip-height, 24px);
 	max-width: 100%;
 	overflow: hidden;
 	color: var(--text-muted);
@@ -3853,14 +4372,16 @@ body .modal.operon-task-finder-modal .modal-close-button {
 }
 
 .operon-task-finder-chip {
+	display: inline-flex;
+	align-items: center;
 	flex: 0 0 auto;
+	height: var(--operon-task-chip-height, 24px);
+	min-height: var(--operon-task-chip-height, 24px);
 	min-width: 0;
 	max-width: none;
-	border-color: transparent;
-	background: var(--background-modifier-hover);
 	color: var(--text-muted);
 	font-weight: 400;
-	pointer-events: none;
+	pointer-events: auto;
 	white-space: nowrap;
 }
 
@@ -3888,6 +4409,7 @@ body .modal.operon-task-finder-modal .modal-close-button {
 	justify-content: center;
 	color: var(--text-muted);
 	font-weight: 700;
+	font-variant-numeric: tabular-nums;
 }
 
 .operon-task-finder-overflow-chip.is-visible {
@@ -3904,11 +4426,16 @@ body .modal.operon-task-finder-modal .modal-close-button {
 
 .operon-task-finder-empty {
 	display: none;
-	padding: 14px 2px;
+	padding: 12px 14px;
+	border: 1px solid var(--operon-task-finder-row-border);
+	border-radius: var(--operon-task-finder-control-radius);
+	background: transparent;
+	background-color: transparent;
 	color: var(--text-muted);
 	font-size: 13px;
 	font-weight: 600;
 	letter-spacing: 0;
+	text-align: center;
 }
 
 .operon-task-finder-empty.is-visible {
@@ -3918,9 +4445,9 @@ body .modal.operon-task-finder-modal .modal-close-button {
 .operon-task-finder-footer {
 	display: none;
 	min-height: 18px;
-	padding: 0 2px;
-	color: var(--text-faint);
-	font-size: 11px;
+	padding: 0 4px;
+	color: var(--text-muted);
+	font-size: 12px;
 	font-weight: 600;
 	letter-spacing: 0;
 	line-height: 1.4;
@@ -4106,31 +4633,40 @@ body .modal.operon-task-finder-modal .modal-close-button {
 }
 
 .operon-task-creator-action {
-	padding: 9px 16px;
-	border: 1px solid var(--background-modifier-border);
-	border-radius: 8px;
-	background: var(--background-secondary);
+	height: 36px;
+	min-height: 36px;
+	padding: 0 14px;
+	border: 1px solid var(--operon-task-creator-control-border);
+	border-radius: var(--operon-task-creator-control-radius);
+	background: var(--operon-task-creator-control-bg);
+	background-color: var(--operon-task-creator-control-bg);
+	box-shadow: none;
 	color: var(--text-normal);
+	font-size: 13px;
 	font-weight: 600;
 	cursor: pointer;
-	transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+	line-height: 1.25;
+	transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease, color 0.12s ease;
 }
 
-.operon-task-creator-action:hover:not(:disabled) {
-	transform: translateY(-1px);
-	border-color: color-mix(in srgb, var(--operon-task-creator-accent) 42%, transparent);
+.operon-task-creator-action:hover:not(:disabled),
+.operon-task-creator-action:focus-visible:not(:disabled) {
+	border-color: var(--operon-task-creator-control-hover-border);
+	background: var(--operon-task-creator-control-hover-bg);
+	background-color: var(--operon-task-creator-control-hover-bg);
+	box-shadow: 0 0 0 2px var(--operon-task-creator-control-focus-ring);
+	outline: none;
 }
 
 .operon-task-creator-action.is-primary {
 	border-color: var(--operon-task-creator-accent);
-	background: var(--operon-task-creator-accent);
-	color: var(--text-on-accent);
+	color: var(--operon-task-creator-accent);
 }
 
 .operon-task-creator-action:disabled {
-	opacity: 0.6;
+	opacity: 0.58;
 	cursor: default;
-	transform: none;
+	box-shadow: none;
 }
 
 .operon-task-creator-action.is-cancel {
@@ -4144,6 +4680,9 @@ body .modal.operon-task-finder-modal .modal-close-button {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+	height: 36px;
+	min-height: 36px;
+	padding: 0 14px;
 	text-align: center;
 }
 
@@ -4163,8 +4702,8 @@ body .modal.operon-task-finder-modal .modal-close-button {
 
 .operon-task-creator-template-action.is-active,
 .operon-task-creator-template-action.is-picker-open {
-	border-color: color-mix(in srgb, var(--operon-task-creator-accent) 42%, var(--background-modifier-border));
-	background: color-mix(in srgb, var(--operon-task-creator-accent) 12%, var(--background-secondary));
+	border-color: var(--operon-task-creator-control-hover-border);
+	color: var(--operon-task-creator-accent);
 }
 
 .operon-task-creator-native-color-input {
@@ -4288,14 +4827,10 @@ body .modal.operon-task-finder-modal .modal-close-button {
 }
 
 .operon-task-creator-modal-mobile .operon-task-creator-tool {
-	flex: 0 0 36px;
-	width: 36px;
-	height: 36px;
-	border-radius: 8px;
-}
-
-.operon-task-creator-modal-mobile .operon-task-creator-tool:hover {
-	transform: none;
+	flex: 0 0 34px;
+	width: 34px;
+	height: 34px;
+	border-radius: var(--operon-task-creator-control-radius);
 }
 
 .operon-task-creator-modal-mobile .operon-task-creator-tool-icon,
@@ -4320,9 +4855,10 @@ body .modal.operon-task-finder-modal .modal-close-button {
 }
 
 .operon-task-creator-modal-mobile .operon-task-creator-action {
+	height: 34px;
 	min-height: 34px;
-	padding: 7px 10px;
-	border-radius: 8px;
+	padding: 0 10px;
+	border-radius: var(--operon-task-creator-control-radius);
 	font-size: 13px;
 	line-height: 1.2;
 	white-space: nowrap;
@@ -4339,6 +4875,7 @@ body .modal.operon-task-finder-modal .modal-close-button {
 
 .operon-task-creator-modal-mobile .operon-task-creator-template-action {
 	min-width: 0;
+	height: 34px;
 	width: auto;
 	max-width: min(128px, 34vw);
 	flex: 1 1 auto;
@@ -4870,6 +5407,99 @@ body .modal.operon-task-finder-modal .modal-close-button {
 	text-overflow: ellipsis;
 }
 
+.operon-custom-list-picker-selected-wrap {
+	display: none;
+	width: 100%;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.operon-custom-list-picker-selected-wrap.is-visible {
+	display: flex;
+}
+
+.operon-custom-list-picker-chip {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	width: 100%;
+	padding: 8px 10px 8px 12px;
+	border: 1px solid color-mix(in srgb, var(--interactive-accent) 24%, var(--background-modifier-border));
+	border-radius: var(--radius-m);
+	background: color-mix(in srgb, var(--interactive-accent) 14%, var(--background-primary));
+	box-sizing: border-box;
+	color: var(--text-normal);
+}
+
+.operon-custom-list-picker-chip-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 13px;
+	font-weight: 600;
+	line-height: 1.35;
+}
+
+.operon-custom-list-picker-chip-remove {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 20px;
+	height: 20px;
+	padding: 0;
+	border: none;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+	font-size: 14px;
+	line-height: 1;
+}
+
+.operon-custom-list-picker-chip-remove:hover {
+	background: color-mix(in srgb, var(--text-muted) 20%, transparent);
+	color: var(--text-normal);
+}
+
+.operon-custom-list-picker-suggestions {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	max-height: min(320px, 48vh);
+	overflow-y: auto;
+}
+
+.operon-custom-list-picker-option {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	text-align: left;
+}
+
+.operon-custom-list-picker-option-label {
+	width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--text-normal);
+	font-weight: 400;
+	text-align: left;
+}
+
+.operon-custom-list-picker-actions {
+	justify-content: space-between;
+}
+
+.operon-custom-list-picker-count {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--text-muted);
+	white-space: nowrap;
+}
+
 /* ========================================
    Task Editor Modal
    ======================================== */
@@ -5255,7 +5885,18 @@ body .modal.operon-task-finder-modal .modal-close-button {
 	border: none;
 }
 
+.operon-task-editor-mobile-workflow .operon-task-editor-workflow-values > .setting-item {
+	display: block;
+	padding: 0;
+	border: none;
+}
+
 .operon-task-editor-mobile-workflow > .setting-item .setting-item-control {
+	width: 100%;
+	max-width: 100%;
+}
+
+.operon-task-editor-mobile-workflow .operon-task-editor-workflow-values > .setting-item .setting-item-control {
 	width: 100%;
 	max-width: 100%;
 }
@@ -6007,6 +6648,7 @@ body .modal.operon-task-finder-modal .modal-close-button {
 
 .operon-task-editor-file-source-editor {
 	--operon-file-active-line-bg: color-mix(in srgb, var(--text-normal) 4%, transparent);
+	--operon-file-fold-gutter: 14px;
 	display: flex;
 	flex: 1 1 auto;
 	min-height: 0;
@@ -6039,6 +6681,16 @@ body .modal.operon-task-finder-modal .modal-close-button {
 
 .modal.operon-task-editor-modal .operon-task-editor-file-source-editor button.operon-live-preview-edit {
 	height: auto;
+}
+
+.modal.operon-task-editor-modal .operon-task-editor-file-source-editor .operon-filter-surface.operon-task-chip-surface :is(
+	button.operon-live-preview-chip,
+	button.operon-live-preview-edit,
+	.operon-task-chip,
+	.operon-task-chip-action
+) {
+	height: var(--operon-task-chip-height, 24px);
+	min-height: var(--operon-task-chip-height, 24px);
 }
 
 body .operon-task-editor-file-panel .operon-task-editor-file-source-editor.markdown-source-view.mod-cm6 .cm-gutters,
@@ -6098,11 +6750,32 @@ body .operon-task-editor-file-panel .operon-task-editor-file-source-editor.markd
 .operon-task-editor-file-source-editor .cm-content {
 	flex: 1 1 0;
 	width: 100%;
-	padding: 0 0 0 var(--operon-file-content-inset, 0px);
+	padding: 0 0 0 calc(var(--operon-file-content-inset, 0px) + var(--operon-file-fold-gutter, 14px));
 	min-width: 0;
 	max-width: 100%;
 	box-sizing: border-box;
 	overflow: visible;
+}
+
+body .operon-task-editor-file-panel .operon-task-editor-file-source-editor.markdown-source-view.mod-cm6 .cm-line.HyperMD-header .cm-fold-indicator {
+	margin-inline-start: var(--operon-file-fold-gutter, 14px);
+	margin-inline-end: 2px;
+}
+
+body .operon-task-editor-file-panel .operon-task-editor-file-source-editor.markdown-source-view.mod-cm6 .cm-line.HyperMD-header .cm-fold-indicator .collapse-indicator,
+.operon-task-editor-file-source-editor .cm-line.HyperMD-header .cm-fold-indicator .collapse-indicator {
+	color: color-mix(in srgb, var(--text-muted) 86%, var(--text-normal));
+	opacity: 1;
+	--collapse-icon-color: color-mix(in srgb, var(--text-muted) 86%, var(--text-normal));
+	--nav-collapse-icon-color: color-mix(in srgb, var(--text-muted) 86%, var(--text-normal));
+}
+
+body .operon-task-editor-file-panel .operon-task-editor-file-source-editor.markdown-source-view.mod-cm6 .cm-line.HyperMD-header .cm-fold-indicator .collapse-indicator:is(:hover, :focus-visible),
+.operon-task-editor-file-source-editor .cm-line.HyperMD-header .cm-fold-indicator .collapse-indicator:is(:hover, :focus-visible) {
+	color: var(--text-normal);
+	opacity: 1;
+	--collapse-icon-color: var(--text-normal);
+	--nav-collapse-icon-color: var(--text-normal);
 }
 
 .operon-task-editor-file-source-editor .cm-content .cm-line {
@@ -7692,6 +8365,97 @@ body .operon-task-editor-file-panel .operon-task-editor-file-source-editor.markd
 	min-width: 0;
 }
 
+.operon-task-editor-workflow-surface {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	gap: 10px;
+	margin: 14px 0 16px;
+	padding: 10px 18px 14px;
+	border-top: none;
+	border-radius: 12px;
+	background: color-mix(in srgb, var(--background-secondary) 55%, transparent);
+}
+
+.operon-task-editor-workflow-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	min-width: 0;
+	margin-bottom: 2px;
+}
+
+.operon-task-editor-workflow-title {
+	margin: 0;
+}
+
+.operon-task-editor-workflow-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	min-width: 0;
+	padding: 2px 0 4px;
+}
+
+.operon-task-editor-workflow-action-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 36px;
+	width: 36px;
+	height: 36px;
+	padding: 0;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	background: var(--background-primary);
+	color: var(--text-muted);
+	cursor: pointer;
+	box-shadow: none;
+	appearance: none;
+	-webkit-appearance: none;
+	transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+
+.operon-task-editor-workflow-action-button:hover,
+.operon-task-editor-workflow-action-button:focus-visible,
+.operon-task-editor-workflow-action-button.is-picker-open {
+	border-color: color-mix(in srgb, var(--operon-task-editor-accent, var(--interactive-accent)) 36%, var(--background-modifier-border));
+	background: color-mix(in srgb, var(--operon-task-editor-accent, var(--interactive-accent)) 8%, var(--background-primary));
+	color: var(--text-normal);
+	transform: none;
+}
+
+.operon-task-editor-workflow-action-button.is-active {
+	border-color: color-mix(in srgb, var(--operon-task-editor-accent, var(--interactive-accent)) 42%, var(--background-modifier-border));
+	background: color-mix(in srgb, var(--operon-task-editor-accent, var(--interactive-accent)) 12%, var(--background-primary));
+	color: var(--operon-task-editor-accent, var(--interactive-accent));
+}
+
+.operon-task-editor-workflow-action-button.is-locked {
+	opacity: 0.55;
+	cursor: default;
+}
+
+.operon-task-editor-workflow-action-icon,
+.operon-task-editor-workflow-action-icon-placeholder,
+.operon-task-editor-workflow-action-button svg {
+	width: 16px;
+	height: 16px;
+	flex: 0 0 16px;
+}
+
+.operon-task-editor-workflow-values {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+}
+
+.operon-task-editor-workflow-values.is-empty {
+	display: none;
+}
+
 .operon-editor-picker-selected.is-empty {
 	display: none;
 }
@@ -7927,7 +8691,28 @@ body .operon-task-editor-file-panel .operon-task-editor-file-source-editor.markd
 	.operon-links-setting,
 	.operon-dependency-setting,
 	.operon-location-setting,
-	.operon-editor-parent-setting
+	.operon-editor-parent-setting,
+	.operon-editor-custom-field-setting
+) {
+	border-left: none;
+	border-right: none;
+	border-bottom: none;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	outline: none;
+}
+
+.operon-task-editor-workflow-values > :is(
+	.operon-contexts-setting,
+	.operon-tags-setting,
+	.operon-assignees-setting,
+	.operon-links-setting,
+	.operon-dependency-setting,
+	.operon-location-setting,
+	.operon-editor-parent-setting,
+	.operon-editor-custom-field-setting,
+	.operon-related-setting
 ) {
 	border-left: none;
 	border-right: none;
@@ -7949,7 +8734,9 @@ body .operon-task-editor-file-panel .operon-task-editor-file-source-editor.markd
 .operon-editor-location-selection-row,
 .operon-editor-task-selection-row,
 .operon-editor-context-selection-row,
-.operon-editor-tag-selection-row {
+.operon-editor-tag-selection-row,
+.operon-editor-related-selection-row,
+.operon-editor-custom-field-selection-row {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px;
@@ -8883,19 +9670,25 @@ body .operon-task-editor-file-panel .operon-task-editor-file-source-editor.markd
 
 /* Single horizontal row: [grip] [title] [cards...] [collapse] [close] */
 .operon-pinned-dock {
+	--operon-pinned-dock-control-radius: 8px;
+	--operon-pinned-dock-control-border: color-mix(in srgb, var(--text-muted) 26%, var(--background-modifier-border));
+	--operon-pinned-dock-control-hover-border: color-mix(in srgb, var(--operon-card-color, var(--interactive-accent)) 38%, var(--background-modifier-border));
+	--operon-pinned-dock-control-focus-ring: color-mix(in srgb, var(--operon-card-color, var(--interactive-accent)) 12%, transparent);
+	--operon-pinned-dock-card-border: color-mix(in srgb, var(--background-modifier-border) 88%, transparent);
 	position: fixed;
 	z-index: 999;
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	background: var(--background-primary);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: 10px;
-	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-	padding: 4px 6px;
-	gap: 4px;
+	background: color-mix(in srgb, var(--background-primary) 94%, transparent);
+	border: 1px solid color-mix(in srgb, var(--background-modifier-border) 88%, transparent);
+	border-radius: 12px;
+	box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
+	padding: 8px;
+	gap: 8px;
 	max-width: 90vw;
 	user-select: none;
+	backdrop-filter: blur(12px);
 }
 
 .operon-pinned-dock.is-hidden {
@@ -8963,7 +9756,7 @@ body .operon-task-editor-file-panel .operon-task-editor-file-source-editor.markd
 .operon-pinned-dock-header {
 	display: flex;
 	align-items: center;
-	gap: 4px;
+	gap: 6px;
 	flex-shrink: 0;
 }
 
@@ -8972,7 +9765,12 @@ body .operon-task-editor-file-panel .operon-task-editor-file-source-editor.markd
 	color: var(--text-muted);
 	display: flex;
 	align-items: center;
-	padding: 4px 6px;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border: 1px solid transparent;
+	border-radius: var(--operon-pinned-dock-control-radius);
 }
 
 .operon-pinned-dock-drag-handle:active {
@@ -8980,8 +9778,8 @@ body .operon-task-editor-file-panel .operon-task-editor-file-source-editor.markd
 }
 
 .operon-pinned-dock-drag-handle svg {
-	width: 16px;
-	height: 16px;
+	width: 18px;
+	height: 18px;
 }
 
 .operon-pinned-dock-title {
@@ -9036,7 +9834,7 @@ body .operon-task-editor-file-panel .operon-task-editor-file-source-editor.markd
 /* Cards container — layout variants */
 .operon-pinned-cards {
 	display: flex;
-	gap: 4px;
+	gap: 8px;
 	align-items: center;
 }
 
@@ -9064,22 +9862,24 @@ body .operon-task-editor-file-panel .operon-task-editor-file-source-editor.markd
 	grid-template-columns: repeat(var(--operon-grid-cols, 2), minmax(0, var(--operon-pinned-item-width, 240px)));
 	overflow-y: auto;
 	max-height: 60vh;
-	max-width: min(calc(var(--operon-grid-cols, 2) * var(--operon-pinned-item-width, 240px) + (var(--operon-grid-cols, 2) - 1) * 4px), 80vw);
+	max-width: min(calc(var(--operon-grid-cols, 2) * var(--operon-pinned-item-width, 240px) + (var(--operon-grid-cols, 2) - 1) * 8px), 80vw);
 }
 
 .operon-pinned-card {
 	display: flex;
 	align-items: center;
-	gap: 4px;
+	gap: 9px;
 	width: var(--operon-pinned-item-width, 240px);
-	padding: 3px 8px;
-	border-radius: 6px;
-	border: 1px solid var(--background-modifier-border);
-	background: var(--background-primary);
+	min-height: 44px;
+	padding: 7px 9px;
+	border-radius: var(--operon-pinned-dock-control-radius);
+	border: 1px solid var(--operon-pinned-dock-card-border);
+	background: var(--operon-pinned-card-bg, transparent);
+	background-color: var(--operon-pinned-card-bg, transparent);
 	cursor: default;
 	flex-shrink: 0;
 	box-sizing: border-box;
-	transition: background-color 0.15s ease, border-color 0.15s ease;
+	transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 	position: relative;
 }
 
@@ -9089,8 +9889,10 @@ body .operon-task-editor-file-panel .operon-task-editor-file-source-editor.markd
 }
 
 .operon-pinned-card:hover {
-	background: var(--background-secondary);
-	border-color: var(--operon-card-color, var(--interactive-accent));
+	background: var(--operon-pinned-card-bg, transparent);
+	background-color: var(--operon-pinned-card-bg, transparent);
+	border-color: var(--operon-pinned-card-hover-border, var(--operon-pinned-dock-control-hover-border));
+	box-shadow: 0 0 0 2px var(--operon-pinned-dock-control-focus-ring);
 }
 
 /* Status icon button (left of description) */
@@ -9099,31 +9901,42 @@ button.operon-pinned-timer,
 button.operon-pinned-unpin {
 	appearance: none;
 	-webkit-appearance: none;
-	background: none;
+	background: transparent;
 	background-color: transparent;
 	background-image: none;
-	border: none;
+	border: 1px solid transparent;
+	border-radius: var(--operon-pinned-dock-control-radius);
 	box-shadow: none;
-	height: auto;
-	min-height: 0;
-	min-width: 0;
+	box-sizing: border-box;
+	filter: none;
 	outline: none;
 }
 
-.operon-pinned-status {
+button.operon-pinned-status {
 	cursor: pointer;
 	padding: 0;
 	margin: 0;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	flex-shrink: 0;
+	flex: 0 0 28px;
 	line-height: 1;
-	width: 18px;
-	height: 18px;
+	width: 28px;
+	height: 28px;
+	border-color: color-mix(in srgb, currentColor 42%, var(--background-modifier-border));
+	transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease, color 0.12s ease;
 }
 
-.operon-pinned-status svg {
+button.operon-pinned-status:hover,
+button.operon-pinned-status:focus-visible {
+	border-color: currentColor;
+	background: transparent;
+	background-color: transparent;
+	box-shadow: 0 0 0 2px var(--operon-pinned-dock-control-focus-ring);
+	outline: none;
+}
+
+button.operon-pinned-status svg {
 	width: 16px;
 	height: 16px;
 }
@@ -9131,7 +9944,8 @@ button.operon-pinned-unpin {
 /* Description */
 .operon-pinned-desc {
 	display: block;
-	font-size: 12px;
+	font-size: var(--font-ui-small);
+	font-weight: 500;
 	flex: 1 1 auto;
 	width: 0;
 	min-width: 0;
@@ -9140,24 +9954,24 @@ button.operon-pinned-unpin {
 	text-overflow: ellipsis;
 	max-width: none;
 	cursor: pointer;
-	transition: padding-right 0.15s ease;
+	color: var(--text-muted);
+	line-height: 1.35;
+	transition: color 0.12s ease;
 }
 
 .operon-pinned-card--tracking .operon-pinned-desc {
-	padding-right: 18px;
+	font-weight: 550;
 }
 
-.operon-pinned-card:hover .operon-pinned-desc {
-	padding-right: 42px;
-}
-
+.operon-pinned-card:hover .operon-pinned-desc,
 .operon-pinned-desc:hover {
-	text-decoration: underline;
+	color: var(--operon-pinned-card-hover-border, var(--operon-pinned-dock-control-hover-border));
+	text-decoration: none;
 }
 
-/* Timer play/stop button (right of description) — hidden until hover */
-.operon-pinned-timer {
-	right: 8px;
+/* Timer play/stop button (right of description) */
+button.operon-pinned-timer,
+button.operon-pinned-unpin {
 	cursor: pointer;
 	padding: 0;
 	margin: 0;
@@ -9166,69 +9980,50 @@ button.operon-pinned-unpin {
 	justify-content: center;
 	line-height: 1;
 	color: var(--text-muted);
-	width: 16px;
-	height: 16px;
-	opacity: 0;
-	pointer-events: none;
-	position: absolute;
-	top: 50%;
-	transform: translateY(-50%);
-	transition: opacity 0.15s ease, color 0.15s ease;
-	z-index: 1;
-}
-
-.operon-pinned-card:hover .operon-pinned-timer {
+	width: 28px;
+	height: 28px;
+	min-width: 28px;
+	min-height: 28px;
+	border-color: var(--operon-pinned-dock-control-border);
 	opacity: 1;
 	pointer-events: auto;
+	position: static;
+	transform: none;
+	transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease, color 0.12s ease;
+	z-index: auto;
+}
+
+button.operon-pinned-timer:hover,
+button.operon-pinned-timer:focus-visible {
+	border-color: var(--operon-pinned-dock-control-hover-border);
+	background: transparent;
+	background-color: transparent;
+	box-shadow: 0 0 0 2px var(--operon-pinned-dock-control-focus-ring);
+	color: var(--operon-pinned-card-hover-border, var(--operon-card-color, var(--interactive-accent)));
+	outline: none;
 }
 
 .operon-pinned-timer.is-active {
-	opacity: 1;
 	color: var(--text-error);
-	pointer-events: auto;
+	border-color: color-mix(in srgb, var(--text-error) 70%, var(--background-modifier-border));
 }
 
-.operon-pinned-timer:hover {
-	color: var(--text-error);
-}
-
-.operon-pinned-timer svg {
+button.operon-pinned-timer svg {
 	width: 14px;
 	height: 14px;
 }
 
-/* Unpin button (left of timer) — visible on hover */
-.operon-pinned-unpin {
-	cursor: pointer;
-	padding: 0;
-	margin: 0;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	line-height: 1;
-	color: var(--text-muted);
-	width: 16px;
-	height: 16px;
-	opacity: 0;
-	pointer-events: none;
-	position: absolute;
-	top: 50%;
-	right: 28px;
-	transform: translateY(-50%);
-	transition: opacity 0.15s ease, color 0.15s ease;
-	z-index: 1;
-}
-
-.operon-pinned-card:hover .operon-pinned-unpin {
-	opacity: 1;
-	pointer-events: auto;
-}
-
-.operon-pinned-unpin:hover {
+button.operon-pinned-unpin:hover,
+button.operon-pinned-unpin:focus-visible {
+	border-color: var(--operon-pinned-dock-control-hover-border);
+	background: transparent;
+	background-color: transparent;
+	box-shadow: 0 0 0 2px var(--operon-pinned-dock-control-focus-ring);
 	color: var(--text-error);
+	outline: none;
 }
 
-.operon-pinned-unpin svg {
+button.operon-pinned-unpin svg {
 	width: 14px;
 	height: 14px;
 }
@@ -9246,10 +10041,15 @@ button.operon-pinned-unpin {
    ======================================== */
 
 .operon-pinned-sidebar-view {
+	--operon-pinned-sidebar-control-radius: 8px;
+	--operon-pinned-sidebar-control-border: color-mix(in srgb, var(--text-muted) 26%, var(--background-modifier-border));
+	--operon-pinned-sidebar-control-hover-border: color-mix(in srgb, var(--operon-card-color, var(--interactive-accent)) 38%, var(--background-modifier-border));
+	--operon-pinned-sidebar-control-focus-ring: color-mix(in srgb, var(--operon-card-color, var(--interactive-accent)) 12%, transparent);
+	--operon-pinned-sidebar-row-border: color-mix(in srgb, var(--background-modifier-border) 88%, transparent);
 	display: flex;
 	flex-direction: column;
 	height: 100%;
-	padding: 8px;
+	padding: 10px;
 	box-sizing: border-box;
 	overflow: hidden;
 }
@@ -9257,7 +10057,7 @@ button.operon-pinned-unpin {
 .operon-pinned-sidebar-list {
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
+	gap: 8px;
 	min-height: 0;
 	overflow-y: auto;
 	padding-right: 2px;
@@ -9266,26 +10066,52 @@ button.operon-pinned-unpin {
 .operon-pinned-sidebar-row {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: 9px;
 	width: 100%;
-	min-height: 32px;
-	padding: 5px 8px;
-	border: 1px solid var(--background-modifier-border);
-	border-radius: 6px;
-	background: var(--background-primary);
+	min-height: 44px;
+	padding: 7px 9px;
+	border: 1px solid var(--operon-pinned-sidebar-row-border);
+	border-radius: var(--operon-pinned-sidebar-control-radius);
+	background: var(--operon-pinned-sidebar-row-bg, transparent);
+	background-color: var(--operon-pinned-sidebar-row-bg, transparent);
 	box-sizing: border-box;
 	cursor: default;
-	transition: background-color 0.15s ease, border-color 0.15s ease;
+	transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .operon-pinned-sidebar-row:hover,
 .operon-pinned-sidebar-row:focus-within {
-	background: var(--background-secondary);
-	border-color: var(--operon-card-color, var(--interactive-accent));
+	background: var(--operon-pinned-sidebar-row-bg, transparent);
+	background-color: var(--operon-pinned-sidebar-row-bg, transparent);
+	border-color: var(--operon-pinned-sidebar-row-hover-border, var(--operon-pinned-sidebar-control-hover-border));
+	box-shadow: 0 0 0 2px var(--operon-pinned-sidebar-control-focus-ring);
 }
 
-.operon-pinned-sidebar-status {
-	flex-shrink: 0;
+button.operon-pinned-sidebar-status {
+	flex: 0 0 28px;
+	width: 28px;
+	height: 28px;
+	border: 1px solid color-mix(in srgb, currentColor 42%, var(--background-modifier-border));
+	border-radius: var(--operon-pinned-sidebar-control-radius);
+	background: transparent;
+	background-color: transparent;
+	box-shadow: none;
+	box-sizing: border-box;
+	transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease, color 0.12s ease;
+}
+
+button.operon-pinned-sidebar-status:hover,
+button.operon-pinned-sidebar-status:focus-visible {
+	border-color: currentColor;
+	background: transparent;
+	background-color: transparent;
+	box-shadow: 0 0 0 2px var(--operon-pinned-sidebar-control-focus-ring);
+	outline: none;
+}
+
+button.operon-pinned-sidebar-status svg {
+	width: 16px;
+	height: 16px;
 }
 
 .operon-pinned-sidebar-desc {
@@ -9295,17 +10121,24 @@ button.operon-pinned-unpin {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	font-size: 12px;
+	font-size: var(--font-ui-small);
+	font-weight: 500;
 	line-height: 1.35;
 	cursor: pointer;
+	color: var(--text-muted);
+	transition: color 0.12s ease;
 }
 
+.operon-pinned-sidebar-row:hover .operon-pinned-sidebar-desc,
+.operon-pinned-sidebar-row:focus-within .operon-pinned-sidebar-desc,
 .operon-pinned-sidebar-desc:hover {
-	text-decoration: underline;
+	color: var(--operon-pinned-sidebar-row-hover-border, var(--operon-pinned-sidebar-control-hover-border));
+	text-decoration: none;
 }
 
 .operon-pinned-sidebar-desc:focus-visible {
-	outline: 2px solid var(--interactive-accent);
+	color: var(--operon-pinned-sidebar-row-hover-border, var(--operon-pinned-sidebar-control-hover-border));
+	outline: 2px solid var(--operon-pinned-sidebar-row-hover-border, var(--operon-pinned-sidebar-control-hover-border));
 	outline-offset: 2px;
 	border-radius: 4px;
 }
@@ -9313,7 +10146,7 @@ button.operon-pinned-unpin {
 .operon-pinned-sidebar-actions {
 	display: inline-flex;
 	align-items: center;
-	gap: 3px;
+	gap: 6px;
 	flex-shrink: 0;
 }
 
@@ -9323,24 +10156,32 @@ button.operon-pinned-sidebar-action {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	width: 22px;
-	height: 22px;
-	min-width: 22px;
-	min-height: 22px;
+	width: 28px;
+	height: 28px;
+	min-width: 28px;
+	min-height: 28px;
 	padding: 0;
 	margin: 0;
-	border: none;
-	border-radius: 5px;
+	border: 1px solid var(--operon-pinned-sidebar-control-border);
+	border-radius: var(--operon-pinned-sidebar-control-radius);
 	background: transparent;
+	background-color: transparent;
 	box-shadow: none;
 	color: var(--text-muted);
 	cursor: pointer;
+	box-sizing: border-box;
+	filter: none;
+	transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease, color 0.12s ease;
 }
 
 button.operon-pinned-sidebar-action:hover,
 button.operon-pinned-sidebar-action:focus-visible {
-	background: var(--background-modifier-hover);
+	border-color: var(--operon-pinned-sidebar-control-hover-border);
+	background: transparent;
+	background-color: transparent;
+	box-shadow: 0 0 0 2px var(--operon-pinned-sidebar-control-focus-ring);
 	color: var(--operon-card-color, var(--interactive-accent));
+	outline: none;
 }
 
 button.operon-pinned-sidebar-action svg {
@@ -9348,12 +10189,18 @@ button.operon-pinned-sidebar-action svg {
 	height: 14px;
 }
 
-.operon-pinned-sidebar-timer.is-active {
+.operon-pinned-sidebar-unpin:hover,
+.operon-pinned-sidebar-unpin:focus-visible {
 	color: var(--text-error);
 }
 
+.operon-pinned-sidebar-timer.is-active {
+	color: var(--text-error);
+	border-color: color-mix(in srgb, var(--text-error) 70%, var(--background-modifier-border));
+}
+
 .operon-pinned-sidebar-row--tracking .operon-pinned-sidebar-desc {
-	font-weight: 600;
+	font-weight: 550;
 }
 
 .operon-pinned-sidebar-empty {
@@ -9372,8 +10219,8 @@ button.operon-pinned-sidebar-action svg {
 	}
 
 	.operon-pinned-sidebar-row {
-		min-height: 40px;
-		padding: 7px 9px;
+		min-height: 46px;
+		padding: 8px 10px;
 	}
 
 	.operon-pinned-sidebar-desc {
@@ -9896,7 +10743,7 @@ button.operon-pinned-sidebar-action svg {
 	display: inline-flex;
 	align-items: center;
 	justify-content: flex-start;
-	min-width: 28px;
+	min-width: 2.5ch;
 	font-size: 10px;
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
@@ -10932,10 +11779,29 @@ button.operon-pinned-sidebar-action svg {
 /* --- Time Session History sidebar view --- */
 
 .operon-time-session-history-view {
+	--operon-time-session-history-accent: var(--interactive-accent);
+	--operon-time-session-history-control-radius: 8px;
+	--operon-time-session-history-control-border: color-mix(in srgb, var(--text-muted) 28%, var(--background-modifier-border));
+	--operon-time-session-history-control-hover-border: color-mix(in srgb, var(--operon-time-session-history-accent) 34%, var(--background-modifier-border));
+	--operon-time-session-history-control-focus-ring: color-mix(in srgb, var(--operon-time-session-history-accent) 12%, transparent);
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
 	padding: 10px;
+}
+
+.operon-time-session-history-view button:is(
+	.operon-time-session-history-task-icon,
+	.operon-time-session-history-session-play,
+	.operon-time-session-history-session-settings,
+	.operon-time-session-history-session-delete
+) {
+	appearance: none;
+	-webkit-appearance: none;
+	background: transparent;
+	background-color: transparent;
+	box-shadow: none;
+	filter: none;
 }
 
 .operon-time-session-history-session-card {
@@ -10951,6 +11817,14 @@ button.operon-pinned-sidebar-action svg {
 	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
+.operon-time-session-history-session-card.is-terminal-task {
+	border-color: color-mix(in srgb, var(--operon-tracker-card-border, var(--background-modifier-border)) 58%, var(--background-modifier-border));
+}
+
+.operon-time-session-history-session-card.is-terminal-task:hover {
+	border-color: color-mix(in srgb, var(--operon-tracker-card-border, var(--interactive-accent)) 72%, var(--background-modifier-border));
+}
+
 .operon-time-session-history-task-row {
 	display: flex;
 	align-items: center;
@@ -10959,27 +11833,34 @@ button.operon-pinned-sidebar-action svg {
 }
 
 .operon-time-session-history-task-icon {
-	width: 24px;
-	height: 24px;
-	border-radius: 6px;
-	border: 1px solid var(--background-modifier-border);
-	background: var(--background-secondary);
+	width: 28px;
+	height: 28px;
+	border-radius: var(--operon-time-session-history-control-radius);
+	border: 1px solid color-mix(in srgb, var(--operon-tracker-icon-hover-border, var(--text-muted)) 42%, var(--background-modifier-border));
+	background: transparent;
+	background-color: transparent;
 	color: var(--operon-live-icon-color, var(--text-muted));
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	flex: 0 0 auto;
+	flex: 0 0 28px;
 	cursor: pointer;
-	transition: border-color 0.12s ease;
+	box-shadow: none;
+	transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease, color 0.12s ease;
 }
 
-.operon-time-session-history-task-icon:hover {
+.operon-time-session-history-task-icon:hover,
+.operon-time-session-history-task-icon:focus-visible {
 	border-color: var(--operon-tracker-icon-hover-border, var(--text-muted));
+	background: transparent;
+	background-color: transparent;
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--operon-tracker-icon-hover-border, var(--operon-time-session-history-accent)) 12%, transparent);
+	outline: none;
 }
 
 .operon-time-session-history-task-icon svg {
-	width: 14px;
-	height: 14px;
+	width: 16px;
+	height: 16px;
 }
 
 .operon-time-session-history-task-desc {
@@ -10991,6 +11872,7 @@ button.operon-pinned-sidebar-action svg {
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+	text-align: center;
 	transition: color 0.12s ease;
 }
 
@@ -11011,8 +11893,8 @@ button.operon-pinned-sidebar-action svg {
 	min-width: 28px;
 	min-height: 28px;
 	padding: 0;
-	border: none;
-	border-radius: 6px;
+	border: 1px solid var(--operon-time-session-history-control-border);
+	border-radius: var(--operon-time-session-history-control-radius);
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -11024,7 +11906,7 @@ button.operon-pinned-sidebar-action svg {
 	overflow: hidden;
 	line-height: 1;
 	box-shadow: none;
-	transition: background-color 0.12s ease, color 0.12s ease, opacity 0.15s ease;
+	transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease, color 0.12s ease, opacity 0.15s ease;
 }
 
 .operon-time-session-history-session-play svg,
@@ -11037,34 +11919,62 @@ button.operon-pinned-sidebar-action svg {
 .operon-time-session-history-session-play,
 .operon-time-session-history-session-settings {
 	background: transparent;
+	background-color: transparent;
 	color: var(--text-muted);
-	opacity: 0;
-}
-
-.operon-time-session-history-session-play:hover {
-	background: var(--text-error);
-	color: white;
-}
-
-.operon-time-session-history-session-settings:hover {
-	background: var(--background-modifier-hover);
-	color: var(--text-normal);
-}
-
-.operon-time-session-history-session-card:hover .operon-time-session-history-session-play,
-.operon-time-session-history-session-card:hover .operon-time-session-history-session-settings,
-.operon-time-session-history-session-card:focus-within .operon-time-session-history-session-play,
-.operon-time-session-history-session-card:focus-within .operon-time-session-history-session-settings,
-.operon-time-session-history-session-play:focus-visible,
-.operon-time-session-history-session-settings:focus-visible {
 	opacity: 1;
 }
 
-@media (hover: none), (pointer: coarse) {
-	.operon-time-session-history-session-play,
-	.operon-time-session-history-session-settings {
-		opacity: 1;
-	}
+.operon-time-session-history-session-play {
+	border-color: var(--operon-time-session-history-control-hover-border);
+	color: var(--operon-time-session-history-accent);
+}
+
+.operon-time-session-history-session-play:hover,
+.operon-time-session-history-session-play:focus-visible {
+	border-color: var(--operon-time-session-history-accent);
+	background: transparent;
+	background-color: transparent;
+	box-shadow: 0 0 0 2px var(--operon-time-session-history-control-focus-ring);
+	color: var(--operon-time-session-history-accent);
+	outline: none;
+}
+
+.operon-time-session-history-session-play.is-terminal-task {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.operon-time-session-history-session-card:hover .operon-time-session-history-session-play.is-terminal-task,
+.operon-time-session-history-session-card:focus-within .operon-time-session-history-session-play.is-terminal-task,
+.operon-time-session-history-session-play.is-terminal-task:focus-visible {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.operon-time-session-history-session-settings:hover,
+.operon-time-session-history-session-settings:focus-visible {
+	border-color: var(--operon-time-session-history-control-hover-border);
+	background: transparent;
+	background-color: transparent;
+	box-shadow: 0 0 0 2px var(--operon-time-session-history-control-focus-ring);
+	color: var(--text-normal);
+	outline: none;
+}
+
+.operon-time-session-history-session-settings,
+.operon-time-session-history-session-count {
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 0.15s ease, border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease, color 0.12s ease;
+}
+
+.operon-time-session-history-session-card:hover .operon-time-session-history-session-settings,
+.operon-time-session-history-session-card:hover .operon-time-session-history-session-count,
+.operon-time-session-history-session-card:focus-within .operon-time-session-history-session-settings,
+.operon-time-session-history-session-card:focus-within .operon-time-session-history-session-count,
+.operon-time-session-history-session-settings:focus-visible {
+	opacity: 1;
+	pointer-events: auto;
 }
 
 .operon-time-session-history-session-interval {
@@ -11073,7 +11983,29 @@ button.operon-pinned-sidebar-action svg {
 	font-size: var(--font-ui-smaller);
 }
 
+.operon-time-session-history-session-count {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	justify-self: start;
+	min-width: 38px;
+	height: 28px;
+	padding: 0 8px;
+	border: 1px solid var(--operon-time-session-history-control-border);
+	border-radius: var(--operon-time-session-history-control-radius);
+	background: transparent;
+	background-color: transparent;
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+	box-sizing: border-box;
+}
+
 .operon-time-session-history-view button.operon-time-session-history-session-interval-button {
+	justify-self: center;
+	min-width: 0;
 	margin-top: 0;
 	padding: 0;
 	border: 0;
@@ -11088,6 +12020,7 @@ button.operon-pinned-sidebar-action svg {
 	gap: 5px;
 	width: fit-content;
 	max-width: 100%;
+	overflow: hidden;
 	color: var(--text-muted);
 	font-family: inherit;
 	font-size: var(--font-ui-smaller);
@@ -11100,6 +12033,8 @@ button.operon-pinned-sidebar-action svg {
 }
 
 .operon-time-session-history-view button.operon-time-session-history-session-interval-button:hover,
+.operon-time-session-history-session-card:hover .operon-time-session-history-session-interval-button,
+.operon-time-session-history-session-card:focus-within .operon-time-session-history-session-interval-button,
 .operon-time-session-history-view button.operon-time-session-history-session-interval-button:focus-visible {
 	background: transparent;
 	background-image: none;
@@ -11110,6 +12045,42 @@ button.operon-pinned-sidebar-action svg {
 	text-decoration: none;
 	transform: none;
 	outline: none;
+}
+
+.operon-time-session-history-session-interval-primary {
+	display: inline-flex;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	line-height: 1.4;
+}
+
+.operon-time-session-history-session-interval-detail {
+	display: none;
+	align-items: center;
+	gap: 5px;
+	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
+}
+
+.operon-time-session-history-view button.operon-time-session-history-session-interval-button:hover .operon-time-session-history-session-interval-primary,
+.operon-time-session-history-session-card:hover .operon-time-session-history-session-interval-primary,
+.operon-time-session-history-session-card:focus-within .operon-time-session-history-session-interval-primary,
+.operon-time-session-history-view button.operon-time-session-history-session-interval-button:focus-visible .operon-time-session-history-session-interval-primary {
+	display: none;
+}
+
+.operon-time-session-history-view button.operon-time-session-history-session-interval-button:hover .operon-time-session-history-session-interval-detail,
+.operon-time-session-history-session-card:hover .operon-time-session-history-session-interval-detail,
+.operon-time-session-history-session-card:focus-within .operon-time-session-history-session-interval-detail,
+.operon-time-session-history-view button.operon-time-session-history-session-interval-button:focus-visible .operon-time-session-history-session-interval-detail {
+	display: inline-flex;
 }
 
 .operon-time-session-history-view button.operon-time-session-history-session-interval-button:focus-visible {
@@ -11133,6 +12104,9 @@ button.operon-pinned-sidebar-action svg {
 
 .operon-time-session-history-session-interval-text {
 	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .operon-time-session-history-day-group {
@@ -11170,9 +12144,9 @@ button.operon-pinned-sidebar-action svg {
 }
 
 .operon-time-session-history-session-body {
-	display: flex;
+	display: grid;
+	grid-template-columns: minmax(38px, auto) minmax(0, 1fr) auto;
 	align-items: center;
-	justify-content: space-between;
 	gap: 8px;
 	margin-top: 6px;
 }
@@ -11180,6 +12154,7 @@ button.operon-pinned-sidebar-action svg {
 .operon-time-session-history-session-actions {
 	display: flex;
 	align-items: center;
+	justify-self: end;
 	gap: 6px;
 	flex: 0 0 auto;
 }
@@ -11203,12 +12178,35 @@ button.operon-pinned-sidebar-action svg {
 .operon-flow-time-view {
 	--operon-flow-time-accent: var(--interactive-accent);
 	--operon-flow-time-major-color: color-mix(in srgb, var(--text-muted) 62%, transparent);
+	--operon-flow-time-control-radius: 8px;
+	--operon-flow-time-control-border: color-mix(in srgb, var(--text-muted) 28%, var(--background-modifier-border));
+	--operon-flow-time-control-hover-border: color-mix(in srgb, var(--operon-flow-time-accent) 34%, var(--background-modifier-border));
+	--operon-flow-time-control-focus-ring: color-mix(in srgb, var(--operon-flow-time-accent) 12%, transparent);
+	--operon-flow-time-row-border: color-mix(in srgb, var(--background-modifier-border) 88%, transparent);
+	--operon-flow-time-danger: var(--text-error);
+	--operon-flow-time-danger-border: color-mix(in srgb, var(--operon-flow-time-danger) 72%, var(--background-modifier-border));
+	--operon-flow-time-danger-focus-ring: color-mix(in srgb, var(--operon-flow-time-danger) 14%, transparent);
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
 	padding: 12px 6px 18px;
 	min-height: 100%;
 	background: var(--background-primary);
+}
+
+.operon-flow-time-view button:is(
+	.operon-flow-time-mode-button,
+	.operon-flow-time-break-button,
+	.operon-flow-time-task-finder-button,
+	.operon-flow-time-task-icon,
+	.operon-flow-time-action
+) {
+	appearance: none;
+	-webkit-appearance: none;
+	background: transparent;
+	background-color: transparent;
+	box-shadow: none;
+	filter: none;
 }
 
 .operon-flow-time-mode-row {
@@ -11228,15 +12226,19 @@ button.operon-pinned-sidebar-action svg {
 	min-width: 112px;
 	min-height: 32px;
 	padding: 6px;
-	border-radius: 8px;
-	border: 1px solid var(--background-modifier-border);
-	background: var(--background-secondary);
+	border-radius: var(--operon-flow-time-control-radius);
+	border: 1px solid var(--operon-flow-time-control-border);
+	background: transparent;
+	background-color: transparent;
 	color: var(--text-muted);
 	font-size: var(--font-ui-small);
-	font-weight: 600;
+	font-weight: 500;
 	line-height: 1.2;
+	opacity: 0.68;
 	cursor: pointer;
 	box-sizing: border-box;
+	box-shadow: none;
+	transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease, color 0.12s ease, opacity 0.12s ease;
 }
 
 .operon-flow-time-mode-button:last-child {
@@ -11245,16 +12247,23 @@ button.operon-pinned-sidebar-action svg {
 
 .operon-flow-time-mode-button:hover,
 .operon-flow-time-mode-button:focus-visible {
-	border-color: color-mix(in srgb, var(--operon-flow-time-accent) 30%, var(--background-modifier-border));
-	background: color-mix(in srgb, var(--operon-flow-time-accent) 8%, var(--background-secondary));
+	border-color: var(--operon-flow-time-control-hover-border);
+	background: transparent;
+	background-color: transparent;
+	box-shadow: 0 0 0 2px var(--operon-flow-time-control-focus-ring);
 	color: var(--text-normal);
+	opacity: 1;
 	outline: none;
 }
 
 .operon-flow-time-mode-button.is-active {
-	border-color: color-mix(in srgb, var(--operon-flow-time-accent) 34%, var(--background-modifier-border));
-	background: color-mix(in srgb, var(--operon-flow-time-accent) 14%, var(--background-secondary));
-	color: var(--text-normal);
+	border-color: var(--operon-flow-time-accent);
+	background: transparent;
+	background-color: transparent;
+	box-shadow: 0 0 0 2px var(--operon-flow-time-control-focus-ring);
+	color: var(--operon-flow-time-accent);
+	font-weight: 650;
+	opacity: 1;
 }
 
 .operon-flow-time-break-slot {
@@ -11271,19 +12280,23 @@ button.operon-pinned-sidebar-action svg {
 	width: 32px;
 	height: 32px;
 	padding: 0;
-	border: 1px solid var(--background-modifier-border);
-	border-radius: 8px;
-	background: var(--background-secondary);
+	border: 1px solid var(--operon-flow-time-control-border);
+	border-radius: var(--operon-flow-time-control-radius);
+	background: transparent;
+	background-color: transparent;
 	color: var(--text-muted);
 	cursor: pointer;
 	box-sizing: border-box;
-	transition: background-color 0.12s ease, color 0.12s ease, opacity 0.12s ease;
+	box-shadow: none;
+	transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease, color 0.12s ease, opacity 0.12s ease;
 }
 
-.operon-flow-time-break-button:hover,
-.operon-flow-time-break-button:focus-visible {
-	border-color: color-mix(in srgb, var(--operon-flow-time-accent) 30%, var(--background-modifier-border));
-	background: color-mix(in srgb, var(--operon-flow-time-accent) 8%, var(--background-secondary));
+.operon-flow-time-break-button:hover:not(:disabled),
+.operon-flow-time-break-button:focus-visible:not(:disabled) {
+	border-color: var(--operon-flow-time-control-hover-border);
+	background: transparent;
+	background-color: transparent;
+	box-shadow: 0 0 0 2px var(--operon-flow-time-control-focus-ring);
 	color: var(--text-normal);
 	outline: none;
 }
@@ -11291,10 +12304,14 @@ button.operon-pinned-sidebar-action svg {
 .operon-flow-time-break-button:disabled {
 	opacity: 0.42;
 	cursor: default;
+	box-shadow: none;
 }
 
 .operon-flow-time-break-button.is-active {
-	border-color: color-mix(in srgb, var(--operon-flow-time-accent) 30%, var(--background-modifier-border));
+	border-color: var(--operon-flow-time-accent);
+	background: transparent;
+	background-color: transparent;
+	box-shadow: 0 0 0 2px var(--operon-flow-time-control-focus-ring);
 	color: var(--operon-flow-time-accent);
 }
 
@@ -11444,10 +12461,11 @@ button.operon-pinned-sidebar-action svg {
 	min-width: 28px;
 	min-height: 28px;
 	padding: 0;
-	border: 0;
-	border-radius: 6px;
-	background: var(--text-error);
-	color: white;
+	border: 1px solid var(--operon-flow-time-control-hover-border);
+	border-radius: var(--operon-flow-time-control-radius);
+	background: transparent;
+	background-color: transparent;
+	color: var(--operon-flow-time-accent);
 	cursor: pointer;
 	line-height: 1;
 	box-shadow: none;
@@ -11456,21 +12474,35 @@ button.operon-pinned-sidebar-action svg {
 	appearance: none;
 	-webkit-appearance: none;
 	overflow: hidden;
-	transition: background-color 0.12s ease, color 0.12s ease, filter 0.12s ease;
+	transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease, color 0.12s ease, opacity 0.12s ease;
 }
 
 .operon-flow-time-action:hover,
 .operon-flow-time-action:focus-visible {
-	background: var(--text-error);
-	color: white;
-	filter: brightness(0.9);
+	border-color: var(--operon-flow-time-accent);
+	background: transparent;
+	background-color: transparent;
+	box-shadow: 0 0 0 2px var(--operon-flow-time-control-focus-ring);
+	color: var(--operon-flow-time-accent);
 	outline: none;
+}
+
+.operon-flow-time-action.is-stop {
+	border-color: var(--operon-flow-time-danger-border);
+	color: var(--operon-flow-time-danger);
+}
+
+.operon-flow-time-action.is-stop:hover,
+.operon-flow-time-action.is-stop:focus-visible {
+	border-color: var(--operon-flow-time-danger);
+	box-shadow: 0 0 0 2px var(--operon-flow-time-danger-focus-ring);
+	color: var(--operon-flow-time-danger);
 }
 
 .operon-flow-time-action:disabled {
 	opacity: 0.45;
 	cursor: progress;
-	filter: none;
+	box-shadow: none;
 }
 
 .operon-flow-time-action svg {
@@ -11485,22 +12517,28 @@ button.operon-pinned-sidebar-action svg {
 	gap: 9px;
 	min-height: 42px;
 	padding: 8px 10px;
-	border-radius: 8px;
-	border: 1px solid var(--background-modifier-border);
-	background: var(--background-secondary);
+	border-radius: var(--operon-flow-time-control-radius);
+	border: 1px solid var(--operon-flow-time-row-border);
+	background: transparent;
+	background-color: transparent;
 	cursor: pointer;
+	transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
 }
 
 .operon-flow-time-task-box:hover,
 .operon-flow-time-task-box:focus-within {
-	border-color: color-mix(in srgb, var(--operon-flow-time-accent) 36%, var(--background-modifier-border));
-	background: color-mix(in srgb, var(--operon-flow-time-accent) 6%, var(--background-secondary));
+	border-color: var(--operon-flow-time-control-hover-border);
+	background: transparent;
+	background-color: transparent;
+	box-shadow: 0 0 0 2px var(--operon-flow-time-control-focus-ring);
 }
 
 .operon-flow-time-task-box.is-optimistic,
 .operon-flow-time-task-box.is-pending-draft {
-	border-color: color-mix(in srgb, var(--operon-flow-time-accent) 34%, var(--background-modifier-border));
-	background: color-mix(in srgb, var(--operon-flow-time-accent) 8%, var(--background-secondary));
+	border-color: var(--operon-flow-time-control-hover-border);
+	background: transparent;
+	background-color: transparent;
+	box-shadow: 0 0 0 2px var(--operon-flow-time-control-focus-ring);
 }
 
 .operon-flow-time-task-empty-icon,
@@ -11511,7 +12549,7 @@ button.operon-pinned-sidebar-action svg {
 	width: 26px;
 	height: 26px;
 	min-width: 26px;
-	border-radius: 6px;
+	border-radius: var(--operon-flow-time-control-radius);
 }
 
 .operon-flow-time-task-empty-icon {
@@ -11521,31 +12559,43 @@ button.operon-pinned-sidebar-action svg {
 .operon-flow-time-task-finder-button {
 	flex: 0 0 26px;
 	padding: 0;
-	border: 0;
+	border: 1px solid var(--operon-flow-time-control-border);
 	background: transparent;
+	background-color: transparent;
 	cursor: pointer;
 	box-shadow: none;
 	appearance: none;
 	-webkit-appearance: none;
+	color: var(--text-muted);
+	transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease, color 0.12s ease;
 }
 
 .operon-flow-time-task-finder-button:hover,
 .operon-flow-time-task-finder-button:focus-visible {
-	background: var(--background-modifier-hover);
-	color: var(--text-muted);
+	border-color: var(--operon-flow-time-control-hover-border);
+	background: transparent;
+	background-color: transparent;
+	box-shadow: 0 0 0 2px var(--operon-flow-time-control-focus-ring);
+	color: var(--text-normal);
 	outline: none;
 }
 
 .operon-flow-time-task-icon {
-	border: 1px solid color-mix(in srgb, var(--operon-flow-time-task-status-color, var(--text-muted)) 34%, var(--background-modifier-border));
-	background: var(--background-primary);
+	border: 1px solid color-mix(in srgb, var(--operon-flow-time-task-status-color, var(--text-muted)) 42%, var(--background-modifier-border));
+	background: transparent;
+	background-color: transparent;
 	color: var(--operon-flow-time-task-status-color, var(--text-muted));
 	cursor: pointer;
+	box-shadow: none;
+	transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease, color 0.12s ease;
 }
 
 .operon-flow-time-task-icon:hover,
 .operon-flow-time-task-icon:focus-visible {
 	border-color: var(--operon-flow-time-task-status-color, var(--interactive-accent));
+	background: transparent;
+	background-color: transparent;
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--operon-flow-time-task-status-color, var(--operon-flow-time-accent)) 12%, transparent);
 	outline: none;
 }
 
@@ -11569,12 +12619,13 @@ button.operon-pinned-sidebar-action svg {
 	color: var(--text-muted);
 }
 
-.operon-flow-time-quick-task-input {
+.operon-flow-time-view input.operon-flow-time-quick-task-input {
 	flex: 1 1 auto;
 	min-width: 0;
 	height: 26px;
-	padding: 0;
-	border: 0;
+	padding: 0 8px;
+	border: 1px solid transparent;
+	border-radius: var(--operon-flow-time-control-radius);
 	background: transparent;
 	box-shadow: none;
 	outline: none;
@@ -11582,21 +12633,26 @@ button.operon-pinned-sidebar-action svg {
 	font-size: var(--font-ui-small);
 	font-weight: 600;
 	line-height: 26px;
+	box-sizing: border-box;
+	appearance: none;
+	-webkit-appearance: none;
 }
 
-.operon-flow-time-quick-task-input::placeholder {
-	color: var(--text-muted);
-	opacity: 1;
+.operon-flow-time-view input.operon-flow-time-quick-task-input::placeholder {
+	color: var(--text-faint);
+	font-weight: 500;
+	opacity: 0.72;
 }
 
-.operon-flow-time-quick-task-input:focus {
-	border: 0;
+.operon-flow-time-view input.operon-flow-time-quick-task-input:focus,
+.operon-flow-time-view input.operon-flow-time-quick-task-input:focus-visible {
+	border-color: var(--operon-flow-time-control-hover-border);
 	background: transparent;
 	box-shadow: none;
 	outline: none;
 }
 
-.operon-flow-time-quick-task-input:disabled {
+.operon-flow-time-view input.operon-flow-time-quick-task-input:disabled {
 	opacity: 0.65;
 	cursor: progress;
 }
@@ -11888,6 +12944,51 @@ button.operon-pinned-sidebar-action svg {
 	margin-right: 0;
 	margin-left: 0.08em;
 	vertical-align: text-bottom;
+}
+
+:is(
+	.cm-content .operon-task-wikilink-trailing.operon-task-chip-surface,
+	.markdown-source-view.mod-cm6 .operon-task-wikilink-trailing.operon-task-chip-surface,
+	.markdown-preview-view .operon-task-wikilink-reading.operon-task-chip-surface,
+	.markdown-reading-view .operon-task-wikilink-reading.operon-task-chip-surface
+) .operon-task-wikilink-overlay-standard-action {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	min-width: 24px;
+	height: 24px;
+	min-height: 24px;
+	padding: 0;
+	margin-right: 0;
+	margin-left: 4px;
+	border: 1px solid var(--operon-task-chip-border, var(--background-modifier-border));
+	border-radius: var(--operon-task-chip-radius, 8px);
+	background: var(--operon-task-chip-bg, transparent);
+	background-color: var(--operon-task-chip-bg, transparent);
+	box-shadow: none;
+	color: var(--text-muted);
+	line-height: 1;
+	vertical-align: text-bottom;
+}
+
+:is(
+	.cm-content .operon-task-wikilink-trailing.operon-task-chip-surface,
+	.markdown-source-view.mod-cm6 .operon-task-wikilink-trailing.operon-task-chip-surface,
+	.markdown-preview-view .operon-task-wikilink-reading.operon-task-chip-surface,
+	.markdown-reading-view .operon-task-wikilink-reading.operon-task-chip-surface
+) .operon-task-wikilink-overlay-standard-action:is(:hover, .is-operon-chip-hovered, :focus-visible) {
+	border-color: var(--operon-task-chip-hover-border);
+	background: var(--operon-task-chip-hover-bg);
+	background-color: var(--operon-task-chip-hover-bg);
+	box-shadow: 0 0 0 2px var(--operon-task-chip-focus-ring);
+	color: var(--operon-task-chip-hover-accent, var(--interactive-accent));
+	filter: none;
+	outline: none;
+}
+
+.operon-task-wikilink-note-action {
+	color: var(--operon-live-hover-border, var(--interactive-accent));
 }
 
 .operon-task-wikilink-progress {
@@ -12320,7 +13421,7 @@ button.operon-pinned-sidebar-action svg {
 .markdown-source-view.mod-cm6 .operon-filter-task-row .operon-filter-expand-action {
 	justify-content: flex-start;
 	gap: 6px;
-	min-width: 58px;
+	min-width: 0;
 }
 
 .cm-content :is(
@@ -12406,15 +13507,75 @@ button.operon-pinned-sidebar-action svg {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+	flex: 0 0 auto;
+	height: var(--operon-task-chip-height, 24px);
 	min-width: var(--operon-task-chip-height, 24px);
 	min-height: var(--operon-task-chip-height, 24px);
+	margin: 0;
 	padding: 0 var(--operon-task-chip-action-padding-x, 6px);
 	color: var(--text-muted);
+	line-height: 1;
+	vertical-align: text-bottom;
 }
 
 .operon-task-chip-surface .operon-task-chip-action:not(.operon-task-chip-progress):not(.operon-filter-expand-action):not(.operon-filter-checkbox-progress-control) {
 	width: var(--operon-task-chip-height, 24px);
 	padding-inline: 0;
+}
+
+.operon-task-chip-surface .operon-task-chip-action svg {
+	width: 14px;
+	height: 14px;
+}
+
+.cm-content .operon-live-preview-tail-wrap.operon-task-chip-surface > .operon-live-preview-tail-actions,
+.markdown-source-view.mod-cm6 .operon-live-preview-tail-wrap.operon-task-chip-surface > .operon-live-preview-tail-actions {
+	align-items: center;
+	gap: 4px;
+}
+
+.cm-content .operon-live-preview-tail-wrap.operon-task-chip-surface > .operon-live-preview-tail-actions .operon-task-chip-action:not(.operon-task-chip-progress),
+.markdown-source-view.mod-cm6 .operon-live-preview-tail-wrap.operon-task-chip-surface > .operon-live-preview-tail-actions .operon-task-chip-action:not(.operon-task-chip-progress) {
+	width: 28px;
+	min-width: 28px;
+	max-width: 28px;
+	height: var(--operon-task-chip-height, 24px);
+	min-height: var(--operon-task-chip-height, 24px);
+	padding-inline: 0;
+}
+
+.operon-filter-task-row.operon-task-chip-surface .operon-reading-task-actions {
+	align-items: center;
+	gap: 4px;
+}
+
+.operon-filter-task-row.operon-task-chip-surface .operon-filter-expand-action {
+	align-items: center;
+	justify-content: flex-start;
+	gap: var(--operon-task-chip-gap, 6px);
+	width: auto;
+	min-width: 0;
+	height: var(--operon-task-chip-height, 24px);
+	min-height: var(--operon-task-chip-height, 24px);
+	padding-inline: var(--operon-task-chip-padding-x, 7px);
+}
+
+.operon-filter-task-row.operon-task-chip-surface .operon-reading-task-actions .operon-task-chip-action:not(.operon-task-chip-progress),
+.operon-filter-task-row.operon-task-chip-surface .operon-reading-task-actions .operon-filter-checkbox-progress-control.is-empty {
+	width: 28px;
+	min-width: 28px;
+	max-width: 28px;
+	height: var(--operon-task-chip-height, 24px);
+	min-height: var(--operon-task-chip-height, 24px);
+	padding-inline: 0;
+}
+
+.operon-filter-task-row.operon-task-chip-surface .operon-filter-checkbox-progress-control:not(.is-empty) {
+	width: auto;
+	min-width: 58px;
+	height: var(--operon-task-chip-height, 24px);
+	min-height: var(--operon-task-chip-height, 24px);
+	padding-inline: var(--operon-task-chip-padding-x, 7px);
 }
 
 .operon-task-chip-surface .operon-task-chip-progress {
@@ -12446,8 +13607,61 @@ button.operon-pinned-sidebar-action svg {
 	outline: none;
 }
 
+.operon-task-chip-surface .operon-task-chip-action:is(:hover, .is-operon-chip-hovered, :focus-visible) {
+	color: var(--operon-task-chip-hover-accent, var(--interactive-accent));
+}
+
+.operon-task-chip-surface .operon-filter-expand-action .operon-filter-expand-icon,
+.operon-task-chip-surface .operon-filter-expand-action:is(:hover, .is-operon-chip-hovered, :focus-visible) .operon-filter-expand-icon {
+	color: var(--text-muted);
+}
+
+.operon-task-chip-surface .operon-filter-expand-action:is(:hover, .is-operon-chip-hovered, :focus-visible) .operon-filter-expand-summary {
+	color: var(--operon-task-chip-hover-accent, var(--interactive-accent));
+}
+
 .operon-task-chip-surface .operon-live-preview-action.is-active {
 	color: var(--operon-task-chip-hover-accent, var(--interactive-accent));
+}
+
+.operon-task-chip-surface .operon-task-note-action,
+.operon-task-chip-surface .operon-hover-trigger.operon-task-note-action,
+.operon-task-chip-surface .operon-task-wikilink-overlay-action[role='img'],
+.operon-task-chip-surface .operon-task-wikilink-note-action {
+	border-color: var(--operon-task-chip-border, var(--background-modifier-border));
+	background: var(--operon-task-chip-bg, transparent);
+	background-color: var(--operon-task-chip-bg, transparent);
+	box-shadow: none;
+	color: var(--operon-live-hover-border, var(--operon-task-chip-hover-accent, var(--interactive-accent)));
+}
+
+.operon-task-chip-surface .operon-task-note-action:is(:hover, :focus-visible),
+.operon-task-chip-surface .operon-hover-trigger.operon-task-note-action:is(:hover, :focus-visible),
+.operon-task-chip-surface .operon-task-wikilink-overlay-action[role='img']:is(:hover, :focus-visible),
+.operon-task-chip-surface .operon-task-wikilink-note-action:is(:hover, :focus-visible) {
+	border-color: var(--operon-task-chip-hover-border);
+	background: var(--operon-task-chip-hover-bg);
+	background-color: var(--operon-task-chip-hover-bg);
+	box-shadow: 0 0 0 2px var(--operon-task-chip-focus-ring);
+}
+
+.cm-content .operon-task-wikilink-trailing .operon-task-wikilink-note-neutral,
+.cm-content .operon-task-wikilink-trailing .operon-task-wikilink-note-neutral:is(:hover, .is-operon-chip-hovered, :focus-visible),
+.markdown-source-view.mod-cm6 .operon-task-wikilink-trailing .operon-task-wikilink-note-neutral,
+.markdown-source-view.mod-cm6 .operon-task-wikilink-trailing .operon-task-wikilink-note-neutral:is(:hover, .is-operon-chip-hovered, :focus-visible),
+.markdown-preview-view .operon-task-wikilink-reading .operon-task-wikilink-note-neutral,
+.markdown-preview-view .operon-task-wikilink-reading .operon-task-wikilink-note-neutral:is(:hover, .is-operon-chip-hovered, :focus-visible),
+.markdown-reading-view .operon-task-wikilink-reading .operon-task-wikilink-note-neutral,
+.markdown-reading-view .operon-task-wikilink-reading .operon-task-wikilink-note-neutral:is(:hover, .is-operon-chip-hovered, :focus-visible),
+.operon-reading-task-row .operon-reading-task-note-neutral,
+.operon-reading-task-row .operon-reading-task-note-neutral:is(:hover, .is-operon-chip-hovered, :focus-visible) {
+	color: var(--text-muted);
+}
+
+.operon-reading-task-row.operon-task-chip-surface .operon-hover-trigger.operon-task-note-action.operon-reading-task-note-neutral,
+.operon-reading-task-row.operon-task-chip-surface .operon-hover-trigger.operon-task-note-action.operon-reading-task-note-neutral:is(:hover, .is-operon-chip-hovered, :focus-visible),
+.operon-reading-task-row.operon-task-chip-surface .operon-live-preview-action.operon-task-note-action.operon-reading-task-note-neutral.is-active {
+	color: var(--text-muted);
 }
 
 .cm-content .operon-task-wikilink-live-mark:hover,
@@ -12472,8 +13686,8 @@ button.operon-pinned-sidebar-action svg {
 	color: var(--operon-task-wikilink-status-color, var(--text-muted));
 }
 
-.operon-task-wikilink-reading:hover .internal-link,
-.operon-task-wikilink-reading .internal-link:hover {
+.operon-task-wikilink-reading .internal-link:hover,
+.operon-task-wikilink-reading .internal-link:focus-visible {
 	color: var(--operon-task-wikilink-hover, var(--interactive-accent));
 }
 
@@ -12489,8 +13703,16 @@ button.operon-pinned-sidebar-action svg {
 	opacity: 0.4;
 }
 
-.operon-task-wikilink-reading:hover .operon-task-wikilink-action {
+.operon-task-wikilink-reading .operon-task-wikilink-action:hover,
+.operon-task-wikilink-reading .operon-task-wikilink-action:focus-visible {
 	border-color: var(--operon-task-wikilink-hover, var(--interactive-accent));
+}
+
+.operon-task-wikilink-reading .operon-task-wikilink-left:hover {
+	border-color: transparent;
+	background: transparent;
+	background-color: transparent;
+	box-shadow: none;
 }
 
 .operon-calendar-view {
@@ -14934,21 +16156,25 @@ body.operon-calendar-sidebar-is-resizing {
 }
 
 .operon-calendar-hover-menu {
+	--operon-contextual-menu-radius: 8px;
+	--operon-contextual-menu-border: color-mix(in srgb, var(--text-muted) 26%, var(--background-modifier-border));
+	--operon-contextual-menu-hover-border: color-mix(in srgb, var(--interactive-accent) 34%, var(--background-modifier-border));
+	--operon-contextual-menu-focus-ring: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
 	position: absolute;
 	box-sizing: border-box;
 	z-index: 40;
 	display: flex;
 	flex-direction: column;
-	gap: 4px;
+	gap: 6px;
 	min-width: 168px;
 	max-width: 220px;
-	padding: 8px;
+	padding: 7px;
 	overflow-y: auto;
 	overscroll-behavior: contain;
-	border: 1px solid color-mix(in srgb, var(--background-modifier-border) 82%, white 18%);
+	border: 1px solid color-mix(in srgb, var(--background-modifier-border) 88%, transparent);
 	border-radius: 10px;
-	background: color-mix(in srgb, var(--background-primary) 92%, var(--background-secondary));
-	box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+	background: color-mix(in srgb, var(--background-primary) 94%, transparent);
+	box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2);
 	backdrop-filter: blur(12px);
 }
 
@@ -14962,28 +16188,39 @@ body.operon-calendar-sidebar-is-resizing {
 	user-select: none;
 }
 
-.operon-calendar-hover-menu-item {
+.operon-calendar-hover-menu button.operon-calendar-hover-menu-item {
+	appearance: none;
+	-webkit-appearance: none;
 	display: flex;
 	align-items: center;
 	justify-content: flex-start;
 	gap: 10px;
 	width: 100%;
-	min-height: 30px;
-	padding: 6px 10px;
-	border: 0;
-	border-radius: 6px;
+	min-height: 34px;
+	padding: 6px 9px;
+	border: 1px solid var(--operon-contextual-menu-border);
+	border-radius: var(--operon-contextual-menu-radius);
 	background: transparent;
-	color: var(--text-normal);
+	background-color: transparent;
+	color: var(--text-muted);
 	cursor: pointer;
 	font-size: 13px;
-	font-weight: 400;
+	font-weight: 500;
+	line-height: 1.2;
 	text-align: left;
+	box-shadow: none;
+	box-sizing: border-box;
+	filter: none;
+	transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease, color 0.12s ease;
 }
 
-.operon-calendar-hover-menu-item:hover,
-.operon-calendar-hover-menu-item:focus-visible {
+.operon-calendar-hover-menu button.operon-calendar-hover-menu-item:hover,
+.operon-calendar-hover-menu button.operon-calendar-hover-menu-item:focus-visible {
 	outline: none;
-	background: color-mix(in srgb, var(--interactive-accent) 10%, transparent);
+	border-color: var(--operon-contextual-menu-hover-border);
+	background: transparent;
+	background-color: transparent;
+	box-shadow: 0 0 0 2px var(--operon-contextual-menu-focus-ring);
 	color: var(--text-normal);
 }
 
@@ -16064,10 +17301,10 @@ body.operon-calendar-touch-drag-active {
 	}
 }
 
-.operon-repeat-property-cleanup-section {
-	margin-top: 18px;
-	padding-top: 10px;
-	border-top: 1px solid var(--background-modifier-border);
+.operon-repeat-property-cleanup-render-host.setting-item {
+	display: block;
+	padding: 0;
+	border-top: 0;
 }
 
 .operon-repeat-property-cleanup-card {
@@ -17155,7 +18392,7 @@ body.operon-calendar-touch-drag-active {
 	min-width: 44px;
 	height: 40px;
 	padding: 0 13px;
-	border-radius: 8px;
+	border-radius: var(--operon-task-finder-control-radius);
 }
 
 .operon-kanban-search-scope-popover .operon-kanban-search-scope-button.is-disabled {
@@ -17163,11 +18400,14 @@ body.operon-calendar-touch-drag-active {
 	cursor: default;
 }
 
-.operon-kanban-search-scope-popover .operon-kanban-search-scope-button.is-disabled:hover {
-	border-color: color-mix(in srgb, var(--background-modifier-border) 72%, transparent);
-	background: color-mix(in srgb, var(--background-secondary) 78%, transparent);
+.operon-kanban-search-scope-popover .operon-kanban-search-scope-button.is-disabled:hover,
+.operon-kanban-search-scope-popover .operon-kanban-search-scope-button.is-disabled:focus-visible {
+	border-color: var(--operon-task-finder-control-border);
+	background: transparent;
+	background-color: transparent;
+	box-shadow: none;
 	color: var(--text-muted);
-	transform: none;
+	outline: none;
 }
 
 .operon-kanban-root.is-mobile-layout .operon-kanban-search-scope-popover {
@@ -18614,6 +19854,10 @@ body.operon-kanban-touch-drag-active {
 	border-top: 0;
 }
 
+.operon-settings-native-page-root .operon-settings-card-list-section > .operon-repeat-property-cleanup-add-row {
+	padding: 16px 24px 18px;
+}
+
 .operon-settings-native-page-root .operon-interface-icon-list-settings-section > .operon-compact-chip-row-editor {
 	gap: 10px;
 	margin: 0;
@@ -18643,6 +19887,21 @@ body.operon-kanban-touch-drag-active {
 
 .operon-settings-native-page-root .operon-native-settings-section-card > .setting-item:last-child {
 	border-bottom: none;
+}
+
+.operon-settings-native-page-root .operon-native-settings-section-card > .setting-item.operon-settings-control-active,
+.operon-settings-native-page-root .operon-native-settings-section-card > .setting-item.operon-settings-control-inactive {
+	margin: 0;
+	padding: 18px 24px 20px 34px;
+	border-top: 1px solid var(--background-modifier-border);
+	border-bottom: 0;
+	border-radius: 0;
+	corner-shape: initial;
+}
+
+.operon-settings-native-page-root .operon-native-settings-section-card > .setting-item.operon-settings-control-active + .setting-item,
+.operon-settings-native-page-root .operon-native-settings-section-card > .setting-item.operon-settings-control-inactive + .setting-item {
+	border-top-color: transparent;
 }
 
 .operon-settings-native-page-root .operon-native-settings-section-body > .setting-item:first-child,
@@ -18732,14 +19991,32 @@ body.operon-kanban-touch-drag-active {
 }
 
 .operon-settings-control-active {
-	border-left: 3px solid var(--interactive-accent);
+	position: relative;
 	background: color-mix(in srgb, var(--interactive-accent) 8%, var(--background-secondary));
 }
 
 .operon-settings-control-inactive {
-	border-left: 3px solid var(--background-modifier-border);
+	position: relative;
 	background: color-mix(in srgb, var(--background-secondary) 70%, var(--background-primary));
 	opacity: 0.62;
+}
+
+.operon-settings-control-active::before,
+.operon-settings-control-inactive::before {
+	content: "";
+	position: absolute;
+	inset: 0 auto 0 0;
+	width: 3px;
+	border-radius: 0;
+	pointer-events: none;
+}
+
+.operon-settings-control-active::before {
+	background: var(--interactive-accent);
+}
+
+.operon-settings-control-inactive::before {
+	background: var(--background-modifier-border);
 }
 
 .operon-settings-control-inactive .setting-item-name,
@@ -19328,6 +20605,7 @@ body.operon-kanban-touch-drag-active {
 	font-size: 13px;
 }
 
+.operon-priority-card,
 .operon-pipeline-card {
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 8px;

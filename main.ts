@@ -140,6 +140,7 @@ import {
 	LivePreviewEphemeralSessionController,
 	shouldAbandonLivePreviewSessionForWorkspaceFile,
 } from './src/ui/live-preview-ephemeral-session';
+import { invalidateCustomFieldValueCandidateCache } from './src/ui/custom-field-surfaces';
 import { openTaskFieldPicker } from './src/ui/task-field-picker-dispatch';
 import type { ManualDatePickerOptions } from './src/ui/field-pickers/date-picker';
 import { applyFileTaskPropertyVisibility } from './src/ui/file-task-property-visibility';
@@ -326,6 +327,7 @@ import {
 	queryKanbanBoard,
 	resolveTaskStatusDefinition,
 } from './src/systems/kanban-query';
+import { getManagedCustomFieldOptionMapping } from './src/core/managed-task-fields';
 import {
 	enginePerfLog,
 	enginePerfNow,
@@ -2829,6 +2831,7 @@ export default class OperonPlugin extends Plugin {
 			priorities: this.settings.priorities,
 			pinnedCache: this.pinnedCache,
 			manualOrder,
+			keyMappings: this.settings.keyMappings,
 		});
 	}
 
@@ -2909,17 +2912,18 @@ export default class OperonPlugin extends Plugin {
 		const manualOrderCells = preset.sortMode === 'manual'
 			? this.buildKanbanManualDropOrderCells(preset, context)
 			: null;
-			const previousManualOrderCells = manualOrderCells
-				? this.getKanbanManualOrderCells(preset.id, Object.keys(manualOrderCells))
-				: null;
+		const previousManualOrderCells = manualOrderCells
+			? this.getKanbanManualOrderCells(preset.id, Object.keys(manualOrderCells))
+			: null;
 
-			const plan = buildKanbanWritebackPlan({
-				task,
+		const plan = buildKanbanWritebackPlan({
+			task,
 			pipeline,
 			targetStatus,
 			sourceLaneKey: context.sourceLaneKey,
 			targetLaneKey: context.targetLaneKey,
 			swimlaneBy: context.swimlaneBy ?? preset.swimlaneBy,
+			keyMappings: this.settings.keyMappings,
 		});
 		if (plan.changedKeys.length === 0) {
 			if (this.isKanbanTaskAtDropTarget(task, pipeline, preset.swimlaneBy, context)) {
@@ -2928,18 +2932,18 @@ export default class OperonPlugin extends Plugin {
 			}
 			if (previousManualOrderCells) {
 				await this.storage.kanbanOrder.replaceCells(preset.id, previousManualOrderCells);
-				}
-				throw new Error(`Kanban drop failed: no writeback changes for ${context.taskId}`);
 			}
-			if (!await this.guardTaskStatusChangeOrShow(task, plan.payload)) {
-				callUnknownMethod(leaf.view, 'clearOptimisticMove', context.taskId);
-				return;
-			}
-			if (manualOrderCells) {
-				await this.storage.kanbanOrder.replaceCells(preset.id, manualOrderCells);
-			}
+			throw new Error(`Kanban drop failed: no writeback changes for ${context.taskId}`);
+		}
+		if (!await this.guardTaskStatusChangeOrShow(task, plan.payload)) {
+			callUnknownMethod(leaf.view, 'clearOptimisticMove', context.taskId);
+			return;
+		}
+		if (manualOrderCells) {
+			await this.storage.kanbanOrder.replaceCells(preset.id, manualOrderCells);
+		}
 
-			const wrote = await this.updateTaskFieldsAndRefresh(task.operonId, plan.payload, {
+		const wrote = await this.updateTaskFieldsAndRefresh(task.operonId, plan.payload, {
 			changedKeys: plan.changedKeys,
 		});
 		if (!wrote) {
@@ -2966,7 +2970,7 @@ export default class OperonPlugin extends Plugin {
 	): boolean {
 		const status = resolveTaskStatusDefinition(task, pipeline);
 		if (status?.id !== context.targetStatusId) return false;
-		const laneKeys = extractLaneKeys(task, context.swimlaneBy ?? presetSwimlaneBy);
+		const laneKeys = extractLaneKeys(task, context.swimlaneBy ?? presetSwimlaneBy, this.settings.keyMappings);
 		return laneKeys.includes(context.targetLaneKey);
 	}
 
@@ -3356,6 +3360,7 @@ export default class OperonPlugin extends Plugin {
 				sourceLaneKey: this.resolveKanbanSourceLaneKey(task, context.swimlaneBy, context.targetLaneKey),
 				targetLaneKey: context.targetLaneKey,
 				swimlaneBy: context.swimlaneBy,
+				keyMappings: this.settings.keyMappings,
 			});
 			if (plan.changedKeys.length === 0) return;
 
@@ -3468,6 +3473,7 @@ export default class OperonPlugin extends Plugin {
 			}
 		}
 
+		const customSwimlaneMapping = getManagedCustomFieldOptionMapping(context.swimlaneBy, this.settings.keyMappings);
 		if (context.swimlaneBy === 'priority' || context.swimlaneBy === 'dateDue' || context.swimlaneBy === 'dateScheduled') {
 			fieldValues[context.swimlaneBy] = context.targetLaneKey === KANBAN_NO_VALUE_KEY ? '' : context.targetLaneKey;
 		} else if (context.swimlaneBy === 'tags') {
@@ -3477,6 +3483,8 @@ export default class OperonPlugin extends Plugin {
 			}
 		} else if (context.swimlaneBy === 'contexts' || context.swimlaneBy === 'assignees') {
 			fieldValues[context.swimlaneBy] = context.targetLaneKey === KANBAN_NO_VALUE_KEY ? '' : context.targetLaneKey;
+		} else if (customSwimlaneMapping) {
+			fieldValues[customSwimlaneMapping.canonicalKey] = context.targetLaneKey === KANBAN_NO_VALUE_KEY ? '' : context.targetLaneKey;
 		}
 
 		return { fieldValues, tags, tagsPresent };
@@ -3496,6 +3504,13 @@ export default class OperonPlugin extends Plugin {
 		}
 		if (swimlaneBy === 'contexts' || swimlaneBy === 'assignees') {
 			return parseListValue(task.fieldValues[swimlaneBy] ?? '').includes(targetLaneKey) ? targetLaneKey : null;
+		}
+		const customSwimlaneMapping = getManagedCustomFieldOptionMapping(swimlaneBy, this.settings.keyMappings);
+		if (customSwimlaneMapping?.type === 'list') {
+			return parseListValue(task.fieldValues[customSwimlaneMapping.canonicalKey] ?? '').includes(targetLaneKey) ? targetLaneKey : null;
+		}
+		if (customSwimlaneMapping) {
+			return (task.fieldValues[customSwimlaneMapping.canonicalKey] ?? '').trim() || KANBAN_NO_VALUE_KEY;
 		}
 		return null;
 	}
@@ -5291,6 +5306,7 @@ export default class OperonPlugin extends Plugin {
 		this.registerEvent(
 			this.app.metadataCache.on('changed', file => {
 				if (file.extension !== 'md') return;
+				invalidateCustomFieldValueCandidateCache(this.app);
 				invalidateLocationPlaceIndex(this.app);
 				this.scheduleYamlPropertyVisibilityRefresh(120);
 			}),
@@ -6281,6 +6297,7 @@ export default class OperonPlugin extends Plugin {
 		this.registerEvent(
 			this.app.vault.on('create', (file: TAbstractFile) => {
 				if (file instanceof TFile && file.extension === 'md') {
+					invalidateCustomFieldValueCandidateCache(this.app);
 					invalidateLocationPlaceIndex(this.app);
 					this.indexer.scheduleReindex(file.path);
 				}
@@ -6291,6 +6308,7 @@ export default class OperonPlugin extends Plugin {
 		this.registerEvent(
 				this.app.vault.on('delete', (file: TAbstractFile) => {
 					if (file instanceof TFile && file.extension === 'md') {
+						invalidateCustomFieldValueCandidateCache(this.app);
 						invalidateLocationPlaceIndex(this.app);
 						void this.indexer.handleFileDelete(file.path);
 					}
@@ -6302,6 +6320,7 @@ export default class OperonPlugin extends Plugin {
 			this.app.vault.on('rename', (file: TAbstractFile, oldPath: string) => {
 				if (!(file instanceof TFile) || file.extension !== 'md') return;
 
+				invalidateCustomFieldValueCandidateCache(this.app);
 				invalidateLocationPlaceIndex(this.app);
 				this.indexer.handleFileRename(oldPath, file.path);
 
@@ -11696,10 +11715,9 @@ export default class OperonPlugin extends Plugin {
 			this.addCommand({
 				id: 'toggle-pinned-dock',
 				name: t('commands', 'togglePinnedDock'),
-			callback: () => {
-				if (this.isPinnedDockDisabledOnCurrentDevice()) return;
-				this.pinnedDock?.toggle();
-			},
+				callback: () => {
+					runAsyncAction('toggle pinned tasks surface command failed', () => this.openPinnedTasksSurface());
+				},
 		});
 
 		// Open Filter View panel

@@ -33,6 +33,9 @@ import {
 	cloneDefaultKanbanPresets,
 	createDefaultKanbanSortRules,
 	createKanbanPresetId,
+	isBuiltInKanbanSortField,
+	isBuiltInKanbanSwimlaneBy,
+	normalizeKanbanCustomFieldReference,
 	normalizeBuiltInKanbanPreset,
 } from './kanban';
 import {
@@ -49,7 +52,7 @@ import {
 	sanitizeExcludedFoldersForFileTasksFolder,
 } from '../core/settings-folder-rules';
 
-export const CURRENT_SETTINGS_VERSION = 90;
+export const CURRENT_SETTINGS_VERSION = 91;
 export const CURRENT_TASK_STATS_BACKFILL_VERSION = 2;
 export const SUPPORTED_LANGUAGE_OPTIONS = ['auto', 'en', 'tr', 'de', 'fr'] as const;
 export type OperonLanguage = typeof SUPPORTED_LANGUAGE_OPTIONS[number];
@@ -268,7 +271,7 @@ export function cloneFilterSet(filterSet: FilterSet): FilterSet {
 export interface KeyMapping {
 	canonicalKey: string;
 	visiblePropertyName: string;
-	type: 'text' | 'number' | 'date' | 'datetime' | 'list';
+	type: 'text' | 'number' | 'date' | 'datetime' | 'list' | 'checkbox';
 	sync: 'yes' | 'no' | 'auto';
 	/** Key mappings are always active. */
 	enabled: boolean;
@@ -280,9 +283,147 @@ export interface KeyMapping {
 	isSystem: boolean;
 	/** Hidden internal keys stay functional but are omitted from user-facing mapping UI. */
 	isInternal?: boolean;
+	/** Stable insertion order for user-defined custom keys. */
+	customOrder?: number;
+	/** Custom key surface flag for Task Editor metadata controls. */
+	showInEditor?: boolean;
+	/** Custom key surface flag for Task Creator metadata controls. */
+	showInCreator?: boolean;
+	/** Custom key surface flag for compact task chips. */
+	showInChips?: boolean;
+	/** Custom key surface flag for Kanban swimlane picker options. */
+	showInKanbanSwimlane?: boolean;
+	/** Optional user-facing description for custom fields. */
+	description?: string;
 }
 
 type MigratingKeyMapping = Omit<KeyMapping, 'enabled' | 'hideInFileTaskView' | 'icon' | 'isSystem' | 'isInternal'> & Partial<Pick<KeyMapping, 'enabled' | 'hideInFileTaskView' | 'icon' | 'isSystem' | 'isInternal'>>;
+
+const CANONICAL_KEY_ORDER_INDEX = new Map(CANONICAL_KEYS.map((key, index) => [key.name, index]));
+
+export function normalizeKeyMappingComparableName(value: string): string {
+	return value.trim().toLowerCase();
+}
+
+export function hasDuplicateKeyMappingCanonicalKey(
+	canonicalKey: string,
+	mappings: readonly KeyMapping[],
+	exclude?: KeyMapping,
+): boolean {
+	const normalized = normalizeKeyMappingComparableName(canonicalKey);
+	if (!normalized) return false;
+	return mappings.some(mapping =>
+		mapping !== exclude
+		&& normalizeKeyMappingComparableName(mapping.canonicalKey) === normalized
+	);
+}
+
+export function hasDuplicateKeyMappingVisiblePropertyName(
+	visiblePropertyName: string,
+	mappings: readonly KeyMapping[],
+	exclude?: KeyMapping,
+): boolean {
+	const normalized = normalizeKeyMappingComparableName(visiblePropertyName);
+	if (!normalized) return false;
+	return mappings.some(mapping =>
+		mapping !== exclude
+		&& !isRetiredKeyMapping(mapping.canonicalKey)
+		&& normalizeKeyMappingComparableName(mapping.visiblePropertyName) === normalized
+	);
+}
+
+function normalizeCustomKeyMappingOrderValue(value: unknown): number | null {
+	if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null;
+	return Math.floor(value);
+}
+
+export function getNextCustomKeyMappingOrder(mappings: readonly KeyMapping[]): number {
+	let maxOrder = -1;
+	for (const mapping of mappings) {
+		if (mapping.isSystem !== false) continue;
+		const normalizedOrder = normalizeCustomKeyMappingOrderValue(mapping.customOrder);
+		if (normalizedOrder !== null) {
+			maxOrder = Math.max(maxOrder, normalizedOrder);
+		}
+	}
+	return maxOrder + 1;
+}
+
+function normalizeKeyMappingDescription(mapping: KeyMapping): void {
+	if (typeof mapping.description !== 'string') {
+		delete mapping.description;
+		return;
+	}
+	const description = mapping.description.trim();
+	if (description) {
+		mapping.description = description;
+	} else {
+		delete mapping.description;
+	}
+}
+
+function dedupeKeyMappingsByCanonicalKey(mappings: KeyMapping[]): KeyMapping[] {
+	return mappings.filter((mapping, index, list) => {
+		const normalizedCanonicalKey = normalizeKeyMappingComparableName(mapping.canonicalKey);
+		const systemIndex = list.findIndex(candidate =>
+			candidate.isSystem !== false
+			&& normalizeKeyMappingComparableName(candidate.canonicalKey) === normalizedCanonicalKey
+		);
+		const firstIndex = systemIndex >= 0
+			? systemIndex
+			: list.findIndex(candidate => normalizeKeyMappingComparableName(candidate.canonicalKey) === normalizedCanonicalKey);
+		return firstIndex === index;
+	});
+}
+
+export function orderKeyMappingsForStorage(mappings: readonly KeyMapping[]): KeyMapping[] {
+	return mappings
+		.map((mapping, index) => ({ mapping, index }))
+		.sort((left, right) => {
+			const leftIsSystem = left.mapping.isSystem !== false;
+			const rightIsSystem = right.mapping.isSystem !== false;
+			if (leftIsSystem !== rightIsSystem) return leftIsSystem ? -1 : 1;
+			if (leftIsSystem) {
+				const leftIndex = CANONICAL_KEY_ORDER_INDEX.get(left.mapping.canonicalKey) ?? Number.MAX_SAFE_INTEGER;
+				const rightIndex = CANONICAL_KEY_ORDER_INDEX.get(right.mapping.canonicalKey) ?? Number.MAX_SAFE_INTEGER;
+				if (leftIndex !== rightIndex) return leftIndex - rightIndex;
+				return left.mapping.canonicalKey.localeCompare(right.mapping.canonicalKey);
+			}
+			const leftOrder = normalizeCustomKeyMappingOrderValue(left.mapping.customOrder) ?? Number.MAX_SAFE_INTEGER;
+			const rightOrder = normalizeCustomKeyMappingOrderValue(right.mapping.customOrder) ?? Number.MAX_SAFE_INTEGER;
+			if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+			return left.index - right.index;
+		})
+		.map(entry => entry.mapping);
+}
+
+export function normalizeKeyMappingCollection(mappings: readonly KeyMapping[]): KeyMapping[] {
+	const normalized = dedupeKeyMappingsByCanonicalKey(mappings.map(mapping => ({ ...mapping })));
+	let nextCustomOrder = getNextCustomKeyMappingOrder(normalized);
+	for (const mapping of normalized) {
+		normalizeKeyMappingDescription(mapping);
+		if (mapping.isSystem === false) {
+			const customOrder = normalizeCustomKeyMappingOrderValue(mapping.customOrder);
+			if (customOrder === null) {
+				mapping.customOrder = nextCustomOrder;
+				nextCustomOrder += 1;
+			} else {
+				mapping.customOrder = customOrder;
+			}
+			mapping.showInEditor = mapping.showInEditor !== false;
+			mapping.showInCreator = mapping.showInCreator !== false;
+			mapping.showInChips = mapping.showInChips === true;
+			mapping.showInKanbanSwimlane = mapping.showInKanbanSwimlane === true;
+		} else {
+			delete mapping.customOrder;
+			delete mapping.showInEditor;
+			delete mapping.showInCreator;
+			delete mapping.showInChips;
+			delete mapping.showInKanbanSwimlane;
+		}
+	}
+	return orderKeyMappingsForStorage(normalized);
+}
 
 export interface FileTaskTemplateDefinition {
 	id: string;
@@ -468,25 +609,36 @@ export const TASK_EDITOR_MOBILE_CORE_FALLBACK_ICONS: Record<TaskEditorMobileCore
 };
 
 export interface TaskCreatorToolbarItem {
-	key: TaskCreatorToolbarFieldKey;
+	key: string;
 	visible: boolean;
 }
 
 export interface TaskEditorWorkflowPickerItem {
-	key: TaskEditorWorkflowPickerKey;
+	key: string;
 	visible: boolean;
 }
 
 export interface TaskEditorMobileCoreToolItem {
-	key: TaskEditorMobileCoreToolKey;
+	key: string;
 	visible: boolean;
 }
 
 export interface InlineTaskCompactChipItem {
-	key: InlineTaskCompactChipKey;
+	key: string;
 	visible: boolean;
 	iconOnly: boolean;
 }
+
+const CUSTOM_CANONICAL_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_-]*$/u;
+
+const ALL_BUILT_IN_SURFACE_KEYS = new Set<string>([
+	...TASK_CREATOR_TOOLBAR_FIELD_ORDER,
+	...TASK_EDITOR_WORKFLOW_PICKER_ORDER,
+	...TASK_EDITOR_MOBILE_CORE_TOOL_ORDER,
+	...INLINE_TASK_COMPACT_CHIP_ORDER,
+]);
+
+const BUILT_IN_CANONICAL_KEY_NAMES = new Set<string>(CANONICAL_KEYS.map(key => key.name));
 
 export interface InlineExpandedTaskChips {
 	priority: boolean;
@@ -1009,6 +1161,7 @@ export interface OperonSettings {
 	contextualMenuMobileEnabled: boolean;
 	contextualMenuMobileLongPressMs: number;
 	contextualMenuMobileTransitionGraceMs: number;
+	contextualMenuMobileAutoHideMs: number;
 	calendarInlineTaskHeading: string;
 	calendarShowAllDayLane: boolean;
 	calendarShowDueMarkers: boolean;
@@ -1308,7 +1461,7 @@ export const DEFAULT_SETTINGS: OperonSettings = {
 	autoParentLinkedFileSubtasks: true,
 	estimateAutoReallocation: false,
 	taskCreatorToolbar: buildDefaultTaskCreatorToolbarItems(),
-	taskEditorShowLineNumbers: true,
+	taskEditorShowLineNumbers: false,
 	taskEditorWorkflowPickers: buildDefaultTaskEditorWorkflowPickerItems(),
 	taskEditorMobileCoreTools: buildDefaultTaskEditorMobileCoreToolItems(),
 	inlineTaskCompactChips: buildDefaultInlineTaskCompactChipItems(),
@@ -1372,9 +1525,9 @@ export const DEFAULT_SETTINGS: OperonSettings = {
 	mobileGlobalTaskFabHideInKanban: false,
 	mobileGlobalTaskFabPosition: null,
 	pinnedDockAutoCloseEnabled: true,
-	pinnedDockAutoPin: false,
+	pinnedDockAutoPin: true,
 	pinnedDockAutoUnpinFinished: true,
-	pinnedDockColorSource: 'priorityColor',
+	pinnedDockColorSource: 'noColor',
 
 	leftRailDefaultView: 'filters',
 	leftRailDefaultFilterViewId: null,
@@ -1393,6 +1546,7 @@ export const DEFAULT_SETTINGS: OperonSettings = {
 	contextualMenuMobileEnabled: true,
 	contextualMenuMobileLongPressMs: 320,
 	contextualMenuMobileTransitionGraceMs: 450,
+	contextualMenuMobileAutoHideMs: 7000,
 	calendarInlineTaskHeading: '',
 	calendarShowAllDayLane: true,
 	calendarShowDueMarkers: true,
@@ -1504,6 +1658,7 @@ export const NUMERIC_CONSTRAINTS = {
 	calendarTouchDragCancelDistancePx: { min: 4, max: 24 },
 	contextualMenuMobileLongPressMs: { min: 200, max: 600 },
 	contextualMenuMobileTransitionGraceMs: { min: 150, max: 1200 },
+	contextualMenuMobileAutoHideMs: { min: 1000, max: 30000 },
 	calendarMobileMaxWidthPx: { min: CALENDAR_MOBILE_LAYOUT_MAX_WIDTH_MIN, max: CALENDAR_MOBILE_LAYOUT_MAX_WIDTH_MAX },
 	kanbanExpandedColumnWidthPx: { min: KANBAN_EXPANDED_COLUMN_WIDTH_MIN, max: KANBAN_EXPANDED_COLUMN_WIDTH_MAX },
 	kanbanMaxVisibleTasksPerCell: { min: KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MIN, max: KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MAX },
@@ -1741,13 +1896,10 @@ function normalizeKanbanPresetDefinition(raw: unknown): KanbanPreset | null {
 		typeof value === 'string' && kanbanAppearanceModes.includes(value) ? value as KanbanAppearanceMode : 'theme';
 	const appearanceModeLight = normalizeKanbanAppearance(src.appearanceModeLight);
 	const appearanceModeDark = normalizeKanbanAppearance(src.appearanceModeDark);
-	const swimlaneBy = src.swimlaneBy === 'priority'
-		|| src.swimlaneBy === 'tags'
-		|| src.swimlaneBy === 'contexts'
-		|| src.swimlaneBy === 'assignees'
-		|| src.swimlaneBy === 'dateDue'
-		|| src.swimlaneBy === 'dateScheduled'
-		? src.swimlaneBy
+	const swimlaneBy = typeof src.swimlaneBy === 'string'
+		? isBuiltInKanbanSwimlaneBy(src.swimlaneBy)
+			? src.swimlaneBy
+			: normalizeKanbanCustomFieldReference(src.swimlaneBy)
 		: null;
 	const collapseEmptyColumns = typeof src.collapseEmptyColumns === 'boolean'
 		? src.collapseEmptyColumns
@@ -1814,22 +1966,9 @@ function normalizeKanbanSortField(raw: unknown): KanbanSortField | null {
 	if (raw === 'dateCreated') {
 		return 'datetimeCreated';
 	}
-	return raw === 'alphabetical'
-		|| raw === 'priority'
-		|| raw === 'dateDue'
-		|| raw === 'dateScheduled'
-		|| raw === 'dateStarted'
-		|| raw === 'dateCompleted'
-		|| raw === 'dateCancelled'
-		|| raw === 'datetimeCreated'
-		|| raw === 'datetimeModified'
-		|| raw === 'progress'
-		|| raw === 'estimate'
-		|| raw === 'duration'
-		|| raw === 'totalDuration'
-		|| raw === 'totalEstimate'
-		? raw
-		: null;
+	if (typeof raw !== 'string') return null;
+	if (isBuiltInKanbanSortField(raw)) return raw;
+	return normalizeKanbanCustomFieldReference(raw);
 }
 
 function normalizeCalendarTimeGridScale(raw: unknown): number {
@@ -1953,6 +2092,13 @@ function normalizeContextualMenuMobileTransitionGraceMs(raw: unknown): number {
 		return DEFAULT_SETTINGS.contextualMenuMobileTransitionGraceMs;
 	}
 	return Math.max(150, Math.min(1200, Math.round(raw)));
+}
+
+function normalizeContextualMenuMobileAutoHideMs(raw: unknown): number {
+	if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+		return DEFAULT_SETTINGS.contextualMenuMobileAutoHideMs;
+	}
+	return Math.max(1000, Math.min(30000, Math.round(raw)));
 }
 
 function normalizeKanbanExpandedColumnWidthPx(raw: unknown): number {
@@ -2684,6 +2830,7 @@ export function migrateSettings(raw: unknown): OperonSettings {
 	out.contextualMenuMobileEnabled = normalizeContextualMenuMobileEnabled(src.contextualMenuMobileEnabled);
 	out.contextualMenuMobileLongPressMs = normalizeContextualMenuMobileLongPressMs(src.contextualMenuMobileLongPressMs);
 	out.contextualMenuMobileTransitionGraceMs = normalizeContextualMenuMobileTransitionGraceMs(src.contextualMenuMobileTransitionGraceMs);
+	out.contextualMenuMobileAutoHideMs = normalizeContextualMenuMobileAutoHideMs(src.contextualMenuMobileAutoHideMs);
 	out.externalCalendars = normalizeExternalCalendars(src.externalCalendars);
 	out.calendarPresets = preserveDisabledExternalCalendarVisibility(out.calendarPresets, out.externalCalendars);
 	const legacyCalendarInlineTaskHeading = typeof src.calendarInlineTaskHeading === 'string'
@@ -2736,7 +2883,9 @@ export function migrateSettings(raw: unknown): OperonSettings {
 	out.taskCreatorToolbar = normalizeTaskCreatorToolbar(src.taskCreatorToolbar);
 	out.taskEditorShowLineNumbers = typeof src.taskEditorShowLineNumbers === 'boolean'
 		? src.taskEditorShowLineNumbers
-		: DEFAULT_SETTINGS.taskEditorShowLineNumbers;
+		: Object.keys(src).length === 0
+			? DEFAULT_SETTINGS.taskEditorShowLineNumbers
+			: true;
 	out.taskEditorWorkflowPickers = normalizeTaskEditorWorkflowPickers(
 		src.taskEditorWorkflowPickers,
 		'taskEditorWorkflowPickers' in src || Object.keys(src).length === 0
@@ -3032,13 +3181,11 @@ export function migrateSettings(raw: unknown): OperonSettings {
 			!isRetiredKeyMapping(m.canonicalKey)
 			&& (!m.isSystem || CANONICAL_KEYS.some(k => k.name === m.canonicalKey))
 		);
-		out.keyMappings = out.keyMappings.filter((mapping, index, list) =>
-			list.findIndex(candidate => candidate.canonicalKey === mapping.canonicalKey) === index
-		);
+		out.keyMappings = dedupeKeyMappingsByCanonicalKey(out.keyMappings);
 		// Add any new canonical keys not yet in mappings
 		for (const k of CANONICAL_KEYS) {
 			if (isRetiredKeyMapping(k.name)) continue;
-			if (!out.keyMappings.some(m => m.canonicalKey === k.name)) {
+			if (!out.keyMappings.some(m => m.isSystem !== false && m.canonicalKey === k.name)) {
 				out.keyMappings.push({
 					canonicalKey: k.name,
 					visiblePropertyName: getDefaultKeyMappingVisibleName(k.name),
@@ -3052,7 +3199,10 @@ export function migrateSettings(raw: unknown): OperonSettings {
 				});
 			}
 		}
+		out.keyMappings = dedupeKeyMappingsByCanonicalKey(out.keyMappings);
 	}
+	out.keyMappings = normalizeKeyMappingCollection(out.keyMappings);
+	normalizeSurfaceOrderingSettings(out, src);
 
 	out.fileTasksFolder = normalizeSettingsFolderPath(out.fileTasksFolder);
 	out.fileTaskArchiveFolder = normalizeSettingsFolderPath(out.fileTaskArchiveFolder);
@@ -3135,109 +3285,77 @@ export function migrateSettings(raw: unknown): OperonSettings {
 	return out;
 }
 
-function normalizeTaskCreatorToolbar(raw: unknown): TaskCreatorToolbarItem[] {
-	const defaults = buildDefaultTaskCreatorToolbarItems();
-	if (!Array.isArray(raw)) {
-		return defaults;
-	}
+function normalizeSurfaceOrderingSettings(out: OperonSettings, src: Record<string, unknown>): void {
+	out.taskCreatorToolbar = normalizeTaskCreatorToolbar(src.taskCreatorToolbar, out.keyMappings);
+	out.taskEditorWorkflowPickers = normalizeTaskEditorWorkflowPickers(
+		src.taskEditorWorkflowPickers,
+		'taskEditorWorkflowPickers' in src || Object.keys(src).length === 0
+			? DEFAULT_SETTINGS.taskEditorWorkflowPickers
+			: buildCompatibilityTaskEditorWorkflowPickerItems(),
+		out.keyMappings,
+	);
+	out.taskEditorMobileCoreTools = normalizeTaskEditorMobileCoreTools(
+		src.taskEditorMobileCoreTools,
+		DEFAULT_SETTINGS.taskEditorMobileCoreTools,
+		out.keyMappings,
+	);
+	out.inlineTaskCompactChips = normalizeInlineTaskCompactChips(src.inlineTaskCompactChips, out.keyMappings);
+	out.filterTaskCompactChips = normalizeFilterTaskCompactChips(src, out.keyMappings);
+	out.taskFinderCompactChips = normalizeTaskFinderCompactChips(src.taskFinderCompactChips, out.keyMappings);
+	out.overlayTaskCompactChips = normalizeOverlayTaskCompactChips(src.overlayTaskCompactChips, out.keyMappings);
+}
 
-	const allowed = new Set<TaskCreatorToolbarFieldKey>(TASK_CREATOR_TOOLBAR_FIELD_ORDER);
-	const normalized: TaskCreatorToolbarItem[] = [];
-	const seen = new Set<TaskCreatorToolbarFieldKey>();
+function isProjectableCustomSurfaceMapping(mapping: KeyMapping): boolean {
+	return mapping.isSystem === false
+		&& mapping.isInternal !== true
+		&& mapping.type !== 'checkbox'
+		&& !isRetiredKeyMapping(mapping.canonicalKey);
+}
 
-	for (const item of raw) {
-		if (!item || typeof item !== 'object') continue;
-		const key = (item as Record<string, unknown>).key;
-		const visible = (item as Record<string, unknown>).visible;
-		if (typeof key !== 'string' || !allowed.has(key as TaskCreatorToolbarFieldKey)) continue;
-		const typedKey = key as TaskCreatorToolbarFieldKey;
-		if (seen.has(typedKey)) continue;
-		seen.add(typedKey);
-		normalized.push({
-			key: typedKey,
-			visible: typeof visible === 'boolean' ? visible : true,
+function getProjectableCustomSurfaceMappings(keyMappings: readonly KeyMapping[] | undefined): KeyMapping[] {
+	return (keyMappings ?? [])
+		.filter(isProjectableCustomSurfaceMapping)
+		.sort((left, right) => {
+			const leftOrder = typeof left.customOrder === 'number' && Number.isFinite(left.customOrder)
+				? left.customOrder
+				: Number.MAX_SAFE_INTEGER;
+			const rightOrder = typeof right.customOrder === 'number' && Number.isFinite(right.customOrder)
+				? right.customOrder
+				: Number.MAX_SAFE_INTEGER;
+			if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+			return left.canonicalKey.localeCompare(right.canonicalKey);
 		});
-	}
+}
 
-	for (const key of TASK_CREATOR_TOOLBAR_FIELD_ORDER) {
-		if (seen.has(key)) continue;
-		const item = defaults.find(candidate => candidate.key === key) ?? { key, visible: true };
-		insertMissingOrderedItem(normalized, item, TASK_CREATOR_TOOLBAR_FIELD_ORDER);
-	}
+function isPreservedOrphanSurfaceKey(key: string, keyMappings: readonly KeyMapping[] | undefined): boolean {
+	if (!CUSTOM_CANONICAL_KEY_PATTERN.test(key)) return false;
+	if (ALL_BUILT_IN_SURFACE_KEYS.has(key)) return false;
+	if (BUILT_IN_CANONICAL_KEY_NAMES.has(key)) return false;
+	if (isRetiredKeyMapping(key)) return false;
+	return !(keyMappings ?? []).some(mapping => mapping.canonicalKey === key);
+}
 
-	return normalized;
+function normalizeTaskCreatorToolbar(raw: unknown, keyMappings?: readonly KeyMapping[]): TaskCreatorToolbarItem[] {
+	const defaults = buildDefaultTaskCreatorToolbarItems();
+	return normalizeSurfaceItems(raw, defaults, TASK_CREATOR_TOOLBAR_FIELD_ORDER, keyMappings, mapping => mapping.showInCreator !== false);
 }
 
 export function normalizeTaskEditorWorkflowPickers(
 	raw: unknown,
 	fallback: TaskEditorWorkflowPickerItem[] = buildDefaultTaskEditorWorkflowPickerItems(),
+	keyMappings?: readonly KeyMapping[],
 ): TaskEditorWorkflowPickerItem[] {
-	if (!Array.isArray(raw)) {
-		return fallback.map(item => ({ ...item }));
-	}
-
-	const allowed = new Set<TaskEditorWorkflowPickerKey>(TASK_EDITOR_WORKFLOW_PICKER_ORDER);
-	const normalized: TaskEditorWorkflowPickerItem[] = [];
-	const seen = new Set<TaskEditorWorkflowPickerKey>();
-
-	for (const item of raw) {
-		if (!item || typeof item !== 'object') continue;
-		const key = (item as Record<string, unknown>).key;
-		const visible = (item as Record<string, unknown>).visible;
-		if (typeof key !== 'string' || !allowed.has(key as TaskEditorWorkflowPickerKey)) continue;
-		const typedKey = key as TaskEditorWorkflowPickerKey;
-		if (seen.has(typedKey)) continue;
-		seen.add(typedKey);
-		normalized.push({
-			key: typedKey,
-			visible: typeof visible === 'boolean'
-				? visible
-				: fallback.find(candidate => candidate.key === typedKey)?.visible ?? true,
-		});
-	}
-
-	for (const item of fallback) {
-		if (seen.has(item.key)) continue;
-		insertMissingOrderedItem(normalized, { ...item }, TASK_EDITOR_WORKFLOW_PICKER_ORDER);
-	}
-
-	return normalized;
+	return normalizeSurfaceItems(raw, fallback, TASK_EDITOR_WORKFLOW_PICKER_ORDER, keyMappings, mapping => mapping.showInEditor !== false);
 }
 
 export function normalizeTaskEditorMobileCoreTools(
 	raw: unknown,
 	fallback: TaskEditorMobileCoreToolItem[] = buildDefaultTaskEditorMobileCoreToolItems(),
+	keyMappings?: readonly KeyMapping[],
 ): TaskEditorMobileCoreToolItem[] {
-	if (!Array.isArray(raw)) {
-		return orderTaskEditorMobileCoreTools(fallback.map(item => ({ ...item })));
-	}
-
-	const allowed = new Set<TaskEditorMobileCoreToolKey>(TASK_EDITOR_MOBILE_CORE_TOOL_ORDER);
-	const normalized: TaskEditorMobileCoreToolItem[] = [];
-	const seen = new Set<TaskEditorMobileCoreToolKey>();
-
-	for (const item of raw) {
-		if (!item || typeof item !== 'object') continue;
-		const key = (item as Record<string, unknown>).key;
-		const visible = (item as Record<string, unknown>).visible;
-		if (typeof key !== 'string' || !allowed.has(key as TaskEditorMobileCoreToolKey)) continue;
-		const typedKey = key as TaskEditorMobileCoreToolKey;
-		if (seen.has(typedKey)) continue;
-		seen.add(typedKey);
-		normalized.push({
-			key: typedKey,
-			visible: typeof visible === 'boolean'
-				? visible
-				: fallback.find(candidate => candidate.key === typedKey)?.visible ?? true,
-		});
-	}
-
-	for (const item of fallback) {
-		if (seen.has(item.key)) continue;
-		insertMissingOrderedItem(normalized, { ...item }, TASK_EDITOR_MOBILE_CORE_TOOL_ORDER);
-	}
-
-	return orderTaskEditorMobileCoreTools(normalized);
+	return orderTaskEditorMobileCoreTools(
+		normalizeSurfaceItems(raw, fallback, TASK_EDITOR_MOBILE_CORE_TOOL_ORDER, keyMappings, mapping => mapping.showInEditor !== false),
+	);
 }
 
 function orderTaskEditorMobileCoreTools(items: TaskEditorMobileCoreToolItem[]): TaskEditorMobileCoreToolItem[] {
@@ -3251,42 +3369,77 @@ function orderTaskEditorMobileCoreTools(items: TaskEditorMobileCoreToolItem[]): 
 	];
 }
 
-function normalizeInlineTaskCompactChips(raw: unknown): InlineTaskCompactChipItem[] {
-	return normalizeCompactChipItems(raw, buildDefaultInlineTaskCompactChipItems());
+function normalizeInlineTaskCompactChips(raw: unknown, keyMappings?: readonly KeyMapping[]): InlineTaskCompactChipItem[] {
+	return normalizeCompactChipItems(raw, buildDefaultInlineTaskCompactChipItems(), keyMappings);
 }
 
 function normalizeCompactChipItems(
 	raw: unknown,
 	defaults: InlineTaskCompactChipItem[],
+	keyMappings?: readonly KeyMapping[],
 ): InlineTaskCompactChipItem[] {
-	if (!Array.isArray(raw)) {
-		return defaults.map(item => ({ ...item }));
-	}
+	return normalizeSurfaceItems(raw, defaults, INLINE_TASK_COMPACT_CHIP_ORDER, keyMappings, mapping => mapping.showInChips === true);
+}
 
-	const allowed = new Set<InlineTaskCompactChipKey>(INLINE_TASK_COMPACT_CHIP_ORDER);
-	const normalized: InlineTaskCompactChipItem[] = [];
-	const seen = new Set<InlineTaskCompactChipKey>();
+function normalizeSurfaceItems<T extends { key: string; visible: boolean; iconOnly?: boolean }>(
+	raw: unknown,
+	defaults: T[],
+	builtInOrder: readonly string[],
+	keyMappings: readonly KeyMapping[] | undefined,
+	getCustomVisible: (mapping: KeyMapping) => boolean,
+): T[] {
+	const allowedBuiltIns = new Set<string>(builtInOrder);
+	const customMappings = getProjectableCustomSurfaceMappings(keyMappings);
+	const customByKey = new Map(customMappings.map(mapping => [mapping.canonicalKey, mapping] as const));
+	const normalized: T[] = [];
+	const seen = new Set<string>();
+	const rawItems = Array.isArray(raw) ? raw : defaults;
+	const hasIconOnly = defaults.some(item => 'iconOnly' in item);
 
-	for (const item of raw) {
-		if (!item || typeof item !== 'object') continue;
-		const key = (item as Record<string, unknown>).key;
-		const visible = (item as Record<string, unknown>).visible;
-		if (typeof key !== 'string' || !allowed.has(key as InlineTaskCompactChipKey)) continue;
-		const typedKey = key as InlineTaskCompactChipKey;
-		if (seen.has(typedKey)) continue;
-		seen.add(typedKey);
-		normalized.push({
-			key: typedKey,
-			visible: typeof visible === 'boolean' ? visible : defaults.find(candidate => candidate.key === typedKey)?.visible ?? false,
-			iconOnly: typeof (item as Record<string, unknown>).iconOnly === 'boolean'
-				? (item as Record<string, unknown>).iconOnly as boolean
-				: defaults.find(candidate => candidate.key === typedKey)?.iconOnly ?? false,
-		});
+	for (const rawItem of rawItems) {
+		if (!rawItem || typeof rawItem !== 'object') continue;
+		const record = rawItem as Record<string, unknown>;
+		const key = record.key;
+		if (typeof key !== 'string') continue;
+		const isAllowed = allowedBuiltIns.has(key)
+			|| customByKey.has(key)
+			|| isPreservedOrphanSurfaceKey(key, keyMappings);
+		if (!isAllowed || seen.has(key)) continue;
+		seen.add(key);
+		const defaultItem = defaults.find(candidate => candidate.key === key);
+		const customMapping = customByKey.get(key);
+		const visible = typeof record.visible === 'boolean'
+			? record.visible
+			: customMapping
+				? getCustomVisible(customMapping)
+				: defaultItem?.visible ?? false;
+		const nextItem = {
+			...(defaultItem ?? {}),
+			key,
+			visible,
+		} as T;
+		if (hasIconOnly) {
+			(nextItem as T & { iconOnly: boolean }).iconOnly = typeof record.iconOnly === 'boolean'
+				? record.iconOnly
+				: defaultItem?.iconOnly ?? false;
+		}
+		normalized.push(nextItem);
 	}
 
 	for (const item of defaults) {
 		if (seen.has(item.key)) continue;
-		insertMissingOrderedItem(normalized, { ...item }, INLINE_TASK_COMPACT_CHIP_ORDER);
+		seen.add(item.key);
+		insertMissingOrderedItem(normalized, { ...item }, builtInOrder);
+	}
+
+	for (const mapping of customMappings) {
+		if (seen.has(mapping.canonicalKey)) continue;
+		seen.add(mapping.canonicalKey);
+		normalized.push({
+			key: mapping.canonicalKey,
+			visible: getCustomVisible(mapping),
+			...(hasIconOnly ? { iconOnly: false } : {}),
+		} as T);
 	}
 
 	return normalized;
@@ -3307,9 +3460,9 @@ function normalizeInlineExpandedTaskChips(raw: unknown): InlineExpandedTaskChips
 	return merged;
 }
 
-function normalizeFilterTaskCompactChips(src: Record<string, unknown>): InlineTaskCompactChipItem[] {
+function normalizeFilterTaskCompactChips(src: Record<string, unknown>, keyMappings?: readonly KeyMapping[]): InlineTaskCompactChipItem[] {
 	if (Array.isArray(src.filterTaskCompactChips)) {
-		return normalizeCompactChipItems(src.filterTaskCompactChips, buildDefaultFilterTaskCompactChipItems());
+		return normalizeCompactChipItems(src.filterTaskCompactChips, buildDefaultFilterTaskCompactChipItems(), keyMappings);
 	}
 
 	const defaults = buildDefaultFilterTaskCompactChipItems();
@@ -3331,15 +3484,17 @@ function normalizeFilterTaskCompactChips(src: Record<string, unknown>): InlineTa
 	};
 
 	return defaults.map(item => {
-		const savedVisible = visibilityMap[item.key];
+		const savedVisible = (INLINE_TASK_COMPACT_CHIP_ORDER as readonly string[]).includes(item.key)
+			? visibilityMap[item.key as InlineTaskCompactChipKey]
+			: undefined;
 		return typeof savedVisible === 'boolean'
 			? { ...item, visible: savedVisible }
 			: item;
 	});
 }
 
-function normalizeTaskFinderCompactChips(raw: unknown): InlineTaskCompactChipItem[] {
-	return normalizeCompactChipItems(raw, buildDefaultTaskFinderCompactChipItems()).map(item => ({
+function normalizeTaskFinderCompactChips(raw: unknown, keyMappings?: readonly KeyMapping[]): InlineTaskCompactChipItem[] {
+	return normalizeCompactChipItems(raw, buildDefaultTaskFinderCompactChipItems(), keyMappings).map(item => ({
 		...item,
 		iconOnly: false,
 	}));
@@ -3427,39 +3582,9 @@ function normalizeTaskFinderShortcuts(raw: unknown): TaskFinderShortcutItem[] {
 	});
 }
 
-function normalizeOverlayTaskCompactChips(raw: unknown): InlineTaskCompactChipItem[] {
+function normalizeOverlayTaskCompactChips(raw: unknown, keyMappings?: readonly KeyMapping[]): InlineTaskCompactChipItem[] {
 	const defaults = buildDefaultOverlayTaskCompactChipItems();
-	if (!Array.isArray(raw)) {
-		return defaults;
-	}
-
-	const allowed = new Set<InlineTaskCompactChipKey>(INLINE_TASK_COMPACT_CHIP_ORDER);
-	const normalized: InlineTaskCompactChipItem[] = [];
-	const seen = new Set<InlineTaskCompactChipKey>();
-
-	for (const item of raw) {
-		if (!item || typeof item !== 'object') continue;
-		const key = (item as Record<string, unknown>).key;
-		const visible = (item as Record<string, unknown>).visible;
-		if (typeof key !== 'string' || !allowed.has(key as InlineTaskCompactChipKey)) continue;
-		const typedKey = key as InlineTaskCompactChipKey;
-		if (seen.has(typedKey)) continue;
-		seen.add(typedKey);
-		normalized.push({
-			key: typedKey,
-			visible: typeof visible === 'boolean' ? visible : false,
-			iconOnly: typeof (item as Record<string, unknown>).iconOnly === 'boolean'
-				? (item as Record<string, unknown>).iconOnly as boolean
-				: false,
-		});
-	}
-
-	for (const item of defaults) {
-		if (seen.has(item.key)) continue;
-		insertMissingOrderedItem(normalized, item, INLINE_TASK_COMPACT_CHIP_ORDER);
-	}
-
-	return normalized;
+	return normalizeCompactChipItems(raw, defaults, keyMappings);
 }
 
 function insertMissingOrderedItem<T extends { key: string }>(

@@ -142,9 +142,13 @@ class TaskWikilinkTrailingWidget extends WidgetType {
 	toDOM(view: EditorView): HTMLElement {
 		const wrap = createOwnerElement(view.dom, 'span');
 		wrap.className = 'operon-task-wikilink-trailing operon-task-chip-surface';
-		wrap.setCssProps({ '--operon-task-wikilink-hover': this.visuals.hoverColor });
+		wrap.setCssProps({
+			'--operon-live-hover-border': this.visuals.hoverColor,
+			'--operon-task-chip-hover-accent': this.visuals.hoverColor,
+			'--operon-task-wikilink-hover': this.visuals.hoverColor,
+		});
 
-		const progressEl = createProgressElement(this.progress, wrap);
+		const progressEl = createProgressElement(this.progress, wrap, this.visuals.hoverColor);
 		if (progressEl) {
 			wrap.appendChild(progressEl);
 		}
@@ -212,9 +216,11 @@ class TaskWikilinkTrailingWidget extends WidgetType {
 		const noteValue = this.task.fieldValues['note']?.trim();
 		if (settings.overlayTaskShowNoteAction && noteValue) {
 			const noteIndicator = createOwnerElement(wrap, 'span');
-			noteIndicator.className = 'operon-live-preview-edit operon-live-preview-action operon-task-wikilink-overlay-action operon-task-chip-action is-active';
-			noteIndicator.setAttribute('role', 'img');
-			noteIndicator.setCssProps({ '--operon-live-hover-border': this.visuals.hoverColor });
+			noteIndicator.className = 'operon-live-preview-edit operon-live-preview-action operon-task-wikilink-overlay-action operon-task-wikilink-overlay-standard-action operon-task-wikilink-note-neutral operon-task-chip-action';
+			noteIndicator.setCssProps({
+				'--operon-live-hover-border': this.visuals.hoverColor,
+				'--operon-task-chip-hover-accent': this.visuals.hoverColor,
+			});
 			setIcon(noteIndicator, getConfiguredKeyMappingIcon('note', settings.keyMappings) || 'notebook-pen');
 			setAccessibleLabelWithoutTooltip(noteIndicator, t('taskEditor', 'notes'));
 			bindOperonHoverTooltip(noteIndicator, {
@@ -234,6 +240,11 @@ class TaskWikilinkTrailingWidget extends WidgetType {
 			subtaskButton.setCssProps({ '--operon-live-hover-border': this.visuals.hoverColor });
 			setIcon(subtaskButton, resolveSubtaskActionIcon(this.task));
 			setAccessibleLabelWithoutTooltip(subtaskButton, subtaskLabel);
+			bindOperonHoverTooltip(subtaskButton, {
+				content: subtaskLabel,
+				taskColor: this.visuals.hoverColor,
+				preferredHorizontal: 'right',
+			});
 			subtaskButton.addEventListener('mousedown', stopEvent);
 			subtaskButton.addEventListener('click', (event) => {
 				stopEvent(event);
@@ -244,10 +255,19 @@ class TaskWikilinkTrailingWidget extends WidgetType {
 
 		const button = createOwnerElement(wrap, 'button');
 		button.type = 'button';
-		button.className = 'operon-task-wikilink-action operon-task-wikilink-right operon-task-chip-action';
-		button.setCssProps({ '--operon-task-wikilink-hover': this.visuals.hoverColor });
+		button.className = 'operon-live-preview-edit operon-live-preview-action operon-task-wikilink-overlay-action operon-task-wikilink-overlay-standard-action operon-task-wikilink-settings-action operon-task-chip-action';
+		button.setCssProps({
+			'--operon-live-hover-border': this.visuals.hoverColor,
+			'--operon-task-chip-hover-accent': this.visuals.hoverColor,
+			'--operon-task-wikilink-hover': this.visuals.hoverColor,
+		});
 		setIcon(button, 'settings-2');
 		setAccessibleLabelWithoutTooltip(button, t('tooltips', 'editTask'));
+		bindOperonHoverTooltip(button, {
+			content: t('tooltips', 'editTask'),
+			taskColor: this.visuals.hoverColor,
+			preferredHorizontal: 'right',
+		});
 
 		button.addEventListener('mousedown', stopEvent);
 		button.addEventListener('click', (event) => {
@@ -517,7 +537,7 @@ function getCachedDescendantSummary(
 	return summary;
 }
 
-function createProgressElement(progress: TaskFileLinkProgressIndicator, owner?: Node | null): HTMLElement | null {
+function createProgressElement(progress: TaskFileLinkProgressIndicator, owner: Node | null | undefined, taskColor: string | null): HTMLElement | null {
 	if (progress.kind === 'none') return null;
 
 	const el = createOwnerElement(owner, 'span');
@@ -531,7 +551,7 @@ function createProgressElement(progress: TaskFileLinkProgressIndicator, owner?: 
 		bindOperonHoverTooltip(el, {
 			title: tooltip?.title,
 			content: tooltip?.content ?? progress.text,
-			taskColor: null,
+			taskColor,
 		});
 		return el;
 	}
@@ -541,7 +561,7 @@ function createProgressElement(progress: TaskFileLinkProgressIndicator, owner?: 
 	bindOperonHoverTooltip(el, {
 		title: tooltip?.title,
 		content: tooltip?.content ?? t('tooltips', 'allDescendantsDone'),
-		taskColor: null,
+		taskColor,
 	});
 	setIcon(el, progress.icon);
 	setAccessibleLabelWithoutTooltip(el, tooltip?.accessibleLabel ?? t('tooltips', 'allDescendantsDone'));

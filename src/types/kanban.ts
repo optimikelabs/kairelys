@@ -1,16 +1,18 @@
 import type { KanbanTaskColorSource } from '../core/task-color-source';
 
-export type KanbanSwimlaneBy =
+export type BuiltInKanbanSwimlaneBy =
 	| 'priority'
 	| 'tags'
 	| 'contexts'
 	| 'assignees'
 	| 'dateDue'
 	| 'dateScheduled';
+export type KanbanCustomFieldKey = string & { readonly __kanbanCustomFieldKey?: never };
+export type KanbanSwimlaneBy = BuiltInKanbanSwimlaneBy | KanbanCustomFieldKey;
 
 export type KanbanColorSource = KanbanTaskColorSource;
 export type KanbanAppearanceMode = 'theme' | 'anupuccin-light' | 'anupuccin-dark' | 'catppuccin-dark' | 'atom-light' | 'atom-dark' | 'flexoki-light' | 'flexoki-dark';
-export type KanbanSortField =
+export type BuiltInKanbanSortField =
 	| 'alphabetical'
 	| 'priority'
 	| 'dateDue'
@@ -25,6 +27,7 @@ export type KanbanSortField =
 	| 'duration'
 	| 'totalDuration'
 	| 'totalEstimate';
+export type KanbanSortField = BuiltInKanbanSortField | KanbanCustomFieldKey;
 export type KanbanSortDirection = 'asc' | 'desc';
 export type KanbanSortEmptyPlacement = 'first' | 'last';
 export type KanbanSortMode = 'automatic' | 'manual';
@@ -149,6 +152,52 @@ export function createDefaultKanbanSortRules(): KanbanSortRule[] {
 	}];
 }
 
+export const KANBAN_BUILT_IN_SWIMLANE_FIELDS: BuiltInKanbanSwimlaneBy[] = [
+	'priority',
+	'tags',
+	'contexts',
+	'assignees',
+	'dateDue',
+	'dateScheduled',
+];
+
+const KANBAN_BUILT_IN_SWIMLANE_FIELD_SET = new Set<string>(KANBAN_BUILT_IN_SWIMLANE_FIELDS);
+
+export function isBuiltInKanbanSwimlaneBy(value: string | null | undefined): value is BuiltInKanbanSwimlaneBy {
+	return typeof value === 'string' && KANBAN_BUILT_IN_SWIMLANE_FIELD_SET.has(value);
+}
+
+export const KANBAN_BUILT_IN_SORT_FIELDS: BuiltInKanbanSortField[] = [
+	'alphabetical',
+	'priority',
+	'dateDue',
+	'dateScheduled',
+	'dateStarted',
+	'dateCompleted',
+	'dateCancelled',
+	'datetimeCreated',
+	'datetimeModified',
+	'progress',
+	'estimate',
+	'duration',
+	'totalDuration',
+	'totalEstimate',
+];
+
+const KANBAN_BUILT_IN_SORT_FIELD_SET = new Set<string>(KANBAN_BUILT_IN_SORT_FIELDS);
+
+export function isBuiltInKanbanSortField(value: string | null | undefined): value is BuiltInKanbanSortField {
+	return typeof value === 'string' && KANBAN_BUILT_IN_SORT_FIELD_SET.has(value);
+}
+
+const KANBAN_CUSTOM_FIELD_REFERENCE_PATTERN = /^[A-Za-z][A-Za-z0-9_-]*$/u;
+
+export function normalizeKanbanCustomFieldReference(value: unknown): KanbanCustomFieldKey | null {
+	if (typeof value !== 'string') return null;
+	const trimmed = value.trim();
+	return KANBAN_CUSTOM_FIELD_REFERENCE_PATTERN.test(trimmed) ? trimmed : null;
+}
+
 export function buildKanbanStatusCollapseScopeKey(
 	presetId: string | null | undefined,
 	pipelineId: string | null | undefined,
@@ -202,7 +251,7 @@ function isLegacyDefaultKanbanPreset(preset: KanbanPreset): boolean {
 		&& preset.sortRules[0]?.empty === 'last';
 }
 
-export const KANBAN_SORT_FIELD_OPTIONS: Array<{ value: KanbanSortField; label: string }> = [
+export const KANBAN_SORT_FIELD_OPTIONS: Array<{ value: BuiltInKanbanSortField; label: string }> = [
 	{ value: 'alphabetical', label: 'Alphabetical' },
 	{ value: 'priority', label: 'Priority' },
 	{ value: 'dateDue', label: 'Due date' },

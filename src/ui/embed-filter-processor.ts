@@ -359,7 +359,7 @@ export function renderFilterSurface(
             if (searchActive) {
                 const tasks = sortFilterTasks(
                     filterSet,
-                    applyFilterSearch(treeScopeTasks, instance.searchQuery),
+                    applyFilterSearch(treeScopeTasks, instance.searchQuery, deps.getSettings().keyMappings),
                     priorities,
                     deps.pinnedCache,
                 );
@@ -418,7 +418,7 @@ export function renderFilterSurface(
         if (searchActive) {
             const tasks = sortFilterTasks(
                 filterSet,
-                applyFilterSearch(treeScopeTasks, instance.searchQuery),
+                applyFilterSearch(treeScopeTasks, instance.searchQuery, deps.getSettings().keyMappings),
                 priorities,
                 deps.pinnedCache,
             );
@@ -467,7 +467,7 @@ export function renderFilterSurface(
         const tasks = searchActive
             ? sortFilterTasks(
                 filterSet,
-                applyFilterSearch(treeScopeTasks, instance.searchQuery),
+                applyFilterSearch(treeScopeTasks, instance.searchQuery, deps.getSettings().keyMappings),
                 priorities,
                 deps.pinnedCache,
             )

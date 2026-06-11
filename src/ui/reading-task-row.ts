@@ -39,6 +39,8 @@ import type { InlineRepeatCompletionMode } from '../storage/repeat-series-store'
 import type { DescendantTaskSummary } from '../indexer/indexer';
 import { enhanceReadingTaskFileWikilinks } from './reading-task-wikilink-overlay';
 import { isTaskDescriptionWikilinkEventTarget, renderTaskDescriptionWikilinks } from './task-description-wikilinks';
+import { openTaskFieldPicker } from './task-field-picker-dispatch';
+import { getCustomFieldMapping, isProjectedCustomFieldType } from './custom-field-surfaces';
 
 export interface ReadingTaskRowCallbacks {
 	app: App;
@@ -125,6 +127,8 @@ export function buildReadingTaskRowElement(
 	const tail = el('div', 'operon-reading-task-tail', row);
 
 	const taskColor = normalizeTaskColor(task.fieldValues['taskColor']);
+	if (taskColor) row.style.setProperty('--operon-live-hover-border', taskColor);
+	if (taskColor) row.style.setProperty('--operon-task-chip-hover-accent', taskColor);
 	const statusColor = lookupStatusColor(task.fieldValues['status'], callbacks.getPipelines());
 	const terminalVisualState = resolveTerminalVisualState(task, callbacks.getPipelines());
 	const isTerminal = terminalVisualState !== null;
@@ -225,8 +229,9 @@ export function buildReadingTaskRowElement(
 			} else {
 				bindIconOnlyChipPreview(chip);
 			}
-			if (entry.linkTarget) {
-				bindCompactChipLinkPreview(callbacks.app, chip, entry.linkTarget, task.primary.filePath);
+			const previewLinkTarget = entry.previewLinkTarget ?? entry.linkTarget;
+			if (previewLinkTarget) {
+				bindCompactChipLinkPreview(callbacks.app, chip, previewLinkTarget, task.primary.filePath);
 			}
 			tail.appendChild(chip);
 			continue;
@@ -244,8 +249,9 @@ export function buildReadingTaskRowElement(
 		if (entry.externalUrl) {
 			bindExternalLinkContextMenu(chip, entry.externalUrl, entry.externalRawValue);
 		}
-		if (entry.linkTarget) {
-			bindCompactChipLinkPreview(callbacks.app, chip, entry.linkTarget, task.primary.filePath);
+		const previewLinkTarget = entry.previewLinkTarget ?? entry.linkTarget;
+		if (previewLinkTarget) {
+			bindCompactChipLinkPreview(callbacks.app, chip, previewLinkTarget, task.primary.filePath);
 		}
 		tail.appendChild(chipNode);
 	}
@@ -342,7 +348,7 @@ export function buildReadingTaskRowElement(
 			taskColor,
 			preferredHorizontal: 'right',
 		});
-		noteIndicator.querySelector('.operon-hover-trigger')?.classList.add('operon-task-chip-action');
+		noteIndicator.querySelector('.operon-hover-trigger')?.classList.add('operon-reading-task-note-neutral', 'operon-task-chip-action');
 		actions.appendChild(noteIndicator);
 	}
 
@@ -574,6 +580,44 @@ function attachReadingChipAction(
 			case 'totalDuration':
 			case 'totalEstimate':
 				break;
+			default: {
+				const settings = callbacks.getSettings();
+				const customMapping = getCustomFieldMapping(settings.keyMappings, entry.key);
+				if (!customMapping || !isProjectedCustomFieldType(customMapping)) return;
+				if (entry.linkTarget) {
+					void callbacks.app.workspace.openLinkText(entry.linkTarget, task.primary.filePath, false);
+					onCommit?.();
+					return;
+				}
+				openTaskFieldPicker({
+					app: callbacks.app,
+					settings,
+					allTasks: callbacks.getAllTasks(),
+					canonicalKey: entry.key,
+					anchor: chip,
+					currentFieldValues: task.fieldValues,
+					currentTags: task.tags,
+					sourcePath: task.primary.filePath,
+					taskFormat: task.primary.format,
+					onCommit: payload => {
+						const normalizedPayload = Object.fromEntries(
+							Object.entries(payload).map(([key, value]) => [
+								key,
+								Array.isArray(value) ? value.join('; ') : value,
+							]),
+						);
+						if (callbacks.updateFields) {
+							void callbacks.updateFields(task.operonId, normalizedPayload);
+						} else {
+							for (const [key, value] of Object.entries(normalizedPayload)) {
+								void callbacks.updateField(task.operonId, key, value);
+							}
+						}
+						onCommit?.();
+					},
+				});
+				break;
+			}
 		}
 	});
 	if (taskColor) chip.style.setProperty('--operon-live-hover-border', taskColor);

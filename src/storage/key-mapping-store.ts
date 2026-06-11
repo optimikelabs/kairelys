@@ -1,7 +1,7 @@
 import { App } from 'obsidian';
 import { normalizeTaskIconValue } from '../core/task-icon-value';
 import { CANONICAL_KEYS } from '../types/keys';
-import { KeyMapping } from '../types/settings';
+import { KeyMapping, normalizeKeyMappingCollection } from '../types/settings';
 import { WriteQueue } from './write-queue';
 import { preserveInvalidJsonFile, shouldSkipStoreWrite, writeJsonSafely, type RecoveredStoreWriteOptions } from './storage-file-ops';
 import type { OperonKeyMappingsPackageV1 } from './operon-data-package';
@@ -18,19 +18,27 @@ interface KeyMappingStoreData {
 }
 
 function cloneKeyMapping(mapping: KeyMapping): KeyMapping {
-	return {
+	const clone: KeyMapping = {
 		...mapping,
 		icon: normalizeTaskIconValue(mapping.icon),
 		hideInFileTaskView: mapping.hideInFileTaskView === true,
 		isInternal: mapping.isInternal === true,
 	};
+	if (clone.isSystem !== false) {
+		delete clone.customOrder;
+		delete clone.showInEditor;
+		delete clone.showInCreator;
+		delete clone.showInChips;
+		delete clone.showInKanbanSwimlane;
+	}
+	return clone;
 }
 
 function cloneKeyMappings(mappings: KeyMapping[]): KeyMapping[] {
 	return mappings.map(cloneKeyMapping);
 }
 
-function coerceKeyMapping(raw: unknown): KeyMapping | null {
+function coerceKeyMapping(raw: unknown, fallbackIsSystem = true): KeyMapping | null {
 	if (!raw || typeof raw !== 'object') return null;
 	const src = raw as Record<string, unknown>;
 	const canonicalKey = typeof src.canonicalKey === 'string' ? src.canonicalKey.trim() : '';
@@ -42,10 +50,11 @@ function coerceKeyMapping(raw: unknown): KeyMapping | null {
 		|| src.type === 'date'
 		|| src.type === 'datetime'
 		|| src.type === 'list'
+		|| src.type === 'checkbox'
 		? src.type
 		: 'text';
 	const sync = src.sync === 'yes' || src.sync === 'no' ? src.sync : 'auto';
-	return {
+	const mapping: KeyMapping = {
 		canonicalKey,
 		visiblePropertyName,
 		type,
@@ -53,16 +62,35 @@ function coerceKeyMapping(raw: unknown): KeyMapping | null {
 		enabled: true,
 		hideInFileTaskView: src.hideInFileTaskView === true,
 		icon: normalizeTaskIconValue(typeof src.icon === 'string' ? src.icon : ''),
-		isSystem: src.isSystem !== false,
+		isSystem: typeof src.isSystem === 'boolean' ? src.isSystem : fallbackIsSystem,
 		isInternal: src.isInternal === true,
 	};
+	if (typeof src.customOrder === 'number' && Number.isFinite(src.customOrder)) {
+		mapping.customOrder = src.customOrder;
+	}
+	if (typeof src.showInEditor === 'boolean') {
+		mapping.showInEditor = src.showInEditor;
+	}
+	if (typeof src.showInCreator === 'boolean') {
+		mapping.showInCreator = src.showInCreator;
+	}
+	if (typeof src.showInChips === 'boolean') {
+		mapping.showInChips = src.showInChips;
+	}
+	if (typeof src.showInKanbanSwimlane === 'boolean') {
+		mapping.showInKanbanSwimlane = src.showInKanbanSwimlane;
+	}
+	if (typeof src.description === 'string') {
+		mapping.description = src.description;
+	}
+	return mapping;
 }
 
-function readSection(raw: unknown): KeyMapping[] {
+function readSection(raw: unknown, fallbackIsSystem = true): KeyMapping[] {
 	if (!Array.isArray(raw)) return [];
 	const mappings: KeyMapping[] = [];
 	for (const entry of raw) {
-		const mapping = coerceKeyMapping(entry);
+		const mapping = coerceKeyMapping(entry, fallbackIsSystem);
 		if (mapping) mappings.push(mapping);
 	}
 	return mappings;
@@ -71,7 +99,7 @@ function readSection(raw: unknown): KeyMapping[] {
 function splitKeyMappings(mappings: KeyMapping[]): { system: KeyMapping[]; custom: KeyMapping[] } {
 	const system: KeyMapping[] = [];
 	const custom: KeyMapping[] = [];
-	for (const mapping of mappings) {
+	for (const mapping of normalizeKeyMappingCollection(mappings)) {
 		const clone = cloneKeyMapping(mapping);
 		if (clone.isSystem) {
 			system.push(clone);
@@ -114,8 +142,12 @@ export class KeyMappingStore {
 	}
 
 	loadFromPackage(keyMappings: OperonKeyMappingsPackageV1): void {
-		this.system = readSection(keyMappings.system);
-		this.custom = readSection(keyMappings.custom);
+		const split = splitKeyMappings([
+			...readSection(keyMappings.system, true),
+			...readSection(keyMappings.custom, false),
+		]);
+		this.system = split.system;
+		this.custom = split.custom;
 		this.serializedStore = JSON.stringify({
 			system: this.system,
 			custom: this.custom,
@@ -145,8 +177,12 @@ export class KeyMappingStore {
 		try {
 			raw = await adapter.read(KEY_MAPPINGS_FILE);
 			const parsed = JSON.parse(raw) as Partial<KeyMappingStoreData>;
-			this.system = readSection(parsed.system);
-			this.custom = readSection(parsed.custom);
+			const split = splitKeyMappings([
+				...readSection(parsed.system, true),
+				...readSection(parsed.custom, false),
+			]);
+			this.system = split.system;
+			this.custom = split.custom;
 			this.serializedStore = JSON.stringify({
 				system: this.system,
 				custom: this.custom,

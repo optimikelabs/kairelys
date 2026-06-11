@@ -1,8 +1,9 @@
-import { CANONICAL_KEY_MAP, TASK_STATS_CANONICAL_KEYS } from '../types/keys';
+import { TASK_STATS_CANONICAL_KEYS } from '../types/keys';
 import { isRetiredKeyMapping, KeyMapping } from '../types/settings';
 import { buildForwardMapping, buildReverseMapping, getManagedYamlAliases, isManagedYamlCanonicalKey } from './yaml-fields';
 import { normalizeTaskIconValue } from './task-icon-value';
 import { formatTaskColorYamlValue } from './task-color-value';
+import { getManagedTaskFieldType } from './managed-task-fields';
 
 export interface YamlFrontmatterFormattingPlan {
 	blankYamlKeys: Set<string>;
@@ -164,19 +165,43 @@ export function tryPatchAggregateYamlFrontmatter(
 	return { ok: true, content: patched, fallbackReason: 'none' };
 }
 
-function getConfiguredFieldType(canonicalKey: string, keyMappings: KeyMapping[]): KeyMapping['type'] | null {
-	const canonicalDef = CANONICAL_KEY_MAP.get(canonicalKey);
-	if (canonicalDef) return canonicalDef.type;
-	return keyMappings.find(mapping => mapping.canonicalKey === canonicalKey)?.type ?? null;
-}
-
 function hasYamlKey(frontmatter: Record<string, unknown>, yamlKey: string): boolean {
 	return Object.prototype.hasOwnProperty.call(frontmatter, yamlKey) === true;
+}
+
+function isNumericYamlString(value: string): boolean {
+	return /^-?\d+(\.\d+)?$/.test(value.trim());
+}
+
+function hasMeaningfulYamlValue(value: unknown): boolean {
+	if (value === '' || value === null || value === undefined) return false;
+	if (Array.isArray(value) && value.length === 0) return false;
+	return true;
+}
+
+function normalizeYamlValueForComparison(value: unknown): string | null {
+	if (value === null || value === undefined) return '';
+	if (typeof value === 'string') return value.trim();
+	if (typeof value === 'number' || typeof value === 'boolean') return String(value).trim();
+	if (Array.isArray(value)) {
+		return value
+			.map(item => normalizeYamlValueForComparison(item))
+			.filter((item): item is string => item !== null && item !== '')
+			.join('; ');
+	}
+	return null;
+}
+
+function yamlValuesEquivalent(left: unknown, right: unknown): boolean {
+	const normalizedLeft = normalizeYamlValueForComparison(left);
+	const normalizedRight = normalizeYamlValueForComparison(right);
+	return normalizedLeft !== null && normalizedRight !== null && normalizedLeft === normalizedRight;
 }
 
 function resolveManagedCanonicalKey(
 	yamlKey: string,
 	reverseMap: Map<string, string>,
+	keyMappings: KeyMapping[],
 ): string | null {
 	if (yamlKey === 'position' || yamlKey === 'tags' || yamlKey === 'title' || yamlKey.startsWith('_')) {
 		return null;
@@ -188,7 +213,7 @@ function resolveManagedCanonicalKey(
 	if (mappedKey) {
 		return isRetiredKeyMapping(mappedKey) ? null : mappedKey;
 	}
-	return CANONICAL_KEY_MAP.has(yamlKey) && !isRetiredKeyMapping(yamlKey) ? yamlKey : null;
+	return isManagedYamlCanonicalKey(yamlKey, keyMappings) ? yamlKey : null;
 }
 
 function buildManagedFieldPayload(
@@ -222,12 +247,6 @@ function pickExistingManagedValue(
 	aliasKeys: Iterable<string>,
 	preferredYamlKey: string,
 ): unknown {
-	const hasMeaningfulYamlValue = (value: unknown): boolean => {
-		if (value === '' || value === null || value === undefined) return false;
-		if (Array.isArray(value) && value.length === 0) return false;
-		return true;
-	};
-
 	if (hasYamlKey(frontmatter, preferredYamlKey) && hasMeaningfulYamlValue(frontmatter[preferredYamlKey])) {
 		return frontmatter[preferredYamlKey];
 	}
@@ -269,16 +288,16 @@ function coerceYamlStoredValue(
 	if (canonicalKey === 'taskColor') {
 		return formatTaskColorYamlValue(value);
 	}
-	const fieldType = getConfiguredFieldType(canonicalKey, keyMappings);
+	const fieldType = getManagedTaskFieldType(canonicalKey, keyMappings);
 	if (fieldType === 'list' && value) {
 		return value.split('; ').map(v => v.trim()).filter(v => v);
 	}
 	if (fieldType === 'number' && value) {
-		return Number(value);
+		return isNumericYamlString(value) ? Number(value) : value;
 	}
 	if (
 		typeof existingValue === 'number'
-		&& /^-?\d+(\.\d+)?$/.test(value.trim())
+		&& isNumericYamlString(value)
 	) {
 		return Number(value);
 	}
@@ -356,13 +375,16 @@ export function applyYamlTaskFieldValues(
 		for (const yamlKey of aliasKeys) {
 			if (yamlKey === preferredYamlKey) continue;
 			if (!hasYamlKey(frontmatter, yamlKey)) continue;
-			removeYamlKey(yamlKey);
+			const aliasValue = frontmatter[yamlKey];
+			if (!hasMeaningfulYamlValue(aliasValue) || yamlValuesEquivalent(aliasValue, value)) {
+				removeYamlKey(yamlKey);
+			}
 		}
 	};
 
 	const existingManagedKeys = new Map<string, Set<string>>();
 	for (const yamlKey of Object.keys(frontmatter)) {
-		const canonicalKey = resolveManagedCanonicalKey(yamlKey, reverseMap);
+		const canonicalKey = resolveManagedCanonicalKey(yamlKey, reverseMap, keyMappings);
 		if (!canonicalKey || canonicalKey === 'pinned') continue;
 		if (!existingManagedKeys.has(canonicalKey)) {
 			existingManagedKeys.set(canonicalKey, new Set<string>());

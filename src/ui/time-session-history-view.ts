@@ -3,8 +3,8 @@ import { OperonIndexer } from '../indexer/indexer';
 import { TimeTracker } from '../systems/time-tracker';
 import { TrackerHistoryDayGroup, TrackerSession, TrackerSource } from '../types/tracker';
 import { OperonSettings, resolveTaskDisplayIcon } from '../types/settings';
-import { formatDurationHuman } from '../systems/tracker-utils';
-import { parseStatusValue } from '../types/pipeline';
+import { formatDurationHuman, parseTrackerList } from '../systems/tracker-utils';
+import { parseStatusValue, resolveWorkflowStatus } from '../types/pipeline';
 import { TrackerSessionEditModal } from './tracker-session-edit-modal';
 import { t } from '../core/i18n';
 import { formatTaskNotice } from '../core/task-notice';
@@ -150,6 +150,10 @@ export class TimeSessionHistoryView extends ItemView {
 
 	private renderSessionCard(container: HTMLElement, session: TrackerSession): void {
 		const card = container.createDiv('operon-time-session-history-session-card');
+		const isTerminalTask = this.isTerminalTask(session.task);
+		if (isTerminalTask) {
+			card.addClass('is-terminal-task');
+		}
 		this.applyTaskColorBorder(card, session.task);
 		this.renderTaskIdentity(card, session.task);
 
@@ -160,17 +164,26 @@ export class TimeSessionHistoryView extends ItemView {
 			session.start,
 			session.end,
 		);
+		body.createSpan({
+			cls: 'operon-time-session-history-session-count',
+			text: this.formatSessionCount(session),
+		});
 		const intervalButton = body.createEl('button', {
 			cls: 'operon-time-session-history-session-interval-button',
 			attr: {
 				type: 'button',
 			},
 		});
+		intervalButton.createSpan({
+			cls: 'operon-time-session-history-session-interval-primary',
+			text: formatDurationHuman(session.durationSeconds),
+		});
+		const intervalDetail = intervalButton.createSpan('operon-time-session-history-session-interval-detail');
 		if (sessionMeta.icon) {
-			const icon = intervalButton.createSpan('operon-time-session-history-session-interval-icon');
+			const icon = intervalDetail.createSpan('operon-time-session-history-session-interval-icon');
 			setIcon(icon, sessionMeta.icon);
 		}
-		intervalButton.createSpan({
+		intervalDetail.createSpan({
 			cls: 'operon-time-session-history-session-interval-text',
 			text: sessionMeta.fullText,
 		});
@@ -211,15 +224,13 @@ export class TimeSessionHistoryView extends ItemView {
 		});
 
 		const actions = body.createDiv('operon-time-session-history-session-actions');
-		actions.createSpan({
-			cls: 'operon-time-session-history-session-duration',
-			text: formatDurationHuman(session.durationSeconds),
-		});
-
 		const play = actions.createEl('button', {
 			cls: 'operon-time-session-history-session-play',
 			attr: { type: 'button' },
 		});
+		if (isTerminalTask) {
+			play.addClass('is-terminal-task');
+		}
 		setIcon(play, 'play');
 		setAccessibleLabelWithoutTooltip(play, t('taskEditor', 'replayTaskTimer'));
 		play.addEventListener('click', asyncHandler('time session history replay failed', async () => {
@@ -228,8 +239,19 @@ export class TimeSessionHistoryView extends ItemView {
 				this.render();
 			}
 		}));
+	}
 
-		this.renderSecondaryTaskAction(actions, session.task);
+	private formatSessionCount(session: TrackerSession): string {
+		const sessionTotal = parseTrackerList(session.task.fieldValues['trackers'] ?? '').length;
+		const sessionPosition = session.sessionIndex + 1;
+		return `${sessionPosition}/${Math.max(sessionPosition, sessionTotal, 1)}`;
+	}
+
+	private isTerminalTask(task: import('../types/fields').IndexedTask): boolean {
+		if (task.checkbox === 'done' || task.checkbox === 'cancelled') return true;
+		if (task.fieldValues['dateCompleted']?.trim() || task.fieldValues['dateCancelled']?.trim()) return true;
+		const workflow = resolveWorkflowStatus(this.callbacks.getPipelines(), task.fieldValues['status']);
+		return workflow?.definition.isFinished === true || workflow?.definition.isCancelled === true;
 	}
 
 	private renderTaskIdentity(
@@ -268,6 +290,8 @@ export class TimeSessionHistoryView extends ItemView {
 		desc.setText(formatTimeSessionHistoryTaskDescription(task));
 		desc.addEventListener('click', () => this.handleTaskDescriptionClick(task));
 		desc.addClass('is-history');
+
+		this.renderSecondaryTaskAction(row, task);
 	}
 
 	private handleTaskDescriptionClick(task: import('../types/fields').IndexedTask): void {

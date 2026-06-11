@@ -1,8 +1,9 @@
-import { CANONICAL_KEY_MAP, CANONICAL_KEY_ORDER } from '../types/keys';
+import { CANONICAL_KEY_ORDER } from '../types/keys';
 import { isRetiredKeyMapping, KeyMapping } from '../types/settings';
 import { buildForwardMapping, buildReverseMapping } from './yaml-fields';
 import { ResolvedFileTaskDefaults } from './file-task-defaults';
 import { formatTaskColorYamlValue, normalizeTaskColorValue } from './task-color-value';
+import { getManagedTaskFieldType, isManagedTaskFieldCanonicalKey } from './managed-task-fields';
 
 export type FileTaskBodyStrategy = 'preserve-source' | 'use-template';
 type SectionKind = 'managed' | 'title' | 'tags' | 'unknown';
@@ -216,16 +217,21 @@ function renderListSection(yamlKey: string, values: string[]): string {
 	].join('\n');
 }
 
-function renderManagedSection(yamlKey: string, canonicalKey: string, value: string): string {
-	const def = CANONICAL_KEY_MAP.get(canonicalKey);
-	if (def?.type === 'list') {
+function renderManagedSection(
+	yamlKey: string,
+	canonicalKey: string,
+	value: string,
+	keyMappings: KeyMapping[],
+): string {
+	const fieldType = getManagedTaskFieldType(canonicalKey, keyMappings);
+	if (fieldType === 'list') {
 		if (!value) return `${yamlKey}:`;
 		const items = value.split(';').map(item => item.trim()).filter(Boolean);
 		return renderListSection(yamlKey, items);
 	}
 
 	if (!value) return `${yamlKey}:`;
-	if (def?.type === 'number' && /^-?\d+(\.\d+)?$/.test(value.trim())) {
+	if (fieldType === 'number' && /^-?\d+(\.\d+)?$/.test(value.trim())) {
 		return `${yamlKey}: ${value.trim()}`;
 	}
 	if (canonicalKey === 'taskColor') {
@@ -247,6 +253,7 @@ function buildOrderedFieldPresence(values: Record<string, string>, provided?: Se
 function parseSection(
 	section: RawSection,
 	reverseMap: Map<string, string>,
+	keyMappings: KeyMapping[],
 ): {
 	parsed: ParsedFrontmatterSection;
 	value?: string | string[];
@@ -280,7 +287,7 @@ function parseSection(
 	const mappedKey = reverseMap.get(section.yamlKey);
 	const canonicalKey = mappedKey
 		? (isRetiredKeyMapping(mappedKey) ? null : mappedKey)
-		: CANONICAL_KEY_MAP.has(section.yamlKey) && !isRetiredKeyMapping(section.yamlKey)
+		: isManagedTaskFieldCanonicalKey(section.yamlKey, keyMappings)
 			? section.yamlKey
 			: null;
 	if (!canonicalKey) {
@@ -294,10 +301,10 @@ function parseSection(
 		};
 	}
 
-	const def = CANONICAL_KEY_MAP.get(canonicalKey);
+	const fieldType = getManagedTaskFieldType(canonicalKey, keyMappings);
 	const headerLine = section.lines[0] ?? '';
 	const valuePart = headerLine.slice(headerLine.indexOf(':') + 1);
-	const value = def?.type === 'list'
+	const value = fieldType === 'list'
 		? parseListSection(section).join('; ')
 		: canonicalKey === 'taskColor'
 			? normalizeTaskColorValue(parseScalarValue(valuePart))
@@ -339,7 +346,7 @@ export function parseFrontmatterDocument(content: string, keyMappings: KeyMappin
 	let tagsPresent = false;
 
 	for (const rawSection of rawSections) {
-		const { parsed, value } = parseSection(rawSection, reverseMap);
+		const { parsed, value } = parseSection(rawSection, reverseMap, keyMappings);
 		sections.push(parsed);
 		if (parsed.kind === 'title') {
 			continue;
@@ -432,6 +439,7 @@ function buildMergedManagedFields(
 	templateValues: Record<string, string>,
 	templatePresence: Set<string>,
 	defaults: ResolvedFileTaskDefaults,
+	keyMappings: KeyMapping[],
 	explicitEmptySourceKeys: Set<string> = new Set(),
 ): { values: Record<string, string>; presence: Set<string> } {
 	const values: Record<string, string> = {};
@@ -457,6 +465,7 @@ function buildMergedManagedFields(
 	}
 
 	for (const key of candidateKeys) {
+		if (!isManagedTaskFieldCanonicalKey(key, keyMappings)) continue;
 		const sourceHasValue = sourcePresence.has(key);
 		const templateHasValue = templatePresence.has(key);
 		const sourceValue = sourceValues[key] ?? '';
@@ -622,6 +631,7 @@ export function buildMergedFileTaskDraft(options: BuildMergedFileTaskDraftOption
 		templateValues,
 		templatePresence,
 		options.defaults,
+		options.keyMappings,
 		source.explicitEmptyFieldKeys,
 	);
 	const chosenKeyMap = buildChosenKeyMap(
@@ -681,7 +691,7 @@ export function buildMergedFileTaskDraft(options: BuildMergedFileTaskDraftOption
 				emit(choice.yamlKey, section.raw);
 				continue;
 			}
-			emit(choice.yamlKey, renderManagedSection(choice.yamlKey, section.canonicalKey, mergedValue));
+			emit(choice.yamlKey, renderManagedSection(choice.yamlKey, section.canonicalKey, mergedValue, options.keyMappings));
 		}
 	};
 
@@ -692,7 +702,7 @@ export function buildMergedFileTaskDraft(options: BuildMergedFileTaskDraftOption
 	if (operonIdChoice) {
 		emit(
 			operonIdChoice.yamlKey,
-			renderManagedSection(operonIdChoice.yamlKey, 'operonId', mergedFields.values['operonId'] ?? ''),
+			renderManagedSection(operonIdChoice.yamlKey, 'operonId', mergedFields.values['operonId'] ?? '', options.keyMappings),
 		);
 	}
 
@@ -702,7 +712,7 @@ export function buildMergedFileTaskDraft(options: BuildMergedFileTaskDraftOption
 		if (!choice) continue;
 		emit(
 			choice.yamlKey,
-			renderManagedSection(choice.yamlKey, canonicalKey, mergedFields.values[canonicalKey] ?? ''),
+			renderManagedSection(choice.yamlKey, canonicalKey, mergedFields.values[canonicalKey] ?? '', options.keyMappings),
 		);
 	}
 

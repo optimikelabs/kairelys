@@ -29,6 +29,33 @@ import {
 	tryResolveSlotIndexFromDigits,
 } from './datetime-time-grid';
 
+export interface DatetimePickerClassNames {
+	useBaseClasses?: boolean;
+	panel?: string;
+	topRow?: string;
+	query?: string;
+	topTime?: string;
+	timeInput?: string;
+	controlsRow?: string;
+	dateSection?: string;
+	dateLabel?: string;
+	dayPickerHost?: string;
+	meridiem?: string;
+	meridiemButton?: string;
+	dateResults?: string;
+	dateItem?: string;
+	dateItemLabel?: string;
+	dateItemDate?: string;
+	dateItemWeekday?: string;
+	empty?: string;
+	timeResults?: string;
+	timeItem?: string;
+	timeNotice?: string;
+	actions?: string;
+	clearButton?: string;
+	todayButton?: string;
+}
+
 export interface DatetimePickerOptions {
 	app?: App;
 	settings: Pick<OperonSettings, 'timeFormat' | 'calendarWeekStart' | 'calendarSidebarShowWeekNumbers'>;
@@ -36,6 +63,7 @@ export interface DatetimePickerOptions {
 	language?: DatePickerLang;
 	value?: string;
 	retainInputFocus?: boolean;
+	classNames?: DatetimePickerClassNames;
 	onSelect: (value: string) => void;
 	onRemove?: () => void;
 	canRemove?: boolean;
@@ -58,58 +86,62 @@ export function showDatetimePicker(anchor: HTMLElement | DOMRect, options: Datet
 		language,
 		referenceDate: new Date(),
 	};
-	const { panel, close } = createFloatingPanel(anchor, 'operon-floating-panel operon-datetime-picker-panel', () => {
+	const useBaseClasses = options.classNames?.useBaseClasses !== false;
+	const timeItemSelectorClass = useBaseClasses
+		? 'operon-datetime-picker-time-item'
+		: firstDatetimePickerClass(options.classNames?.timeItem) ?? 'operon-datetime-picker-time-item';
+	const { panel, close } = createFloatingPanel(anchor, joinDatetimePickerClasses('operon-floating-panel', baseDatetimePickerClass('operon-datetime-picker-panel', useBaseClasses), options.classNames?.panel), () => {
 		if (!completed) options.onCancel?.();
 		options.onClose?.();
 	}, {
 		retainInputFocus: options.retainInputFocus,
 	});
 
-	panel.classList.add('operon-datetime-picker-panel');
+	if (useBaseClasses) panel.classList.add('operon-datetime-picker-panel');
 
-	const topRow = panel.createDiv('operon-datetime-picker-top-row');
+	const topRow = panel.createDiv(joinDatetimePickerClasses(baseDatetimePickerClass('operon-datetime-picker-top-row', useBaseClasses), options.classNames?.topRow));
 
 	const input = topRow.createEl('input');
 	input.type = 'text';
-	input.className = 'operon-floating-input operon-date-picker-query operon-datetime-picker-query';
+	input.className = joinDatetimePickerClasses('operon-floating-input', baseDatetimePickerClass('operon-date-picker-query operon-datetime-picker-query', useBaseClasses), options.classNames?.query);
 	input.placeholder = strings.searchPlaceholder;
 
-	const topTimeWrap = topRow.createDiv('operon-datetime-picker-top-time');
+	const topTimeWrap = topRow.createDiv(joinDatetimePickerClasses(baseDatetimePickerClass('operon-datetime-picker-top-time', useBaseClasses), options.classNames?.topTime));
 
 	const timeInput = topTimeWrap.createEl('input');
 	timeInput.type = 'text';
-	timeInput.className = 'operon-floating-input operon-datetime-picker-time-input';
+	timeInput.className = joinDatetimePickerClasses('operon-floating-input', baseDatetimePickerClass('operon-datetime-picker-time-input', useBaseClasses), options.classNames?.timeInput);
 	timeInput.placeholder = t('taskEditor', 'datetimeTimePlaceholder');
 
-	const results = panel.createDiv('operon-date-picker-results');
+	const results = panel.createDiv(joinDatetimePickerClasses(baseDatetimePickerClass('operon-date-picker-results', useBaseClasses), options.classNames?.dateResults));
 
-	const controlsRow = panel.createDiv('operon-datetime-picker-controls-row');
+	const controlsRow = panel.createDiv(joinDatetimePickerClasses(baseDatetimePickerClass('operon-datetime-picker-controls-row', useBaseClasses), options.classNames?.controlsRow));
 
-	const dateSection = controlsRow.createDiv('operon-datetime-picker-control-section');
+	const dateSection = controlsRow.createDiv(joinDatetimePickerClasses(baseDatetimePickerClass('operon-datetime-picker-control-section', useBaseClasses), options.classNames?.dateSection));
 
-	const dateLabel = dateSection.createDiv('operon-floating-subtitle operon-datetime-picker-control-label');
+	const dateLabel = dateSection.createDiv(joinDatetimePickerClasses('operon-floating-subtitle', baseDatetimePickerClass('operon-datetime-picker-control-label', useBaseClasses), options.classNames?.dateLabel));
 	dateLabel.textContent = strings.manualDate;
 
-	const dayPickerHost = dateSection.createDiv('operon-datetime-picker-day-picker-host');
+	const dayPickerHost = dateSection.createDiv(joinDatetimePickerClasses(baseDatetimePickerClass('operon-datetime-picker-day-picker-host', useBaseClasses), options.classNames?.dayPickerHost));
 
 	let meridiemButtons: { am: HTMLButtonElement; pm: HTMLButtonElement } | null = null;
 	if (timeFormat === '12h') {
-		const meridiemToggle = topTimeWrap.createDiv('operon-datetime-picker-meridiem');
+		const meridiemToggle = topTimeWrap.createDiv(joinDatetimePickerClasses(baseDatetimePickerClass('operon-datetime-picker-meridiem', useBaseClasses), options.classNames?.meridiem));
 		meridiemButtons = {
-			am: createButton(t('taskEditor', 'datetimeAm'), 'operon-datetime-picker-meridiem-btn', meridiemToggle),
-			pm: createButton(t('taskEditor', 'datetimePm'), 'operon-datetime-picker-meridiem-btn', meridiemToggle),
+			am: createButton(t('taskEditor', 'datetimeAm'), joinDatetimePickerClasses(baseDatetimePickerClass('operon-datetime-picker-meridiem-btn', useBaseClasses), options.classNames?.meridiemButton), meridiemToggle),
+			pm: createButton(t('taskEditor', 'datetimePm'), joinDatetimePickerClasses(baseDatetimePickerClass('operon-datetime-picker-meridiem-btn', useBaseClasses), options.classNames?.meridiemButton), meridiemToggle),
 		};
 		meridiemToggle.appendChild(meridiemButtons.am);
 		meridiemToggle.appendChild(meridiemButtons.pm);
 	}
 
-	const timeResults = topTimeWrap.createDiv('operon-datetime-picker-time-results');
+	const timeResults = topTimeWrap.createDiv(joinDatetimePickerClasses(baseDatetimePickerClass('operon-datetime-picker-time-results', useBaseClasses), options.classNames?.timeResults));
 
-	const timeNotice = topTimeWrap.createDiv('operon-datetime-picker-time-notice');
+	const timeNotice = topTimeWrap.createDiv(joinDatetimePickerClasses(baseDatetimePickerClass('operon-datetime-picker-time-notice', useBaseClasses), options.classNames?.timeNotice));
 
-	const actions = panel.createDiv('operon-day-picker-footer operon-datetime-picker-actions');
+	const actions = panel.createDiv(joinDatetimePickerClasses(baseDatetimePickerClass('operon-day-picker-footer operon-datetime-picker-actions', useBaseClasses), options.classNames?.actions));
 
-	const clearButton = createButton(strings.clear, 'operon-day-picker-footer-button is-clear', actions);
+	const clearButton = createButton(strings.clear, joinDatetimePickerClasses(baseDatetimePickerClass('operon-day-picker-footer-button', useBaseClasses), options.classNames?.clearButton, 'is-clear'), actions);
 	clearButton.disabled = !options.onRemove || !options.canRemove;
 	clearButton.addEventListener('click', () => {
 		if (clearButton.disabled) return;
@@ -119,7 +151,7 @@ export function showDatetimePicker(anchor: HTMLElement | DOMRect, options: Datet
 	});
 	actions.appendChild(clearButton);
 
-	const todayButton = createButton(strings.today, 'operon-day-picker-footer-button is-today', actions);
+	const todayButton = createButton(strings.today, joinDatetimePickerClasses(baseDatetimePickerClass('operon-day-picker-footer-button', useBaseClasses), options.classNames?.todayButton, 'is-today'), actions);
 	todayButton.addEventListener('click', () => {
 		dayPickerController?.setFocusedDate(localToday());
 	});
@@ -195,7 +227,7 @@ export function showDatetimePicker(anchor: HTMLElement | DOMRect, options: Datet
 	};
 
 	const scrollActiveTimeIntoView = () => {
-		const active = timeResults.querySelector<HTMLElement>('.operon-datetime-picker-time-item.is-active');
+		const active = timeResults.querySelector<HTMLElement>(`.${timeItemSelectorClass}.is-active`);
 		scrollChildIntoView(timeResults, active);
 	};
 
@@ -226,7 +258,7 @@ export function showDatetimePicker(anchor: HTMLElement | DOMRect, options: Datet
 		timeNotice.classList.toggle('is-open', timeDropdownVisible && !!timeNotice.textContent);
 		timeResults.replaceChildren();
 		if (visibleTimeIndices.length === 0) {
-			const empty = timeResults.createDiv('operon-date-picker-empty');
+			const empty = timeResults.createDiv(joinDatetimePickerClasses(baseDatetimePickerClass('operon-date-picker-empty', useBaseClasses), options.classNames?.empty));
 			empty.textContent = t('taskEditor', 'datetimeNoMatchingTimes');
 			const specialEndOfDay = getSpecialEndOfDayCommitValue();
 			timeNotice.textContent = specialEndOfDay
@@ -241,7 +273,7 @@ export function showDatetimePicker(anchor: HTMLElement | DOMRect, options: Datet
 			const slot = slots[index];
 			const button = timeResults.createEl('button');
 			button.type = 'button';
-			button.className = 'operon-field-menu-item operon-datetime-picker-time-item';
+			button.className = joinDatetimePickerClasses('operon-field-menu-item', baseDatetimePickerClass('operon-datetime-picker-time-item', useBaseClasses), options.classNames?.timeItem);
 			if (index === activeTimeIndex) button.classList.add('is-active');
 			button.textContent = formatTimeLabel(slot);
 			button.addEventListener('mousemove', () => {
@@ -288,7 +320,7 @@ export function showDatetimePicker(anchor: HTMLElement | DOMRect, options: Datet
 
 		if (visibleCandidates.length === 0) {
 			if (hiddenCalendarDate) return;
-			const empty = results.createDiv('operon-date-picker-empty');
+			const empty = results.createDiv(joinDatetimePickerClasses(baseDatetimePickerClass('operon-date-picker-empty', useBaseClasses), options.classNames?.empty));
 			empty.textContent = strings.quickSuggestions;
 			return;
 		}
@@ -297,9 +329,13 @@ export function showDatetimePicker(anchor: HTMLElement | DOMRect, options: Datet
 		for (const [index, candidate] of visibleCandidates.entries()) {
 			const button = results.createEl('button');
 			button.type = 'button';
-			button.className = 'operon-field-menu-item operon-date-picker-item';
+			button.className = joinDatetimePickerClasses('operon-field-menu-item', baseDatetimePickerClass('operon-date-picker-item', useBaseClasses), options.classNames?.dateItem);
 			if (index === activeDateIndex) button.classList.add('is-active');
-			appendDatePickerCandidateRow(button, candidate, language);
+			appendDatePickerCandidateRow(button, candidate, language, {
+				label: useBaseClasses ? undefined : options.classNames?.dateItemLabel,
+				date: useBaseClasses ? undefined : options.classNames?.dateItemDate,
+				weekday: useBaseClasses ? undefined : options.classNames?.dateItemWeekday,
+			});
 
 			button.addEventListener('mousemove', () => {
 				if (activeDateIndex === index) return;
@@ -587,4 +623,20 @@ export function showDatetimePicker(anchor: HTMLElement | DOMRect, options: Datet
 	});
 
 	return close;
+}
+
+function baseDatetimePickerClass(className: string, useBaseClasses: boolean): string {
+	return useBaseClasses ? className : '';
+}
+
+function firstDatetimePickerClass(className: string | undefined): string | null {
+	return className?.split(/\s+/u).map(value => value.trim()).find(Boolean) ?? null;
+}
+
+function joinDatetimePickerClasses(...classes: Array<string | undefined>): string {
+	return classes
+		.flatMap(value => value?.split(/\s+/u) ?? [])
+		.map(value => value.trim())
+		.filter(Boolean)
+		.join(' ');
 }

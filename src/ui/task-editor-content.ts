@@ -11,7 +11,7 @@ import { PinnedCache } from '../storage/pinned-cache';
 
 import { IndexedTask, ParsedTask, OperonField } from '../types/fields';
 import { CANONICAL_KEY_MAP } from '../types/keys';
-import { OperonSettings, TaskEditorMobileCoreToolKey, TaskEditorWorkflowPickerKey } from '../types/settings';
+import { OperonSettings } from '../types/settings';
 import { generateOperonId, generateRepeatSeriesId } from '../core/id-generator';
 import {
 	resolveAutomationWorkflowStatus,
@@ -72,6 +72,7 @@ import { showSubtasksPicker } from './field-pickers/subtasks-picker';
 import { showDependencyTaskPicker } from './field-pickers/dependency-task-picker';
 import { showLinksPicker } from './field-pickers/links-picker';
 import { showLocationPicker } from './field-pickers/location-picker';
+import { showRelatedPicker } from './field-pickers/related-picker';
 import { formatExternalLinkDisplay } from './field-pickers/links-utils';
 import { splitTaskListValue } from '../core/task-field-patch';
 import { splitFrontmatterDocument } from '../core/file-task-template-merge';
@@ -80,7 +81,15 @@ import { getConfiguredKeyMappingIcon } from '../core/key-mapping-icons';
 import { resolveTaskEditorProgressFromStats } from '../core/task-stats-read-model';
 import { resolveSubtaskActionIconForKind, resolveSubtaskActionLabelKeyForKind } from '../core/subtask-action';
 import { createInlineTaskCompactChipElement, InlineTaskCompactChipEntry } from './compact-task-layout';
-import { INLINE_TASK_COMPACT_FALLBACK_ICONS, InlineTaskCompactChipKey } from '../types/settings';
+import { INLINE_TASK_COMPACT_FALLBACK_ICONS, InlineTaskCompactChipKey, KeyMapping, TASK_CREATOR_FALLBACK_FIELD_ICONS, TaskEditorWorkflowPickerItem } from '../types/settings';
+import { openTaskFieldPicker } from './task-field-picker-dispatch';
+import {
+	getCustomFieldIcon,
+	getCustomFieldLabel,
+	getCustomFieldMapping,
+	isProjectedCustomFieldType,
+	normalizeCustomFieldRawValue,
+} from './custom-field-surfaces';
 import {
 	WindowTimeoutHandle,
 	clearWindowTimeout,
@@ -293,6 +302,12 @@ export class TaskEditorContent {
 	private refreshParentContextSection: (() => void) | null = null;
 	private schedulingDraftRefreshers = new Set<() => void>();
 	private workflowExpanded = false;
+	private workflowActionsEl: HTMLElement | null = null;
+	private workflowRowsEl: HTMLElement | null = null;
+	private workflowActionButtons = new Map<string, HTMLButtonElement>();
+	private workflowActionPickerClose: (() => void) | null = null;
+	private workflowDraftSubtaskParentId: string | null = null;
+	private workflowDraftSubtaskIds: string[] | null = null;
 	private persistInFlight: Promise<boolean> | null = null;
 	private editVersion = 0;
 	private selectDescriptionOnMount = false;
@@ -796,7 +811,7 @@ export class TaskEditorContent {
 
 		// High-frequency fields directly under description
 		this.renderCoreSection(container);
-		this.renderWorkflowPickers(container);
+		this.renderWorkflowSurface(container);
 		this.renderDetailsSection(container);
 
 		// Actions bar
@@ -811,7 +826,7 @@ export class TaskEditorContent {
 		this.renderMobileCoreToolbar(body);
 
 		const workflow = body.createDiv('operon-task-editor-mobile-workflow');
-		this.renderWorkflowPickers(workflow);
+		this.renderWorkflowSurface(workflow);
 	}
 
 	private renderMobileDescription(container: HTMLElement): void {
@@ -878,11 +893,16 @@ export class TaskEditorContent {
 
 		for (const item of this.settings.taskEditorMobileCoreTools) {
 			if (!item.visible) continue;
+			const customMapping = getCustomFieldMapping(this.settings.keyMappings, item.key);
+			if (customMapping && isProjectedCustomFieldType(customMapping)) {
+				this.renderMobileCustomFieldButton(tools, customMapping);
+				continue;
+			}
 			this.renderMobileCoreTool(tools, item.key);
 		}
 	}
 
-	private renderMobileCoreTool(container: HTMLElement, key: TaskEditorMobileCoreToolKey): void {
+	private renderMobileCoreTool(container: HTMLElement, key: string): void {
 		switch (key) {
 			case 'goToSource':
 				if (this.hasFileBodyContext()) this.renderMobileGoToSourceButton(container);
@@ -1371,6 +1391,49 @@ export class TaskEditorContent {
 		this.setMobileCoreButtonState(button, true, 'var(--color-red)');
 	}
 
+	private renderMobileCustomFieldButton(container: HTMLElement, mapping: KeyMapping): void {
+		const label = getCustomFieldLabel(mapping);
+		const button = this.createMobileCoreButton(container, label, mapping.canonicalKey, () => {
+			button.addClass('is-picker-open');
+			const close = openTaskFieldPicker({
+				app: this.app,
+				settings: this.settings,
+				allTasks: this.indexer.getAllTasks(),
+				canonicalKey: mapping.canonicalKey,
+				anchor: button,
+				currentFieldValues: { ...this.fieldValues },
+				currentTags: [...this.tags],
+				sourcePath: this.existingTask?.filePath ?? this.fileBodyContext?.filePath ?? '',
+				closeListPickerOnSelect: this.shouldCloseWorkflowPickerOnSelect(),
+				taskFormat: this.fileBodyContext?.format ?? 'inline',
+				repeatInlineCompletionMode: this.inlineCompletionMode,
+				onCommit: payload => {
+					this.applyTaskFieldPickerPayload(payload);
+					this.markEdited();
+					this.refreshMobileCoreButtons();
+				},
+				onRepeatInlineCompletionModeChange: mode => {
+					this.inlineCompletionMode = normalizeInlineCompletionMode(mode);
+				},
+				onClose: () => {
+					button.removeClass('is-picker-open');
+				},
+				onCancel: () => {
+					button.removeClass('is-picker-open');
+				},
+			});
+			if (!close) button.removeClass('is-picker-open');
+		});
+		const refresh = () => {
+			const value = normalizeCustomFieldRawValue((this.fieldValues as Record<string, unknown>)[mapping.canonicalKey]);
+			this.setMobileCoreButtonIcon(button, getCustomFieldIcon(mapping));
+			this.setMobileCoreButtonState(button, !!value);
+			this.setMobileCoreButtonLabel(button, value ? `${label}: ${this.formatCustomFieldDisplayValue(mapping, value)}` : label);
+		};
+		this.mobileCoreButtonRefreshers.add(refresh);
+		refresh();
+	}
+
 	private createMobileCoreButton(
 		container: HTMLElement,
 		label: string,
@@ -1621,6 +1684,12 @@ export class TaskEditorContent {
 		this.refreshEstimateReallocationControl = null;
 		this.refreshParentContextSection = null;
 		this.refreshTrackingSessionsSection = null;
+		this.workflowActionsEl = null;
+		this.workflowRowsEl = null;
+		this.workflowActionButtons.clear();
+		this.closeActiveWorkflowActionPicker();
+		this.workflowDraftSubtaskParentId = null;
+		this.workflowDraftSubtaskIds = null;
 		this.mobileCoreButtonRefreshers.clear();
 		this.descriptionInputEl = null;
 		this.noteInputEl = null;
@@ -1673,6 +1742,12 @@ export class TaskEditorContent {
 		this.refreshCoreTrackerControl = null;
 		this.refreshEstimateReallocationControl = null;
 		this.refreshParentContextSection = null;
+		this.workflowActionsEl = null;
+		this.workflowRowsEl = null;
+		this.workflowActionButtons.clear();
+		this.closeActiveWorkflowActionPicker();
+		this.workflowDraftSubtaskParentId = null;
+		this.workflowDraftSubtaskIds = null;
 		for (const el of this.bodyDropdowns) el.remove();
 		this.bodyDropdowns = [];
 		this.refreshTrackingSessionsSection = null;
@@ -1761,6 +1836,57 @@ export class TaskEditorContent {
 		this.refreshSchedulingDraftControls();
 		this.refreshEstimateReallocationControl?.();
 		this.refreshMobileCoreButtons();
+	}
+
+	private applyTaskFieldPickerPayload(payload: Record<string, string | string[]>): void {
+		const patch: Record<string, string> = {};
+		for (const [key, value] of Object.entries(payload)) {
+			patch[key] = Array.isArray(value) ? value.join('; ') : value;
+		}
+		this.applyDraftFieldRules(patch, Object.keys(patch));
+	}
+
+	private renderCustomFieldSelection(
+		container: HTMLElement,
+		mapping: KeyMapping,
+		onRemove: (value: string) => void,
+	): void {
+		container.replaceChildren();
+		const rawValue = normalizeCustomFieldRawValue((this.fieldValues as Record<string, unknown>)[mapping.canonicalKey]);
+		const values = mapping.type === 'list'
+			? splitTaskListValue(rawValue)
+			: rawValue
+				? [rawValue]
+				: [];
+		container.classList.toggle('is-empty', values.length === 0);
+		for (const value of values) {
+			const chip = createInlineTaskCompactChipElement({
+				key: mapping.canonicalKey,
+				label: this.formatCustomFieldDisplayValue(mapping, value),
+				icon: getCustomFieldIcon(mapping),
+				iconOnly: false,
+				interactive: false,
+				colorRole: 'default',
+				linkTarget: null,
+			}, 'operon-editor-compact-selection-chip', { forceFull: true });
+			const removeButton = chip.ownerDocument.createElement('button');
+			removeButton.type = 'button';
+			removeButton.className = 'operon-editor-compact-selection-chip-remove';
+			setIcon(removeButton, 'x');
+			setAccessibleLabelWithoutTooltip(removeButton, t('taskEditor', 'removeValue', {
+				value: this.formatCustomFieldDisplayValue(mapping, value),
+			}));
+			removeButton.addEventListener('click', () => onRemove(value));
+			chip.appendChild(removeButton);
+			container.appendChild(chip);
+		}
+	}
+
+	private formatCustomFieldDisplayValue(mapping: KeyMapping, value: string): string {
+		const trimmed = value.trim();
+		if (mapping.type === 'datetime') return formatTaskEditorDatetime(this.app, this.settings, trimmed);
+		if (mapping.type === 'date') return formatTaskEditorDate(trimmed);
+		return trimmed;
 	}
 
 	// --- Renderers ---
@@ -2288,6 +2414,7 @@ export class TaskEditorContent {
 				this.tags = [...selectedValues];
 				render();
 				this.markEdited();
+				this.refreshWorkflowPickerSurfaceValues();
 			}, (tag) => tag);
 		};
 
@@ -2304,6 +2431,12 @@ export class TaskEditorContent {
 					this.tags = [...nextValues];
 					render();
 					this.markEdited();
+					if (selectedValues.length > 0) {
+						this.refreshWorkflowActionButtonStates();
+					} else {
+						closeActivePicker();
+						this.refreshWorkflowPickerSurfaceValues();
+					}
 				},
 				onClose: () => {
 					closePicker = null;
@@ -2613,18 +2746,321 @@ export class TaskEditorContent {
 		);
 	}
 
-	private renderWorkflowPickers(container: HTMLElement): void {
-		for (const item of this.settings.taskEditorWorkflowPickers) {
-			if (!item.visible) continue;
-			this.renderWorkflowPicker(container, item.key);
+	private renderWorkflowSurface(container: HTMLElement): void {
+		const items = this.getRenderableWorkflowPickerItems();
+		if (items.length === 0) return;
+
+		const section = container.createDiv('operon-editor-group operon-task-editor-workflow-surface');
+		const header = section.createDiv('operon-task-editor-workflow-header');
+		header.createDiv({
+			text: t('settings', 'taskEditorWorkflowPickers'),
+			cls: 'operon-editor-core-title-badge operon-task-editor-workflow-title',
+		});
+
+		this.workflowActionsEl = section.createDiv('operon-task-editor-workflow-actions');
+		this.workflowRowsEl = section.createDiv('operon-task-editor-workflow-values');
+		this.renderWorkflowPickerActions(this.workflowActionsEl, items);
+		this.renderFilledWorkflowPickers(this.workflowRowsEl, items);
+	}
+
+	private getRenderableWorkflowPickerItems(): TaskEditorWorkflowPickerItem[] {
+		return this.settings.taskEditorWorkflowPickers
+			.filter(item => item.visible)
+			.filter(item => this.canRenderWorkflowPickerKey(item.key));
+	}
+
+	private canRenderWorkflowPickerKey(key: string): boolean {
+		const customMapping = getCustomFieldMapping(this.settings.keyMappings, key);
+		if (customMapping) return isProjectedCustomFieldType(customMapping);
+		return key === 'contexts'
+			|| key === 'tags'
+			|| key === 'assignees'
+			|| key === 'location'
+			|| key === 'links'
+			|| key === 'parentTask'
+			|| key === 'subtasks'
+			|| key === 'blocking'
+			|| key === 'blockedBy'
+			|| key === 'related';
+	}
+
+	private renderWorkflowPickerActions(container: HTMLElement, items = this.getRenderableWorkflowPickerItems()): void {
+		container.empty();
+		this.workflowActionButtons.clear();
+		for (const item of items) {
+			const label = this.getWorkflowPickerLabel(item.key);
+			const button = container.createEl('button', {
+				cls: 'operon-task-editor-workflow-action-button',
+				attr: {
+					type: 'button',
+				},
+			});
+			button.dataset.workflowPickerKey = item.key;
+			this.setWorkflowActionButtonIcon(button, item.key);
+			setAccessibleLabelWithoutTooltip(button, label);
+			button.title = label;
+			this.bindTaskEditorTooltip(button, label);
+			this.workflowActionButtons.set(item.key, button);
+			this.syncWorkflowActionButtonState(item.key, button);
+			button.addEventListener('click', event => {
+				event.preventDefault();
+				this.openWorkflowPickerFromAction(item.key, button);
+			});
 		}
+	}
+
+	private renderFilledWorkflowPickers(container: HTMLElement, items = this.getRenderableWorkflowPickerItems()): void {
+		container.empty();
+		let renderedCount = 0;
+		for (const item of items) {
+			if (!this.hasWorkflowPickerValue(item.key)) continue;
+			const customMapping = getCustomFieldMapping(this.settings.keyMappings, item.key);
+			if (customMapping && isProjectedCustomFieldType(customMapping)) {
+				this.renderCustomWorkflowPicker(container, customMapping);
+			} else {
+				this.renderWorkflowPicker(container, item.key);
+			}
+			renderedCount += 1;
+		}
+		container.toggleClass('is-empty', renderedCount === 0);
+	}
+
+	private refreshWorkflowPickerSurfaceValues(): void {
+		this.refreshWorkflowActionButtonStates();
+		if (!this.workflowRowsEl) return;
+		this.renderFilledWorkflowPickers(this.workflowRowsEl);
+	}
+
+	private refreshWorkflowActionButtonStates(): void {
+		for (const [key, button] of this.workflowActionButtons) {
+			this.syncWorkflowActionButtonState(key, button);
+		}
+	}
+
+	private setWorkflowActionButtonIcon(button: HTMLButtonElement, key: string): void {
+		button.empty();
+		const iconWrap = button.createSpan('operon-task-editor-workflow-action-icon');
+		const icon = this.resolveWorkflowPickerIcon(key);
+		if (icon) {
+			setIcon(iconWrap, icon);
+			return;
+		}
+		iconWrap.addClass('operon-task-editor-workflow-action-icon-placeholder');
+	}
+
+	private syncWorkflowActionButtonState(key: string, button: HTMLButtonElement): void {
+		const active = this.hasWorkflowPickerValue(key);
+		button.toggleClass('is-active', active);
+		button.setAttr('aria-pressed', String(active));
+		const locked = key === 'subtasks' && !this.getCurrentOperonId();
+		button.toggleClass('is-locked', locked);
+		button.setAttr('aria-disabled', String(locked));
+	}
+
+	private getWorkflowPickerLabel(key: string): string {
+		const customMapping = getCustomFieldMapping(this.settings.keyMappings, key);
+		if (customMapping) return getCustomFieldLabel(customMapping);
+		if (key === 'tags') return t('taskEditor', 'tags');
+		if (key === 'contexts') return t('taskEditor', 'contexts');
+		if (key === 'assignees') return t('taskEditor', 'assignees');
+		if (key === 'location') return t('location', 'location');
+		if (key === 'links') return t('taskEditor', 'links');
+		if (key === 'parentTask') return t('taskEditor', 'parentTask');
+		if (key === 'subtasks') return t('taskEditor', 'subtasks');
+		if (key === 'blocking') return t('taskEditor', 'blocking');
+		if (key === 'blockedBy') return t('taskEditor', 'blockedBy');
+		if (key === 'related') return t('taskEditor', 'related');
+		return key;
+	}
+
+	private resolveWorkflowPickerIcon(key: string): string {
+		const customMapping = getCustomFieldMapping(this.settings.keyMappings, key);
+		if (customMapping) return getCustomFieldIcon(customMapping);
+		return getConfiguredKeyMappingIcon(key, this.settings.keyMappings)
+			|| (TASK_CREATOR_FALLBACK_FIELD_ICONS as Record<string, string>)[key]
+			|| (INLINE_TASK_COMPACT_FALLBACK_ICONS as Record<string, string>)[key]
+			|| (key === 'related' ? 'link-2' : '')
+			|| 'circle-dot';
+	}
+
+	private hasWorkflowPickerValue(key: string): boolean {
+		const customMapping = getCustomFieldMapping(this.settings.keyMappings, key);
+		if (customMapping && isProjectedCustomFieldType(customMapping)) {
+			const value = normalizeCustomFieldRawValue((this.fieldValues as Record<string, unknown>)[customMapping.canonicalKey]);
+			return customMapping.type === 'list'
+				? splitTaskListValue(value).length > 0
+				: !!value.trim();
+		}
+		if (key === 'tags') return this.tags.length > 0;
+		if (key === 'contexts' || key === 'links' || key === 'assignees' || key === 'blocking' || key === 'blockedBy' || key === 'related') {
+			return splitTaskListValue(this.fieldValues[key]).length > 0;
+		}
+		if (key === 'parentTask' || key === 'location') return !!(this.fieldValues[key] ?? '').trim();
+		if (key === 'subtasks') return this.getWorkflowSubtaskIds().length > 0;
+		return !!(this.fieldValues[key] ?? '').trim();
+	}
+
+	private getWorkflowSubtaskIds(parentId = this.getCurrentOperonId()): string[] {
+		const normalizedParentId = parentId?.trim() ?? '';
+		if (!normalizedParentId) return [];
+		if (this.workflowDraftSubtaskParentId === normalizedParentId && this.workflowDraftSubtaskIds) {
+			return [...this.workflowDraftSubtaskIds];
+		}
+		return normalizeListValues(Array.from(this.indexer.secondary.getChildIds(normalizedParentId)));
+	}
+
+	private openWorkflowPickerFromAction(key: string, button: HTMLButtonElement): void {
+		if (button.hasClass('is-locked')) {
+			new Notice(t('taskEditor', 'subtasksSaveFirst'));
+			return;
+		}
+
+		this.closeActiveWorkflowActionPicker();
+		button.addClass('is-picker-open');
+		let closePicker: (() => void) | null = null;
+		const handleClose = () => {
+			button.removeClass('is-picker-open');
+			if (this.workflowActionPickerClose === closePicker) {
+				this.workflowActionPickerClose = null;
+			}
+		};
+
+		if (key === 'parentTask') {
+			closePicker = this.openParentTaskWorkflowAction(button, handleClose);
+		} else if (key === 'subtasks') {
+			closePicker = this.openSubtasksWorkflowAction(button, handleClose);
+		} else if (key === 'blocking' || key === 'blockedBy') {
+			closePicker = this.openDependencyWorkflowAction(button, key, handleClose);
+		} else {
+			closePicker = openTaskFieldPicker({
+				app: this.app,
+				settings: this.settings,
+				allTasks: this.indexer.getAllTasks(),
+				canonicalKey: key,
+				anchor: button,
+				currentFieldValues: { ...this.fieldValues },
+				currentTags: [...this.tags],
+				sourcePath: this.existingTask?.filePath ?? this.fileBodyContext?.filePath ?? '',
+				closeListPickerOnSelect: this.shouldCloseWorkflowPickerOnSelect(),
+				taskFormat: this.fileBodyContext?.format ?? 'inline',
+				repeatInlineCompletionMode: this.inlineCompletionMode,
+				onCommit: payload => this.commitWorkflowActionPayload(payload),
+				onRepeatInlineCompletionModeChange: mode => {
+					this.inlineCompletionMode = normalizeInlineCompletionMode(mode);
+				},
+				onClose: handleClose,
+				onCancel: handleClose,
+			});
+		}
+
+		if (closePicker) {
+			this.workflowActionPickerClose = closePicker;
+			return;
+		}
+		button.removeClass('is-picker-open');
+	}
+
+	private closeActiveWorkflowActionPicker(): void {
+		const current = this.workflowActionPickerClose;
+		this.workflowActionPickerClose = null;
+		for (const button of this.workflowActionButtons.values()) {
+			button.removeClass('is-picker-open');
+		}
+		if (current) current();
+	}
+
+	private commitWorkflowActionPayload(payload: Record<string, string | string[]>): void {
+		const fieldPayload: Record<string, string | string[]> = {};
+		for (const [key, value] of Object.entries(payload)) {
+			if (key === 'tags') {
+				const values = Array.isArray(value) ? value : splitTaskListValue(value);
+				this.tags = normalizeListValues(values.map(tag => tag.replace(/^#/, '')));
+			} else {
+				fieldPayload[key] = value;
+			}
+		}
+		if (Object.keys(fieldPayload).length > 0) {
+			this.applyTaskFieldPickerPayload(fieldPayload);
+		}
+		this.markEdited();
+		this.refreshWorkflowPickerSurfaceValues();
+	}
+
+	private openParentTaskWorkflowAction(anchor: HTMLElement, onClose: () => void): (() => void) | null {
+		const currentTaskId = this.fieldValues['operonId'] ?? this.existingTask?.operonId ?? '';
+		const excludedParentIds = new Set<string>();
+		if (currentTaskId) {
+			excludedParentIds.add(currentTaskId);
+			for (const descendantId of this.indexer.secondary.getAllDescendantIds(currentTaskId)) {
+				excludedParentIds.add(descendantId);
+			}
+		}
+		return showParentTaskPicker(anchor, {
+			value: this.fieldValues['parentTask'] ?? '',
+			allTasks: this.indexer.getAllTasks().filter(task => !excludedParentIds.has(task.operonId)),
+			onSelect: operonId => this.commitWorkflowActionPayload({ parentTask: operonId }),
+			onClear: () => this.commitWorkflowActionPayload({ parentTask: '' }),
+			onClose,
+		});
+	}
+
+	private openDependencyWorkflowAction(anchor: HTMLElement, fieldKey: 'blocking' | 'blockedBy', onClose: () => void): (() => void) | null {
+		const currentTaskId = this.fieldValues['operonId'] ?? this.existingTask?.operonId ?? '';
+		const oppositeFieldKey = fieldKey === 'blocking' ? 'blockedBy' : 'blocking';
+		return showDependencyTaskPicker(anchor, {
+			fieldKey,
+			value: normalizeListValues(splitTaskListValue(this.fieldValues[fieldKey]).filter(id => id !== currentTaskId)).join('; '),
+			oppositeValue: this.fieldValues[oppositeFieldKey] ?? '',
+			allTasks: this.indexer.getAllTasks(),
+			excludedIds: currentTaskId ? [currentTaskId] : [],
+			closeOnSelect: this.shouldCloseWorkflowPickerOnSelect(),
+			onSave: payload => this.commitWorkflowActionPayload(payload),
+			onClose,
+		});
+	}
+
+	private openSubtasksWorkflowAction(anchor: HTMLElement, onClose: () => void): (() => void) | null {
+		const currentTaskId = this.fieldValues['operonId'] ?? this.existingTask?.operonId ?? '';
+		if (!currentTaskId) {
+			new Notice(t('taskEditor', 'subtasksSaveFirst'));
+			return null;
+		}
+
+		const excludedIds = new Set<string>([currentTaskId, ...this.collectAncestorIds(currentTaskId)]);
+		let selectedIds = this.getWorkflowSubtaskIds(currentTaskId);
+		const syncParentLinks = (nextIds: string[]) => {
+			const previousIds = selectedIds;
+			const normalizedNext = normalizeListValues(nextIds.filter(id => !excludedIds.has(id)));
+			if (areStringArraysEqual(previousIds, normalizedNext)) return;
+			selectedIds = normalizedNext;
+			this.workflowDraftSubtaskParentId = currentTaskId;
+			this.workflowDraftSubtaskIds = [...selectedIds];
+			const removedIds = previousIds.filter(id => !normalizedNext.includes(id));
+			const addedIds = normalizedNext.filter(id => !previousIds.includes(id));
+			for (const removedId of removedIds) {
+				this.updateExistingSubtaskParent(removedId, null);
+			}
+			for (const addedId of addedIds) {
+				this.updateExistingSubtaskParent(addedId, currentTaskId);
+			}
+			this.refreshWorkflowPickerSurfaceValues();
+		};
+
+		return showSubtasksPicker(anchor, {
+			value: selectedIds,
+			allTasks: this.indexer.getAllTasks(),
+			excludedIds: Array.from(excludedIds),
+			closeOnSelect: this.shouldCloseWorkflowPickerOnSelect(),
+			onChange: operonIds => syncParentLinks(operonIds),
+			onClose,
+		});
 	}
 
 	private shouldCloseWorkflowPickerOnSelect(): boolean {
 		return Platform.isPhone;
 	}
 
-	private renderWorkflowPicker(container: HTMLElement, key: TaskEditorWorkflowPickerKey): void {
+	private renderWorkflowPicker(container: HTMLElement, key: string): void {
 		switch (key) {
 			case 'contexts':
 				this.renderContextsPicker(container);
@@ -2653,7 +3089,98 @@ export class TaskEditorContent {
 			case 'blockedBy':
 				this.renderTaskListPicker(container, 'blockedBy', t('taskEditor', 'blockedBy'));
 				break;
+			case 'related':
+				this.renderRelatedPicker(container);
+				break;
 		}
+	}
+
+	private renderCustomWorkflowPicker(group: HTMLElement, mapping: KeyMapping): void {
+		const label = getCustomFieldLabel(mapping);
+		const setting = new Setting(group);
+		setting.settingEl.addClass('operon-editor-inline-picker-setting', 'operon-editor-custom-field-setting');
+		const stack = setting.controlEl.createDiv('operon-editor-picker-stack');
+		const anchor = this.createPickerAnchor(stack, label, {
+			leadingIcon: getCustomFieldIcon(mapping),
+		});
+		const selectedWrap = stack.createDiv('operon-editor-picker-selected operon-editor-custom-field-selection-row');
+		let closePicker: (() => void) | null = null;
+
+		const closeActivePicker = () => {
+			if (!closePicker) return;
+			const current = closePicker;
+			closePicker = null;
+			anchor.removeClass('is-picker-open');
+			current();
+		};
+
+		const render = () => {
+			this.renderCustomFieldSelection(selectedWrap, mapping, (value) => {
+				closeActivePicker();
+				if (mapping.type === 'list') {
+					const currentValue = normalizeCustomFieldRawValue((this.fieldValues as Record<string, unknown>)[mapping.canonicalKey]);
+					const nextValues = splitTaskListValue(currentValue).filter(existing => existing !== value);
+					this.setDelimitedFieldValue(mapping.canonicalKey, nextValues);
+				} else {
+					this.applyDraftFieldRules({ [mapping.canonicalKey]: '' }, [mapping.canonicalKey]);
+				}
+				render();
+				this.markEdited();
+				this.refreshWorkflowPickerSurfaceValues();
+			});
+		};
+
+		const openPicker = () => {
+			if (closePicker) return;
+			closePicker = openTaskFieldPicker({
+				app: this.app,
+				settings: this.settings,
+				allTasks: this.indexer.getAllTasks(),
+				canonicalKey: mapping.canonicalKey,
+				anchor,
+				currentFieldValues: { ...this.fieldValues },
+				currentTags: [...this.tags],
+				sourcePath: this.existingTask?.filePath ?? this.fileBodyContext?.filePath ?? '',
+				closeListPickerOnSelect: this.shouldCloseWorkflowPickerOnSelect(),
+				taskFormat: this.fileBodyContext?.format ?? 'inline',
+				repeatInlineCompletionMode: this.inlineCompletionMode,
+				onCommit: payload => {
+					this.applyTaskFieldPickerPayload(payload);
+					render();
+					this.markEdited();
+					if (this.hasWorkflowPickerValue(mapping.canonicalKey)) {
+						this.refreshWorkflowActionButtonStates();
+					} else {
+						closeActivePicker();
+						this.refreshWorkflowPickerSurfaceValues();
+					}
+				},
+				onRepeatInlineCompletionModeChange: mode => {
+					this.inlineCompletionMode = normalizeInlineCompletionMode(mode);
+				},
+				onClose: () => {
+					closePicker = null;
+					anchor.removeClass('is-picker-open');
+				},
+				onCancel: () => {
+					closePicker = null;
+					anchor.removeClass('is-picker-open');
+				},
+			});
+			if (closePicker) anchor.addClass('is-picker-open');
+		};
+
+		anchor.addEventListener('click', event => {
+			event.preventDefault();
+			openPicker();
+		});
+		anchor.addEventListener('keydown', event => {
+			if (event.key !== 'Enter' && event.key !== ' ') return;
+			event.preventDefault();
+			openPicker();
+		});
+
+		render();
 	}
 
 	private renderDetailsSection(container: HTMLElement): void {
@@ -3710,6 +4237,7 @@ export class TaskEditorContent {
 				this.setDelimitedFieldValue('assignees', selectedValues);
 				render();
 				this.markEdited();
+				this.refreshWorkflowPickerSurfaceValues();
 			}, value => this.formatInlineReferenceLabel(value));
 		};
 
@@ -3728,6 +4256,12 @@ export class TaskEditorContent {
 					this.setDelimitedFieldValue('assignees', nextValues);
 					render();
 					this.markEdited();
+					if (selectedValues.length > 0) {
+						this.refreshWorkflowActionButtonStates();
+					} else {
+						closeActivePicker();
+						this.refreshWorkflowPickerSurfaceValues();
+					}
 				},
 				onClose: () => {
 					closePicker = null;
@@ -3783,6 +4317,7 @@ export class TaskEditorContent {
 			}
 			render();
 			this.markEdited();
+			this.refreshWorkflowPickerSurfaceValues();
 		};
 
 		const render = () => {
@@ -3884,6 +4419,7 @@ export class TaskEditorContent {
 				this.setDelimitedFieldValue('links', selectedValues);
 				render();
 				this.markEdited();
+				this.refreshWorkflowPickerSurfaceValues();
 			}, formatExternalLinkDisplay);
 		};
 
@@ -3902,6 +4438,12 @@ export class TaskEditorContent {
 					this.setDelimitedFieldValue('links', nextValues);
 					render();
 					this.markEdited();
+					if (selectedValues.length > 0) {
+						this.refreshWorkflowActionButtonStates();
+					} else {
+						closeActivePicker();
+						this.refreshWorkflowPickerSurfaceValues();
+					}
 				},
 				onClose: () => {
 					closePicker = null;
@@ -3925,8 +4467,102 @@ export class TaskEditorContent {
 		render();
 	}
 
+	private renderRelatedPicker(group: HTMLElement): void {
+		const setting = new Setting(group);
+		setting.settingEl.addClass('operon-related-setting', 'operon-editor-inline-picker-setting');
+		const stack = setting.controlEl.createDiv('operon-editor-picker-stack');
+		const anchor = this.createPickerAnchor(stack, t('taskEditor', 'related'), {
+			leadingIcon: this.resolveWorkflowPickerIcon('related'),
+		});
+		const selectedWrap = stack.createDiv('operon-editor-picker-selected operon-editor-related-selection-row');
+
+		let selectedValues = normalizeListValues(splitTaskListValue(this.fieldValues['related']));
+		let closePicker: (() => void) | null = null;
+
+		const closeActivePicker = () => {
+			if (!closePicker) return;
+			const current = closePicker;
+			closePicker = null;
+			anchor.removeClass('is-picker-open');
+			current();
+		};
+
+		const render = () => {
+			selectedWrap.replaceChildren();
+			selectedWrap.classList.toggle('is-empty', selectedValues.length === 0);
+			for (const value of selectedValues) {
+				const label = this.formatInlineReferenceLabel(value);
+				const chip = createInlineTaskCompactChipElement({
+					key: 'links',
+					label,
+					icon: this.resolveWorkflowPickerIcon('related'),
+					iconOnly: false,
+					interactive: false,
+					colorRole: 'default',
+					linkTarget: null,
+				}, 'operon-editor-compact-selection-chip', { forceFull: true });
+				const removeButton = chip.ownerDocument.createElement('button');
+				removeButton.type = 'button';
+				removeButton.className = 'operon-editor-compact-selection-chip-remove';
+				setIcon(removeButton, 'x');
+				setAccessibleLabelWithoutTooltip(removeButton, t('taskEditor', 'removeValue', { value: label }));
+				removeButton.addEventListener('click', () => {
+					closeActivePicker();
+					selectedValues = selectedValues.filter(existing => existing !== value);
+					this.setDelimitedFieldValue('related', selectedValues);
+					render();
+					this.markEdited();
+					this.refreshWorkflowPickerSurfaceValues();
+				});
+				chip.appendChild(removeButton);
+				selectedWrap.appendChild(chip);
+			}
+		};
+
+		const openPicker = () => {
+			if (closePicker) return;
+			closePicker = showRelatedPicker(anchor, {
+				app: this.app,
+				allTasks: this.indexer.getAllTasks(),
+				value: selectedValues,
+				onSave: (values) => {
+					const nextValues = normalizeListValues(values);
+					if (areStringArraysEqual(selectedValues, nextValues)) return;
+					selectedValues = nextValues;
+					this.setDelimitedFieldValue('related', nextValues);
+					render();
+					this.markEdited();
+					if (selectedValues.length > 0) {
+						this.refreshWorkflowActionButtonStates();
+					} else {
+						closeActivePicker();
+						this.refreshWorkflowPickerSurfaceValues();
+					}
+				},
+				onClose: () => {
+					closePicker = null;
+					anchor.removeClass('is-picker-open');
+				},
+			});
+			anchor.addClass('is-picker-open');
+		};
+
+		anchor.addEventListener('click', (event) => {
+			event.preventDefault();
+			openPicker();
+		});
+		anchor.addEventListener('keydown', (event) => {
+			if (event.key !== 'Enter' && event.key !== ' ') return;
+			event.preventDefault();
+			openPicker();
+		});
+
+		this.setDelimitedFieldValue('related', selectedValues);
+		render();
+	}
+
 	private renderWorkflowFields(container: HTMLElement): void {
-		this.renderWorkflowPickers(container);
+		this.renderWorkflowSurface(container);
 	}
 
 	private renderContextsPicker(group: HTMLElement): void {
@@ -3956,6 +4592,7 @@ export class TaskEditorContent {
 				this.setDelimitedFieldValue('contexts', selectedValues);
 				render();
 				this.markEdited();
+				this.refreshWorkflowPickerSurfaceValues();
 			}, formatContextDisplay);
 		};
 
@@ -3974,6 +4611,12 @@ export class TaskEditorContent {
 					this.setDelimitedFieldValue('contexts', nextValues);
 					render();
 					this.markEdited();
+					if (selectedValues.length > 0) {
+						this.refreshWorkflowActionButtonStates();
+					} else {
+						closeActivePicker();
+						this.refreshWorkflowPickerSurfaceValues();
+					}
 				},
 				onClose: () => {
 					closePicker = null;
@@ -4028,6 +4671,7 @@ export class TaskEditorContent {
 				this.setDelimitedFieldValue(fieldKey, selectedIds);
 				render();
 				this.markEdited();
+				this.refreshWorkflowPickerSurfaceValues();
 			});
 		};
 
@@ -4055,6 +4699,12 @@ export class TaskEditorContent {
 					else delete this.fieldValues[oppositeFieldKey];
 					render();
 					this.markEdited();
+					if (selectedIds.length > 0) {
+						this.refreshWorkflowActionButtonStates();
+					} else {
+						closeActivePicker();
+						this.refreshWorkflowPickerSurfaceValues();
+					}
 				},
 				onClose: () => {
 					closePicker = null;
@@ -4118,14 +4768,17 @@ export class TaskEditorContent {
 
 		const excludedIds = new Set<string>([currentTaskId, ...this.collectAncestorIds(currentTaskId)]);
 
-		let selectedIds: string[] = normalizeListValues(Array.from(this.indexer.secondary.getChildIds(currentTaskId)));
+		let selectedIds: string[] = this.getWorkflowSubtaskIds(currentTaskId);
 
 		const render = () => {
 			this.renderTaskSelectionChips(selectedWrap, 'subtasks', selectedIds, (operonId) => {
 				closeActivePicker();
 				selectedIds = selectedIds.filter(existing => existing !== operonId);
+				this.workflowDraftSubtaskParentId = currentTaskId;
+				this.workflowDraftSubtaskIds = [...selectedIds];
 				render();
 				this.updateExistingSubtaskParent(operonId, null);
+				this.refreshWorkflowPickerSurfaceValues();
 			});
 		};
 
@@ -4134,6 +4787,8 @@ export class TaskEditorContent {
 			const normalizedNext = normalizeListValues(nextIds.filter(id => !excludedIds.has(id)));
 			if (areStringArraysEqual(previousIds, normalizedNext)) return;
 			selectedIds = normalizedNext;
+			this.workflowDraftSubtaskParentId = currentTaskId;
+			this.workflowDraftSubtaskIds = [...selectedIds];
 			render();
 			const removedIds = previousIds.filter(id => !normalizedNext.includes(id));
 			const addedIds = normalizedNext.filter(id => !previousIds.includes(id));
@@ -4143,6 +4798,7 @@ export class TaskEditorContent {
 			for (const addedId of addedIds) {
 				this.updateExistingSubtaskParent(addedId, currentTaskId);
 			}
+			this.refreshWorkflowPickerSurfaceValues();
 		};
 
 		const openPicker = () => {
@@ -4222,6 +4878,7 @@ export class TaskEditorContent {
 					delete this.fieldValues['parentTask'];
 					render();
 					this.markEdited();
+					this.refreshWorkflowPickerSurfaceValues();
 					window.requestAnimationFrame(() => parentAnchor.focus());
 				},
 			));
@@ -4241,6 +4898,7 @@ export class TaskEditorContent {
 					else delete this.fieldValues['parentTask'];
 					render();
 					this.markEdited();
+					this.refreshWorkflowActionButtonStates();
 				},
 				onClose: () => {
 					closePicker = null;

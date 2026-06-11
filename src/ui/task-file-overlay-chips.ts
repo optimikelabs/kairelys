@@ -55,6 +55,7 @@ export function getTaskFileOverlayChipSignature(
 		entry.icon,
 		entry.iconOnly ? 1 : 0,
 		entry.linkTarget ?? '',
+		entry.previewLinkTarget ?? '',
 		entry.externalUrl ?? '',
 		entry.externalRawValue ?? '',
 		entry.locationCoordinate ?? '',
@@ -128,8 +129,9 @@ export function buildTaskFileOverlayChipContainer(
 			} else {
 				bindIconOnlyChipPreview(chip);
 			}
-			if (entry.linkTarget) {
-				bindCompactChipLinkPreview(callbacks.app, chip, entry.linkTarget, callbacks.sourcePath);
+			const previewLinkTarget = entry.previewLinkTarget ?? entry.linkTarget;
+			if (previewLinkTarget) {
+				bindCompactChipLinkPreview(callbacks.app, chip, previewLinkTarget, callbacks.sourcePath);
 			}
 			row.appendChild(chip);
 			continue;
@@ -148,8 +150,9 @@ export function buildTaskFileOverlayChipContainer(
 		if (entry.externalUrl) {
 			bindExternalLinkContextMenu(chip, entry.externalUrl, entry.externalRawValue);
 		}
-		if (entry.linkTarget) {
-			bindCompactChipLinkPreview(callbacks.app, chip, entry.linkTarget, callbacks.sourcePath);
+		const previewLinkTarget = entry.previewLinkTarget ?? entry.linkTarget;
+		if (previewLinkTarget) {
+			bindCompactChipLinkPreview(callbacks.app, chip, previewLinkTarget, callbacks.sourcePath);
 		}
 		row.appendChild(node);
 	}

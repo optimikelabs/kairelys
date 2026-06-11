@@ -14,6 +14,7 @@ import {
 	type OperonSettings,
 	migrateSettings,
 	normalizeFilterSet,
+	normalizeKeyMappingCollection,
 } from '../types/settings';
 import { CANONICAL_KEYS } from '../types/keys';
 
@@ -57,9 +58,11 @@ export const OPERON_DATA_PACKAGE_OWNED_SETTINGS_KEYS = [
 	'contextualMenuMobileEnabled',
 	'contextualMenuMobileLongPressMs',
 	'contextualMenuMobileTransitionGraceMs',
+	'contextualMenuMobileAutoHideMs',
 	'taskCreatorToolbar',
 	'taskEditorShowLineNumbers',
 	'taskEditorWorkflowPickers',
+	'taskEditorMobileCoreTools',
 	'inlineExpandedTaskChips',
 	'inlineTaskCompactChips',
 	'filterTaskCompactChips',
@@ -253,6 +256,10 @@ export function composeOperonSettingsFromDataPackage(
 			dataPackage.ui.contextualMenu.contextualMenuMobileTransitionGraceMs,
 			defaults.contextualMenuMobileTransitionGraceMs,
 		),
+		contextualMenuMobileAutoHideMs: readNumber(
+			dataPackage.ui.contextualMenu.contextualMenuMobileAutoHideMs,
+			defaults.contextualMenuMobileAutoHideMs,
+		),
 			...cloneUnknown<Partial<OperonSettings>>(dataPackage.ui.taskUiPreferences),
 			...cloneUnknown<Partial<OperonSettings>>(dataPackage.ui.taskCreationProfile),
 			...cloneUnknown<Partial<OperonSettings>>(dataPackage.automation.taskAutomationPolicy),
@@ -310,12 +317,14 @@ export function buildOperonDataPackageFromSettings(
 				contextualMenuMobileEnabled: normalized.contextualMenuMobileEnabled,
 				contextualMenuMobileLongPressMs: normalized.contextualMenuMobileLongPressMs,
 				contextualMenuMobileTransitionGraceMs: normalized.contextualMenuMobileTransitionGraceMs,
+				contextualMenuMobileAutoHideMs: normalized.contextualMenuMobileAutoHideMs,
 			},
 			taskUiPreferences: {
 				version: 1,
 				taskCreatorToolbar: cloneUnknown(normalized.taskCreatorToolbar),
 				taskEditorShowLineNumbers: normalized.taskEditorShowLineNumbers,
 				taskEditorWorkflowPickers: cloneUnknown(normalized.taskEditorWorkflowPickers),
+				taskEditorMobileCoreTools: cloneUnknown(normalized.taskEditorMobileCoreTools),
 				inlineExpandedTaskChips: cloneUnknown(normalized.inlineExpandedTaskChips),
 				inlineTaskCompactChips: cloneUnknown(normalized.inlineTaskCompactChips),
 				filterTaskCompactChips: cloneUnknown(normalized.filterTaskCompactChips),
@@ -545,7 +554,7 @@ function buildFiltersPackage(filterSets: FilterSet[]): OperonFiltersPackageV1 {
 function splitKeyMappings(keyMappings: KeyMapping[]): OperonKeyMappingsPackageV1 {
 	const system: KeyMapping[] = [];
 	const custom: KeyMapping[] = [];
-	for (const mapping of keyMappings) {
+	for (const mapping of normalizeKeyMappingCollection(keyMappings)) {
 		if (mapping.isSystem) {
 			system.push(cloneUnknown(mapping));
 		} else {

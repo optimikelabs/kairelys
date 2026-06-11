@@ -12,7 +12,6 @@ import { OperonIndexer } from '../indexer/indexer';
 
 import { parseTaskLine } from './parser';
 import { serializeTask } from './serializer';
-import { CANONICAL_KEY_MAP } from '../types/keys';
 import { IndexedTask, OperonField } from '../types/fields';
 import { KeyMapping } from '../types/settings';
 import {
@@ -25,6 +24,7 @@ import { getManagedYamlAliases } from './yaml-fields';
 import { resolveYamlTaskCreatedBackfillValue } from './yaml-task-file-stat-sync';
 import { WriteQueue } from '../storage/write-queue';
 import { enginePerfLog, enginePerfNow } from './engine-perf';
+import { getManagedTaskFieldType, isManagedTaskFieldCanonicalKey } from './managed-task-fields';
 
 export interface TaskWriteOptions {
     mode?: 'merge' | 'replace';
@@ -113,19 +113,24 @@ export function tryPatchInlineTaskLineContent(
     }
 
     const canonicalFieldMap = new Map<string, OperonField>();
+    const unmanagedFields: OperonField[] = [];
     for (const field of parsed.fields) {
         const canonicalKey = field.key;
         if (canonicalKey === 'pinned') continue;
         if (canonicalKey === 'tags') continue;
-        const def = CANONICAL_KEY_MAP.get(canonicalKey);
+        const fieldType = getManagedTaskFieldType(canonicalKey, keyMappings);
+        if (!fieldType) {
+            unmanagedFields.push(field);
+            continue;
+        }
         canonicalFieldMap.set(canonicalKey, {
             ...field,
             key: canonicalKey,
-            type: def?.type ?? field.type,
-            isCanonical: !!def,
+            type: fieldType,
+            isCanonical: true,
         });
     }
-    parsed.fields = Array.from(canonicalFieldMap.values());
+    parsed.fields = [...unmanagedFields, ...Array.from(canonicalFieldMap.values())];
 
     if ('_description' in fieldValues) {
         parsed.description = fieldValues['_description'];
@@ -142,6 +147,8 @@ export function tryPatchInlineTaskLineContent(
     for (const [key, value] of Object.entries(fieldValues)) {
         if (key.startsWith('_')) continue;
         if (key === 'pinned') continue;
+        const fieldType = getManagedTaskFieldType(key, keyMappings);
+        if (!fieldType) continue;
 
         const existing = parsed.fields.find(f => f.key === key);
         if (value === '') {
@@ -150,14 +157,13 @@ export function tryPatchInlineTaskLineContent(
             existing.value = value;
             existing.rawValue = value;
         } else if (value) {
-            const def = CANONICAL_KEY_MAP.get(key);
             parsed.fields.push({
                 sourceKey: key,
                 key,
                 value,
                 rawValue: value,
-                type: def?.type ?? 'text',
-                isCanonical: !!def,
+                type: fieldType,
+                isCanonical: true,
                 containerRange: { from: 0, to: 0 },
                 valueRange: { from: 0, to: 0 },
             });
@@ -169,6 +175,7 @@ export function tryPatchInlineTaskLineContent(
             Object.keys(fieldValues).filter(key => !key.startsWith('_'))
         );
         parsed.fields = parsed.fields.filter(f => {
+            if (!isManagedTaskFieldCanonicalKey(f.key, keyMappings)) return true;
             if (incomingKeys.has(f.key)) return true;
             if (f.key === 'operonId' || f.key === 'datetimeCreated' || f.key === 'related') return true;
             return false;

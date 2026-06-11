@@ -31,6 +31,7 @@ type ContextualHoverMenuSettings = Pick<
 	| 'contextualMenuMobileEnabled'
 	| 'contextualMenuMobileLongPressMs'
 	| 'contextualMenuMobileTransitionGraceMs'
+	| 'contextualMenuMobileAutoHideMs'
 >;
 
 interface ContextualHoverMenuBindOptions {
@@ -62,6 +63,7 @@ interface ContextualHoverMenuShowOptions {
 	onAction: ContextualMenuActionHandler;
 	mobileInteraction?: {
 		transitionGraceMs: number;
+		autoHideMs: number;
 		guardTargets?: HTMLElement[];
 	};
 }
@@ -71,6 +73,7 @@ export class ContextualHoverMenuController {
 	private activeMenuEl: HTMLElement | null = null;
 	private activeKey: string | null = null;
 	private activeMenuHideTimer: WindowTimeoutHandle | null = null;
+	private activeMenuAutoHideTimer: WindowTimeoutHandle | null = null;
 	private activeMenuShowTimer: WindowTimeoutHandle | null = null;
 	private activeMenuDocument: Document | null = null;
 	private activeMenuWindow: Window | null = null;
@@ -118,6 +121,12 @@ export class ContextualHoverMenuController {
 		this.activeMenuHideTimer = null;
 	}
 
+	private clearAutoHideTimer(): void {
+		if (this.activeMenuAutoHideTimer === null) return;
+		clearWindowTimeout(this.activeMenuAutoHideTimer);
+		this.activeMenuAutoHideTimer = null;
+	}
+
 	scheduleShow(callback: () => void): void {
 		this.clearShowTimer();
 		const delay = Math.max(0, this.options.getDelayMs());
@@ -144,6 +153,7 @@ export class ContextualHoverMenuController {
 		}
 		this.clearShowTimer();
 		this.clearHideTimer();
+		this.clearAutoHideTimer();
 		this.activeMenuEl?.remove();
 		this.activeMenuEl = null;
 		this.activeKey = null;
@@ -186,10 +196,20 @@ export class ContextualHoverMenuController {
 		}
 
 		this.clearHideTimer();
+		this.clearAutoHideTimer();
 		if (this.isActive(options.key) && this.activeMenuEl) {
 			if (!this.options.positionMenu(options.anchorRect, this.activeMenuEl)) {
 				this.hide(true);
 				return false;
+			}
+			if (options.mobileInteraction) {
+				const autoHideMs = Math.round(options.mobileInteraction.autoHideMs);
+				if (autoHideMs > 0) {
+					this.activeMenuAutoHideTimer = setWindowTimeout(() => {
+						this.activeMenuAutoHideTimer = null;
+						this.hide(true);
+					}, autoHideMs);
+				}
 			}
 			return true;
 		}
@@ -305,6 +325,13 @@ export class ContextualHoverMenuController {
 			this.activeMenuOutsideTouchHandler = closeOnOutside;
 			this.activeMenuOutsideEventRoot.addEventListener('pointerdown', this.activeMenuOutsidePointerHandler, true);
 			this.activeMenuOutsideEventRoot.addEventListener('touchstart', this.activeMenuOutsideTouchHandler, true);
+			const autoHideMs = Math.round(options.mobileInteraction.autoHideMs);
+			if (autoHideMs > 0) {
+				this.activeMenuAutoHideTimer = setWindowTimeout(() => {
+					this.activeMenuAutoHideTimer = null;
+					this.hide(true);
+				}, autoHideMs);
+			}
 		}
 		hostDocument.addEventListener('keydown', this.activeMenuKeydownHandler, true);
 		hostDocument.addEventListener('scroll', this.activeMenuScrollHandler, true);
@@ -563,6 +590,7 @@ export function bindTaskContextualHoverMenu(
 			mobileInteraction: mobile
 				? {
 					transitionGraceMs: settings.contextualMenuMobileTransitionGraceMs,
+					autoHideMs: settings.contextualMenuMobileAutoHideMs,
 					guardTargets: [triggerEl],
 				}
 				: undefined,

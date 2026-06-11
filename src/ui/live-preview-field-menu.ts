@@ -23,6 +23,13 @@ import { buildSubtaskExcludedIds } from '../core/task-hierarchy';
 import { collectHiddenKeys } from './compact-task-layout';
 import { asHTMLElement, getOwnerWindow } from '../core/dom-compat';
 import type { InlineRepeatCompletionMode } from '../storage/repeat-series-store';
+import { openTaskFieldPicker } from './task-field-picker-dispatch';
+import {
+	getCustomFieldMapping,
+	getCustomSurfaceKeyMappings,
+	isManagedSurfaceField,
+	isProjectedCustomFieldType,
+} from './custom-field-surfaces';
 
 interface LivePreviewFieldMenuOptions {
 	app: App;
@@ -79,7 +86,8 @@ export function showLivePreviewFieldMenu(anchor: HTMLElement | DOMRect, options:
 	const visibleKeys = new Set(options.visibleKeys ?? VISIBLE_KEYS);
 
 	const hiddenPresentKeys = collectHiddenKeys(fieldValues, options.task?.tags ?? options.parsedTask.tags, visibleKeys, options.allTasks)
-		.filter(key => !isInternalCanonicalKey(key));
+		.filter(key => !isInternalCanonicalKey(key))
+		.filter(key => isLivePreviewManagedFieldMenuKey(options.settings, key));
 
 	const header = panel.createDiv('operon-floating-title');
 	header.textContent = t('taskEditor', 'fieldMenuTitle');
@@ -100,7 +108,31 @@ export function showLivePreviewFieldMenu(anchor: HTMLElement | DOMRect, options:
 	const addHeader = panel.createDiv('operon-floating-subtitle');
 	addHeader.textContent = t('taskEditor', 'fieldMenuAddField');
 
-	for (const key of ['status', 'priority', 'dateDue', 'dateScheduled', 'dateStarted', 'datetimeCreated', 'dateCompleted', 'dateCancelled', 'datetimeStart', 'datetimeEnd', 'repeat', 'tags', 'contexts', 'links', 'assignees', 'taskColor', 'subtasks', 'blocking', 'blockedBy']) {
+	const addFieldKeys = [
+		'status',
+		'priority',
+		'dateDue',
+		'dateScheduled',
+		'dateStarted',
+		'datetimeCreated',
+		'dateCompleted',
+		'dateCancelled',
+		'datetimeStart',
+		'datetimeEnd',
+		'repeat',
+		'tags',
+		'contexts',
+		'links',
+		'assignees',
+		'taskColor',
+		'subtasks',
+		'blocking',
+		'blockedBy',
+		...getCustomSurfaceKeyMappings(options.settings, 'editor')
+			.map(mapping => mapping.canonicalKey)
+			.filter(key => !(fieldValues[key] ?? '').trim()),
+	];
+	for (const key of addFieldKeys) {
 		panel.appendChild(buildItem(getDisplayName(key, forwardMap), () => {
 			const pickerAnchor = snapshotFloatingAnchor(anchor);
 			close();
@@ -162,6 +194,13 @@ function getRepeatDayPickerPopoverOptions(settings: OperonSettings): { weekStart
 	};
 }
 
+function isLivePreviewManagedFieldMenuKey(settings: OperonSettings, key: string): boolean {
+	if (key === 'tags') return true;
+	const customMapping = getCustomFieldMapping(settings.keyMappings, key);
+	if (customMapping) return isProjectedCustomFieldType(customMapping);
+	return isManagedSurfaceField(settings.keyMappings, key);
+}
+
 function openPicker(key: string, anchor: HTMLElement | DOMRect, options: LivePreviewFieldMenuOptions): void {
 	const fieldValues = options.task?.fieldValues ?? Object.fromEntries(options.parsedTask.fields.map(field => [field.key, field.value]));
 	const restoreCursor: LivePreviewCursorRestoreRequest = {
@@ -171,6 +210,40 @@ function openPicker(key: string, anchor: HTMLElement | DOMRect, options: LivePre
 		editorView: options.editorView,
 		trackDescriptionEnd: true,
 	};
+	const customMapping = getCustomFieldMapping(options.settings.keyMappings, key);
+	if (customMapping && isProjectedCustomFieldType(customMapping)) {
+		openTaskFieldPicker({
+			app: options.app,
+			settings: options.settings,
+			allTasks: options.allTasks,
+			canonicalKey: key,
+			anchor,
+			currentFieldValues: fieldValues,
+			currentTags: options.task?.tags ?? options.parsedTask.tags,
+			sourcePath: options.parsedTask.filePath,
+			closeListPickerOnSelect: true,
+			retainInputFocus: true,
+			taskFormat: options.task?.primary.format ?? 'inline',
+			repeatInlineCompletionMode: options.repeatInlineCompletionMode,
+			onCommit: payload => {
+				const normalizedPayload = Object.fromEntries(
+					Object.entries(payload).map(([payloadKey, value]) => [
+						payloadKey,
+						Array.isArray(value) ? value.join('; ') : value,
+					]),
+				);
+				if (options.updateFields) {
+					void options.updateFields(normalizedPayload, restoreCursor);
+					return;
+				}
+				for (const [payloadKey, value] of Object.entries(normalizedPayload)) {
+					void options.updateField(payloadKey, value, restoreCursor);
+				}
+			},
+			onRepeatInlineCompletionModeChange: options.onRepeatInlineCompletionModeChange,
+		});
+		return;
+	}
 
 	switch (key) {
 		case 'status':

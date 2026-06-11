@@ -19,6 +19,14 @@ import { showRepeatPicker } from './field-pickers/repeat-picker';
 import { showEstimatePicker } from './field-pickers/estimate-picker';
 import { showParentTaskPicker } from './field-pickers/parent-task-picker';
 import { showLocationPicker } from './field-pickers/location-picker';
+import { showCustomDateFieldPicker, showCustomDatetimeFieldPicker, showCustomListFieldPicker, showCustomNumberFieldPicker, showCustomTextFieldPicker } from './field-pickers/custom';
+import {
+	collectCustomFieldValueCandidates,
+	getCustomFieldLabel,
+	getCustomFieldMapping,
+	isProjectedCustomFieldType,
+	normalizeCustomFieldRawValue,
+} from './custom-field-surfaces';
 import type { InlineRepeatCompletionMode } from '../storage/repeat-series-store';
 
 export interface TaskFieldPickerDispatchOptions {
@@ -41,6 +49,7 @@ export interface TaskFieldPickerDispatchOptions {
 	anchor: HTMLElement | DOMRect;
 	currentFieldValues: Record<string, string>;
 	currentTags: string[];
+	sourcePath?: string;
 	closeListPickerOnSelect?: boolean;
 	retainInputFocus?: boolean;
 	manualDatePicker?: ManualDatePickerOptions;
@@ -252,7 +261,111 @@ export function openTaskFieldPicker(options: TaskFieldPickerDispatchOptions): ((
 			options.onOpenNote?.();
 			return null;
 		default:
+			return openCustomTaskFieldPicker(options);
+	}
+}
+
+function openCustomTaskFieldPicker(options: TaskFieldPickerDispatchOptions): (() => void) | null {
+	const mapping = getCustomFieldMapping(options.settings.keyMappings, options.canonicalKey);
+	if (!mapping || !isProjectedCustomFieldType(mapping)) {
+		options.onCancel?.();
+		return null;
+	}
+
+	const label = getCustomFieldLabel(mapping);
+	const canonicalKey = mapping.canonicalKey;
+	const value = normalizeCustomFieldRawValue((options.currentFieldValues as Record<string, unknown>)[canonicalKey]);
+
+	switch (mapping.type) {
+		case 'text':
+			return showCustomTextFieldPicker(options.anchor, {
+				canonicalKey,
+				type: 'text',
+				label,
+				value,
+				candidates: collectCustomFieldValueCandidates(options.app, options.allTasks, mapping),
+				placeholder: label,
+				retainInputFocus: options.retainInputFocus,
+				onCommit: (key, nextValue) => options.onCommit({ [key]: nextValue }),
+				canRemove: !!value.trim(),
+				onRemove: key => options.onCommit({ [key]: '' }),
+				onCancel: options.onCancel,
+				onClose: options.onClose,
+			});
+		case 'list':
+			return showCustomListFieldPicker(options.anchor, {
+				app: options.app,
+				sourcePath: options.sourcePath,
+				canonicalKey,
+				type: 'list',
+				label,
+				value: splitTaskListValue(value),
+				candidates: collectCustomFieldValueCandidates(options.app, options.allTasks, mapping),
+				placeholder: label,
+				retainInputFocus: options.retainInputFocus,
+				onCommit: (key, nextValue) => options.onCommit({ [key]: nextValue }),
+				onCancel: options.onCancel,
+				onClose: options.onClose,
+			});
+		case 'number':
+			return showCustomNumberFieldPicker(options.anchor, {
+				canonicalKey,
+				type: 'number',
+				label,
+				value,
+				placeholder: label,
+				onCommit: (key, nextValue) => options.onCommit({ [key]: nextValue }),
+				canRemove: !!value.trim(),
+				onRemove: key => options.onCommit({ [key]: '' }),
+				onCancel: options.onCancel,
+				onClose: options.onClose,
+			});
+		case 'date':
+			return showCustomDateFieldPicker(options.anchor, {
+				app: options.app,
+				canonicalKey,
+				type: 'date',
+				label,
+				value,
+				dayPicker: getCustomDateFieldManualDatePickerOptions(options),
+				retainInputFocus: options.retainInputFocus,
+				onCommit: (key, nextValue) => options.onCommit({ [key]: nextValue }),
+				canRemove: !!value.trim(),
+				onRemove: key => options.onCommit({ [key]: '' }),
+				onCancel: options.onCancel,
+				onClose: options.onClose,
+			});
+		case 'datetime':
+			return showCustomDatetimeFieldPicker(options.anchor, {
+				app: options.app,
+				settings: {
+					timeFormat: options.settings.timeFormat,
+					calendarWeekStart: options.settings.calendarWeekStart,
+					calendarSidebarShowWeekNumbers: options.settings.calendarSidebarShowWeekNumbers,
+				},
+				canonicalKey,
+				type: 'datetime',
+				label,
+				value,
+				retainInputFocus: options.retainInputFocus,
+				onCommit: (key, nextValue) => options.onCommit({ [key]: nextValue }),
+				canRemove: !!value.trim(),
+				onRemove: key => options.onCommit({ [key]: '' }),
+				onCancel: options.onCancel,
+				onClose: options.onClose,
+			});
+		case 'checkbox':
+			options.onCancel?.();
+			return null;
+		default:
 			options.onCancel?.();
 			return null;
 	}
+}
+
+function getCustomDateFieldManualDatePickerOptions(options: TaskFieldPickerDispatchOptions): ManualDatePickerOptions {
+	return options.manualDatePicker ?? {
+		weekStart: options.settings.calendarWeekStart,
+		showWeekNumbers: options.settings.calendarSidebarShowWeekNumbers,
+	};
 }

@@ -8,12 +8,13 @@
  * before regex parsing (Architecture doc Section 4.4).
  */
 
-import { CheckboxState, CANONICAL_KEY_MAP } from '../types/keys';
+import { CheckboxState } from '../types/keys';
 import { OperonField, ParsedTagToken, ParsedTask, SourceRange, TimePrefix, WikiLink } from '../types/fields';
 import { buildReverseMapping } from './yaml-fields';
 import { KeyMapping } from '../types/settings';
 import { normalizeTaskIconValue } from './task-icon-value';
 import { normalizeTaskColorValue } from './task-color-value';
+import { getManagedTaskFieldType, isManagedTaskFieldCanonicalKey } from './managed-task-fields';
 
 /**
  * Fast pre-check: is this line potentially a task line?
@@ -144,6 +145,7 @@ function extractFields(
 	text: string,
 	baseOffset: number,
 	reverseMap: Map<string, string>,
+	keyMappings: KeyMapping[],
 ): { fields: OperonField[]; textParts: TextPart[] } {
 	const fields: OperonField[] = [];
 	const textParts: TextPart[] = [];
@@ -183,7 +185,7 @@ function extractFields(
 				if (depth === 0 && text[j] === '}' && text[j + 1] === '}') {
 					// Found closing }}
 					const fieldContent = text.substring(fieldStart, j);
-					const field = parseFieldContent(fieldContent, baseOffset + i, baseOffset + j + 2, reverseMap);
+					const field = parseFieldContent(fieldContent, baseOffset + i, baseOffset + j + 2, reverseMap, keyMappings);
 					if (field) {
 						fields.push(field);
 					}
@@ -221,6 +223,7 @@ function parseFieldContent(
 	containerFrom: number,
 	containerTo: number,
 	reverseMap: Map<string, string>,
+	keyMappings: KeyMapping[],
 ): OperonField | null {
 	// Find first :: separator
 	const sepIndex = content.indexOf('::');
@@ -244,15 +247,15 @@ function parseFieldContent(
 	} else if (key === 'taskIcon') {
 		value = normalizeTaskIconValue(value);
 	}
-	const keyDef = CANONICAL_KEY_MAP.get(key);
+	const fieldType = getManagedTaskFieldType(key, keyMappings) ?? 'text';
 
 	return {
 		sourceKey,
 		key,
 		value,
 		rawValue,
-		type: keyDef?.type ?? 'text',
-		isCanonical: !!keyDef,
+		type: fieldType,
+		isCanonical: isManagedTaskFieldCanonicalKey(key, keyMappings),
 		containerRange: { from: containerFrom, to: containerTo },
 		valueRange: {
 			from: containerFrom + 2 + valueOffset,
@@ -373,7 +376,7 @@ export function parseTaskLine(
 	}
 
 	// Extract fields from rest of line
-	const { fields, textParts } = extractFields(rest, contentStart, reverseMap);
+	const { fields, textParts } = extractFields(rest, contentStart, reverseMap, keyMappings);
 
 	// Combine text parts to get description + tags
 	const textContent = textParts.map(part => part.text).join('').trim();
@@ -434,7 +437,7 @@ export function hasOperonFields(line: string): boolean {
  * Batch-parse all task lines from file content.
  * Returns array of ParsedTask for all valid task lines.
  */
-export function parseFileContent(content: string, filePath: string): ParsedTask[] {
+export function parseFileContent(content: string, filePath: string, keyMappings: KeyMapping[] = []): ParsedTask[] {
 	const lines = content.split('\n');
 	const tasks: ParsedTask[] = [];
 
@@ -442,8 +445,10 @@ export function parseFileContent(content: string, filePath: string): ParsedTask[
 		// Character-level pre-check for performance
 		if (!isTaskLineCandidate(lines[i])) continue;
 
-		const task = parseTaskLine(lines[i], i, filePath);
-		if (task && (task.operonId || task.fields.length > 0)) {
+		const task = parseTaskLine(lines[i], i, filePath, keyMappings);
+		if (task && (task.operonId || task.fields.some(field =>
+			field.key === 'tags' || isManagedTaskFieldCanonicalKey(field.key, keyMappings)
+		))) {
 			tasks.push(task);
 		}
 	}

@@ -1,5 +1,5 @@
 import { InlineTaskCompactChipItem } from '../../types/settings';
-import { renderInterfaceIconToggleSection, type InterfaceIconActionToggle } from './interface-editor-ui';
+import { renderInterfaceIconToggleSection, type InterfaceIconActionToggle, type InterfaceManagedSurfaceItem } from './interface-editor-ui';
 
 type CompactChipActionToggle = InterfaceIconActionToggle;
 
@@ -14,6 +14,7 @@ export interface CompactChipSettingsRendererOptions {
 	moveDownLabel: string;
 	getItems: () => InlineTaskCompactChipItem[];
 	setItems: (items: InlineTaskCompactChipItem[]) => void;
+	getManagedItems?: () => InterfaceManagedSurfaceItem[];
 	getLabel: (key: InlineTaskCompactChipItem['key']) => string;
 	getIcon: (key: InlineTaskCompactChipItem['key']) => string;
 	save: () => Promise<void>;

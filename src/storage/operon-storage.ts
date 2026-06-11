@@ -121,6 +121,7 @@ function pickContextualMenuStoreSettings(settings: OperonSettings): ContextualMe
 		contextualMenuMobileEnabled: settings.contextualMenuMobileEnabled,
 		contextualMenuMobileLongPressMs: settings.contextualMenuMobileLongPressMs,
 		contextualMenuMobileTransitionGraceMs: settings.contextualMenuMobileTransitionGraceMs,
+		contextualMenuMobileAutoHideMs: settings.contextualMenuMobileAutoHideMs,
 	};
 }
 
@@ -129,6 +130,7 @@ function pickTaskUiPreferenceStoreSettings(settings: OperonSettings): TaskUiPref
 		taskCreatorToolbar: settings.taskCreatorToolbar,
 		taskEditorShowLineNumbers: settings.taskEditorShowLineNumbers,
 		taskEditorWorkflowPickers: settings.taskEditorWorkflowPickers,
+		taskEditorMobileCoreTools: settings.taskEditorMobileCoreTools,
 		inlineExpandedTaskChips: settings.inlineExpandedTaskChips,
 		inlineTaskCompactChips: settings.inlineTaskCompactChips,
 		filterTaskCompactChips: settings.filterTaskCompactChips,

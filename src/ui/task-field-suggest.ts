@@ -1,4 +1,5 @@
 import { OperonSettings } from '../types/settings';
+import { getCustomSurfaceKeyMappings, isCustomFieldMapping } from './custom-field-surfaces';
 
 export interface TaskFieldSuggestionItem {
 	canonicalKey: string;
@@ -53,54 +54,77 @@ export function buildTaskFieldSuggestions(
 	token: string,
 	settings: OperonSettings,
 	currentFieldValues: Record<string, string>,
+	surface: 'editor' | 'creator' = 'editor',
 ): TaskFieldSuggestionItem[] {
 	const lowered = token.toLocaleLowerCase();
-	const unique = new Map<string, TaskFieldSuggestionItem>();
+	const seenVisibleNames = new Set<string>();
+	const builtInItems: TaskFieldSuggestionItem[] = [];
+	const customItems: TaskFieldSuggestionItem[] = [];
+
+	const addItem = (target: TaskFieldSuggestionItem[], item: TaskFieldSuggestionItem): void => {
+		const key = item.visibleName.toLocaleLowerCase();
+		if (seenVisibleNames.has(key)) return;
+		seenVisibleNames.add(key);
+		target.push(item);
+	};
 
 	for (const mapping of settings.keyMappings) {
 		if (mapping.isInternal) continue;
+		if (isCustomFieldMapping(mapping)) continue;
 		if (!mapping.visiblePropertyName) continue;
 		if (!mapping.visiblePropertyName.toLocaleLowerCase().startsWith(lowered)) continue;
-
-		const key = mapping.visiblePropertyName.toLocaleLowerCase();
-		if (!unique.has(key)) {
-			unique.set(key, {
-				canonicalKey: mapping.canonicalKey,
-				visibleName: mapping.visiblePropertyName,
-			});
-		}
+		addItem(builtInItems, {
+			canonicalKey: mapping.canonicalKey,
+			visibleName: mapping.visiblePropertyName,
+		});
 	}
 
-	if ('tags'.startsWith(lowered) && !unique.has('tags')) {
-		unique.set('tags', {
+	if ('tags'.startsWith(lowered)) {
+		addItem(builtInItems, {
 			canonicalKey: 'tags',
 			visibleName: 'tags',
 		});
 	}
 
 	if (!(currentFieldValues['datetimeStart'] ?? '').trim()) {
-		for (const [key, item] of [...unique.entries()]) {
+		for (const [key, item] of builtInItems.entries()) {
 			if (item.canonicalKey === 'datetimeEnd') {
-				unique.delete(key);
+				builtInItems.splice(key, 1);
+				break;
 			}
 		}
 	}
 
-	return [...unique.values()]
-		.sort((a, b) => {
-			const exactA = a.visibleName.length === token.length ? 0 : 1;
-			const exactB = b.visibleName.length === token.length ? 0 : 1;
-			if (exactA !== exactB) return exactA - exactB;
-			if (a.visibleName.length !== b.visibleName.length) return a.visibleName.length - b.visibleName.length;
-			return a.visibleName.localeCompare(b.visibleName, undefined, { sensitivity: 'base' });
-		})
-		.slice(0, 8);
+	for (const mapping of getCustomSurfaceKeyMappings(settings, surface)) {
+		const visibleName = mapping.visiblePropertyName?.trim();
+		if (!visibleName || !visibleName.toLocaleLowerCase().startsWith(lowered)) continue;
+		addItem(customItems, {
+			canonicalKey: mapping.canonicalKey,
+			visibleName,
+		});
+	}
+
+	return [
+		...builtInItems.sort(compareBuiltInTaskFieldSuggestionItems(token)),
+		...customItems,
+	].slice(0, 8);
+}
+
+function compareBuiltInTaskFieldSuggestionItems(token: string): (a: TaskFieldSuggestionItem, b: TaskFieldSuggestionItem) => number {
+	return (a, b) => {
+		const exactA = a.visibleName.length === token.length ? 0 : 1;
+		const exactB = b.visibleName.length === token.length ? 0 : 1;
+		if (exactA !== exactB) return exactA - exactB;
+		if (a.visibleName.length !== b.visibleName.length) return a.visibleName.length - b.visibleName.length;
+		return a.visibleName.localeCompare(b.visibleName, undefined, { sensitivity: 'base' });
+	};
 }
 
 export function resolveTaskFieldSuggestions(
 	beforeCaret: string,
 	settings: OperonSettings,
 	currentFieldValues: Record<string, string>,
+	surface: 'editor' | 'creator' = 'editor',
 ): TaskFieldSuggestionResolution {
 	const candidate = matchTaskFieldTriggerCandidate(beforeCaret);
 	if (!candidate) {
@@ -121,7 +145,7 @@ export function resolveTaskFieldSuggestions(
 		};
 	}
 
-	const items = buildTaskFieldSuggestions(candidate.token, settings, currentFieldValues);
+	const items = buildTaskFieldSuggestions(candidate.token, settings, currentFieldValues, surface);
 	return {
 		trigger: candidate,
 		token: candidate.token,

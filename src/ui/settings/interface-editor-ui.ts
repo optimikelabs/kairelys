@@ -36,6 +36,20 @@ export interface InterfaceIconActionToggle {
 	onToggle: () => Promise<void>;
 }
 
+export interface InterfaceManagedSurfaceItem {
+	key: string;
+	visible: boolean;
+	icon: string;
+	label: string;
+	canonicalLabel: string;
+	onToggle: () => Promise<void>;
+	showReorderControls?: boolean;
+	canMoveUp?: boolean;
+	canMoveDown?: boolean;
+	onMoveUp?: () => Promise<void>;
+	onMoveDown?: () => Promise<void>;
+}
+
 export interface InterfaceIconToggleSectionOptions<
 	TKey extends string,
 	TItem extends InterfaceIconToggleSectionItem<TKey>,
@@ -50,6 +64,7 @@ export interface InterfaceIconToggleSectionOptions<
 	moveDownLabel: string;
 	getItems: () => TItem[];
 	setItems: (items: TItem[]) => void;
+	getManagedItems?: () => InterfaceManagedSurfaceItem[];
 	getLabel: (key: TKey) => string;
 	getIcon: (key: TKey) => string;
 	canMoveUp?: (item: TItem, index: number, items: TItem[]) => boolean;
@@ -305,6 +320,49 @@ export function renderInterfaceIconToggleSection<
 			});
 		});
 
+		for (const item of options.getManagedItems?.() ?? []) {
+			createInterfaceIconToggleButton({
+				containerEl: toggleGrid,
+				icon: item.icon,
+				label: item.label,
+				className: 'operon-settings-task-creator-toolbar-icon is-custom-field',
+				active: item.visible,
+				pressed: item.visible,
+				errorContext: options.visibilityErrorContext,
+				onClick: async () => {
+					await item.onToggle();
+					rerenderRowsPreservingScroll(section, renderRows);
+				},
+			});
+
+			if (item.showReorderControls === true) {
+				const setting = new Setting(reorderList)
+					.setName(item.label);
+				setting.settingEl.addClass('operon-interface-icon-reorder-row');
+				setting.settingEl.addClass('is-custom-field');
+				setting.addExtraButton(button => {
+					button.setIcon('arrow-up');
+					applyExtraButtonTooltip(button, options.moveUpLabel);
+					button.setDisabled(item.canMoveUp !== true || !item.onMoveUp);
+					button.onClick(async () => {
+						if (item.canMoveUp !== true || !item.onMoveUp) return;
+						await item.onMoveUp();
+						rerenderRowsPreservingScroll(section, renderRows);
+					});
+				});
+				setting.addExtraButton(button => {
+					button.setIcon('arrow-down');
+					applyExtraButtonTooltip(button, options.moveDownLabel);
+					button.setDisabled(item.canMoveDown !== true || !item.onMoveDown);
+					button.onClick(async () => {
+						if (item.canMoveDown !== true || !item.onMoveDown) return;
+						await item.onMoveDown();
+						rerenderRowsPreservingScroll(section, renderRows);
+					});
+				});
+			}
+		}
+
 		for (const action of options.getActionToggles?.() ?? []) {
 			createInterfaceIconToggleButton({
 				containerEl: toggleGrid,
@@ -438,6 +496,69 @@ function renderInterfaceIconRowListSection<
 				},
 			});
 		});
+
+		for (const item of options.getManagedItems?.() ?? []) {
+			const row = createSettingsListCard({
+				containerEl: listEl,
+				icon: item.icon,
+				title: item.label,
+				className: 'operon-compact-chip-row is-custom-field',
+				metaClassName: 'operon-compact-chip-row-meta',
+				actionsClassName: 'operon-compact-chip-row-actions',
+				renderMeta: metaEl => {
+					createSettingsListCardChip({
+						containerEl: metaEl,
+						label: item.canonicalLabel,
+						className: 'operon-compact-chip-canonical-chip',
+					});
+				},
+			});
+
+			if (item.showReorderControls === true) {
+				createSettingsListCardActionButton({
+					containerEl: row.actionsEl,
+					label: options.moveUpLabel,
+					tooltip: options.moveUpLabel,
+					icon: 'arrow-up',
+					disabled: item.canMoveUp !== true || !item.onMoveUp,
+					errorContext: options.visibilityErrorContext,
+					onClick: async () => {
+						if (item.canMoveUp !== true || !item.onMoveUp) return;
+						await item.onMoveUp();
+						rerenderRowsPreservingScroll(sectionEl, renderRows);
+					},
+				});
+
+				createSettingsListCardActionButton({
+					containerEl: row.actionsEl,
+					label: options.moveDownLabel,
+					tooltip: options.moveDownLabel,
+					icon: 'arrow-down',
+					disabled: item.canMoveDown !== true || !item.onMoveDown,
+					errorContext: options.visibilityErrorContext,
+					onClick: async () => {
+						if (item.canMoveDown !== true || !item.onMoveDown) return;
+						await item.onMoveDown();
+						rerenderRowsPreservingScroll(sectionEl, renderRows);
+					},
+				});
+			}
+
+			createSettingsListCardActionButton({
+				containerEl: row.actionsEl,
+				label: options.getVisibilityToggleLabel?.(item.label) ?? item.label,
+				ariaLabel: options.getVisibilityToggleLabel?.(item.label) ?? item.label,
+				tooltip: options.getVisibilityToggleLabel?.(item.label) ?? item.label,
+				icon: item.icon,
+				active: item.visible,
+				className: 'operon-compact-chip-visibility-toggle',
+				errorContext: options.visibilityErrorContext,
+				onClick: async () => {
+					await item.onToggle();
+					rerenderRowsPreservingScroll(sectionEl, renderRows);
+				},
+			});
+		}
 
 		const actions = options.getActionToggles?.() ?? [];
 		if (actions.length > 0) {

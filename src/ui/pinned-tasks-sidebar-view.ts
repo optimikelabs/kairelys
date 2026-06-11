@@ -174,10 +174,11 @@ export class PinnedTasksSidebarView extends ItemView {
 		if (this.settings.pinnedDockColorSource === 'noColor') {
 			row.setCssProps({ '--operon-card-color': 'var(--background-modifier-border)' });
 		} else if (color) {
-			row.style.backgroundColor = /^#[0-9a-fA-F]{6}$/.test(color)
-				? `${color}20`
-				: `color-mix(in srgb, ${color} 12%, transparent)`;
 			row.setCssProps({ '--operon-card-color': color });
+			row.setCssProps({
+				'--operon-pinned-sidebar-row-bg': `color-mix(in srgb, ${color} 5%, transparent)`,
+				'--operon-pinned-sidebar-row-hover-border': color,
+			});
 		}
 	}
 

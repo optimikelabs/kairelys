@@ -6,17 +6,24 @@ interface DatePickerCandidateDisplay {
 	weekday: string;
 }
 
+export interface DatePickerCandidateRowClassNames {
+	label?: string;
+	date?: string;
+	weekday?: string;
+}
+
 export function appendDatePickerCandidateRow(
 	button: HTMLElement,
 	candidate: DateParseCandidate,
 	language: DatePickerLang,
+	classNames: DatePickerCandidateRowClassNames = {},
 ): void {
 	const display = formatDatePickerCandidateDisplay(candidate, language);
-	const label = button.createSpan('operon-date-picker-item-label');
+	const label = button.createSpan(classNames.label ?? 'operon-date-picker-item-label');
 	label.textContent = display.label;
-	const date = button.createSpan('operon-date-picker-item-date');
+	const date = button.createSpan(classNames.date ?? 'operon-date-picker-item-date');
 	date.textContent = display.isoDate;
-	const weekday = button.createSpan('operon-date-picker-item-weekday');
+	const weekday = button.createSpan(classNames.weekday ?? 'operon-date-picker-item-weekday');
 	weekday.textContent = display.weekday;
 }
 

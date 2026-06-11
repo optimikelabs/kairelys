@@ -21,6 +21,7 @@ import { normalizeTaskIconValue } from '../core/task-icon-value';
 import { DYNAMIC_FILE_TASK_FILTER_DEFAULT_ICON, isDynamicFileTaskFilterSet } from '../core/dynamic-file-task-filter';
 import { showOperonDayPickerPopover } from './field-pickers/day-picker-popover';
 import { showDatetimePicker } from './field-pickers/datetime-picker';
+import { getManagedCustomFieldOptions } from '../core/managed-task-fields';
 
 function generateConditionId(): string {
 	return 'cond_' + Math.random().toString(36).slice(2, 10);
@@ -290,16 +291,22 @@ export class FilterSetModal extends Modal {
 			pseudoFields.push({ field: 'folders', label: t('filterSets', 'fieldFolders'), type: 'folders' });
 		}
 
-		const editableMappings = this.keyMappings
-			.filter(mapping => !mapping.isInternal)
+		const builtInMappings = this.keyMappings
+			.filter(mapping => mapping.isSystem !== false && !mapping.isInternal)
 			.map(mapping => ({
 				field: mapping.canonicalKey,
 				label: mapping.visiblePropertyName,
 				type: mapping.type,
 			}));
+		const customMappings = getManagedCustomFieldOptions(this.keyMappings).map(option => ({
+			field: option.field,
+			label: option.label,
+			type: option.type,
+		}));
 
-		return [...pseudoFields, ...editableMappings]
+		const builtInOptions = [...pseudoFields, ...builtInMappings]
 			.sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: 'base' }));
+		return [...builtInOptions, ...customMappings];
 	}
 
 	private measureSelectContentWidth(select: HTMLSelectElement): number {

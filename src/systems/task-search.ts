@@ -1,5 +1,7 @@
 import { parseListValue } from '../core/parser';
+import { getManagedCustomFieldMappings, normalizeManagedFieldValue } from '../core/managed-task-fields';
 import { IndexedTask } from '../types/fields';
+import { KeyMapping } from '../types/settings';
 
 export type ProjectSearchMode = 'pc' | 'pt';
 
@@ -35,8 +37,12 @@ export function parseProjectSearchMode(rawQuery: string): ProjectSearchModeQuery
 	};
 }
 
-export function buildTaskSearchMatcher(tasks: IndexedTask[]): (task: IndexedTask, normalizedQuery: string) => boolean {
+export function buildTaskSearchMatcher(
+	tasks: IndexedTask[],
+	keyMappings: readonly KeyMapping[] = [],
+): (task: IndexedTask, normalizedQuery: string) => boolean {
 	const taskLookup = new Map(tasks.map(task => [task.operonId, task] as const));
+	const customSearchMappings = getManagedCustomFieldMappings(keyMappings);
 	const childrenByParent = new Map<string, string[]>();
 	for (const task of tasks) {
 		const parentId = (task.fieldValues['parentTask'] ?? '').trim();
@@ -114,6 +120,7 @@ export function buildTaskSearchMatcher(tasks: IndexedTask[]): (task: IndexedTask
 		addValue(task.fieldValues['note']);
 		addValues(getSearchableSwimlaneValues(task));
 		addValues(getSearchableDateValues(task));
+		addValues(getSearchableCustomFieldValues(task, customSearchMappings));
 
 		const parentId = (task.fieldValues['parentTask'] ?? '').trim();
 		if (parentId) {
@@ -149,16 +156,17 @@ export function rankTaskSearchResults(options: {
 	query: string;
 	includeAllTasks: boolean;
 	limit?: number;
+	keyMappings?: readonly KeyMapping[];
 }): RankedTaskSearchResult[] {
 	const normalizedQuery = options.query.trim().toLocaleLowerCase();
 	const limit = options.limit;
-	const matcher = buildTaskSearchMatcher(options.tasks);
+	const matcher = buildTaskSearchMatcher(options.tasks, options.keyMappings ?? []);
 	const scopedTasks = options.tasks.filter(task => options.includeAllTasks || task.checkbox === 'open');
 	const matches = scopedTasks
 		.filter(task => !normalizedQuery || matcher(task, normalizedQuery))
 		.map(task => ({
 			task,
-			score: normalizedQuery ? scoreTaskSearchResult(task, normalizedQuery) : 0,
+			score: normalizedQuery ? scoreTaskSearchResult(task, normalizedQuery, options.keyMappings ?? []) : 0,
 		}));
 
 	matches.sort((left, right) => compareRankedTaskSearchResults(left, right, normalizedQuery));
@@ -176,11 +184,12 @@ export function buildProjectSearchCandidates(
 		visibleTaskIds?: Set<string>;
 		visibilityMode?: ProjectSearchMode;
 		candidateFilter?: (task: IndexedTask) => boolean;
+		keyMappings?: readonly KeyMapping[];
 	} = {},
 ): ProjectSearchCandidate[] {
 	const scopedTaskIds = new Set(scopedTasks.map(task => task.operonId));
 	const visibleTaskIds = options.visibleTaskIds ?? scopedTaskIds;
-	const matcher = options.match === 'taskSearch' ? buildTaskSearchMatcher(scopedTasks) : null;
+	const matcher = options.match === 'taskSearch' ? buildTaskSearchMatcher(scopedTasks, options.keyMappings ?? []) : null;
 	const candidates: ProjectSearchCandidate[] = [];
 	for (const task of scopedTasks) {
 		if (options.candidateFilter && !options.candidateFilter(task)) {
@@ -219,11 +228,11 @@ export function buildProjectSearchCandidates(
 			return compareRankedTaskSearchResults(
 				{
 					task: left.task,
-					score: normalizedQuery ? scoreTaskSearchResult(left.task, normalizedQuery) : 0,
+					score: normalizedQuery ? scoreTaskSearchResult(left.task, normalizedQuery, options.keyMappings ?? []) : 0,
 				},
 				{
 					task: right.task,
-					score: normalizedQuery ? scoreTaskSearchResult(right.task, normalizedQuery) : 0,
+					score: normalizedQuery ? scoreTaskSearchResult(right.task, normalizedQuery, options.keyMappings ?? []) : 0,
 				},
 				normalizedQuery,
 			);
@@ -276,13 +285,19 @@ function matchesSearchTerm(group: string, term: string): boolean {
 	return tokens.some(token => token.startsWith(term));
 }
 
-function scoreTaskSearchResult(task: IndexedTask, normalizedQuery: string): number {
+function scoreTaskSearchResult(
+	task: IndexedTask,
+	normalizedQuery: string,
+	keyMappings: readonly KeyMapping[] = [],
+): number {
 	const desc = task.description.toLocaleLowerCase();
 	const id = task.operonId.toLocaleLowerCase();
 	const filePath = task.primary.filePath.toLocaleLowerCase();
 	const status = (task.fieldValues['status'] ?? '').toLocaleLowerCase();
 	const priority = (task.fieldValues['priority'] ?? '').toLocaleLowerCase();
 	const note = (task.fieldValues['note'] ?? '').toLocaleLowerCase();
+	const customValues = getSearchableCustomFieldValues(task, getManagedCustomFieldMappings(keyMappings))
+		.map(value => value.toLocaleLowerCase());
 	const tokens = tokenizeTaskSearchText(normalizedQuery);
 	let score = 0;
 
@@ -297,6 +312,7 @@ function scoreTaskSearchResult(task: IndexedTask, normalizedQuery: string): numb
 	if (priority.includes(normalizedQuery)) score += 150;
 	if (filePath.includes(normalizedQuery)) score += 90;
 	if (note.includes(normalizedQuery)) score += 70;
+	if (customValues.some(value => value.includes(normalizedQuery))) score += 65;
 
 	for (const token of tokens) {
 		if (token.length < 2) continue;
@@ -305,6 +321,7 @@ function scoreTaskSearchResult(task: IndexedTask, normalizedQuery: string): numb
 		if (id.includes(token)) score += 40;
 		if (status.includes(token)) score += 30;
 		if (priority.includes(token)) score += 25;
+		if (customValues.some(value => value.includes(token))) score += 20;
 	}
 
 	score += Math.max(0, 30 - getCheckboxRank(task.checkbox) * 10);
@@ -345,6 +362,27 @@ function getSearchableDateValues(task: IndexedTask): string[] {
 	for (const fieldKey of ['dateDue', 'dateScheduled', 'dateStarted', 'dateCompleted', 'dateCancelled'] as const) {
 		const value = (task.fieldValues[fieldKey] ?? '').trim();
 		if (value) values.add(value);
+	}
+	return Array.from(values);
+}
+
+function getSearchableCustomFieldValues(
+	task: IndexedTask,
+	customMappings: readonly KeyMapping[],
+): string[] {
+	const values = new Set<string>();
+	const addValue = (value: string | null | undefined): void => {
+		const normalized = (value ?? '').trim();
+		if (normalized) values.add(normalized);
+	};
+	for (const mapping of customMappings) {
+		const rawValue = normalizeManagedFieldValue((task.fieldValues as Record<string, unknown>)[mapping.canonicalKey]);
+		if (!rawValue) continue;
+		if (mapping.type === 'list') {
+			for (const item of parseListValue(rawValue)) addValue(item);
+			continue;
+		}
+		addValue(rawValue);
 	}
 	return Array.from(values);
 }

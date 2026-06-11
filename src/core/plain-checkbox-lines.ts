@@ -1,6 +1,7 @@
 import { parseTaskLine, isTaskLineCandidate } from './parser';
 import { ParsedTask } from '../types/fields';
 import { KeyMapping } from '../types/settings';
+import { isManagedTaskFieldCanonicalKey } from './managed-task-fields';
 
 export interface PlainCheckboxLine {
 	lineNumber: number;
@@ -274,7 +275,9 @@ export function parseOperonTaskLineCandidate(
 	if (line.indexOf('{{') === -1) return null;
 
 	const task = parseTaskLine(line, lineNumber, filePath, keyMappings);
-	return task && (task.operonId || task.fields.length > 0)
+	return task && (task.operonId || task.fields.some(field =>
+		field.key === 'tags' || isManagedTaskFieldCanonicalKey(field.key, keyMappings)
+	))
 		? task
 		: null;
 }

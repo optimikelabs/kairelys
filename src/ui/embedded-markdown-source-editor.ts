@@ -127,7 +127,7 @@ const filePanelLayoutTheme = EditorView.theme({
 		boxSizing: 'border-box',
 		marginLeft: '0',
 		transform: 'none',
-		paddingInlineStart: 'var(--operon-file-content-inset, 0px)',
+		paddingInlineStart: 'calc(var(--operon-file-content-inset, 0px) + var(--operon-file-fold-gutter, 14px))',
 	},
 	'.cm-line': {
 		marginLeft: '0',
@@ -137,6 +137,16 @@ const filePanelLayoutTheme = EditorView.theme({
 		maxWidth: '100%',
 		boxSizing: 'border-box',
 		overflowWrap: 'anywhere',
+	},
+	'.cm-line.HyperMD-header .cm-fold-indicator': {
+		marginInlineStart: 'var(--operon-file-fold-gutter, 14px)',
+		marginInlineEnd: '2px',
+	},
+	'.cm-line.HyperMD-header .cm-fold-indicator .collapse-indicator': {
+		color: 'color-mix(in srgb, var(--text-muted) 86%, var(--text-normal))',
+		opacity: '1',
+		'--collapse-icon-color': 'color-mix(in srgb, var(--text-muted) 86%, var(--text-normal))',
+		'--nav-collapse-icon-color': 'color-mix(in srgb, var(--text-muted) 86%, var(--text-normal))',
 	},
 });
 

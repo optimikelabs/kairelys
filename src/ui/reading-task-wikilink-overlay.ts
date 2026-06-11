@@ -80,7 +80,11 @@ export function enhanceReadingTaskFileWikilinks(
 
 		const wrapper = createOwnerElement(anchor, 'span');
 		wrapper.className = 'operon-task-wikilink-reading operon-task-chip-surface';
-		wrapper.setCssProps({ '--operon-task-wikilink-hover': visuals.hoverColor });
+		wrapper.setCssProps({
+			'--operon-live-hover-border': visuals.hoverColor,
+			'--operon-task-chip-hover-accent': visuals.hoverColor,
+			'--operon-task-wikilink-hover': visuals.hoverColor,
+		});
 		wrapper.setAttribute('data-operon-task-wikilink-wrapper', 'true');
 
 		const leftButton = createActionButton(
@@ -105,7 +109,7 @@ export function enhanceReadingTaskFileWikilinks(
 			});
 		}
 		const rightButton = createActionButton(
-			'operon-task-wikilink-action operon-task-wikilink-right',
+			'operon-task-wikilink-action operon-task-wikilink-right operon-live-preview-edit operon-live-preview-action operon-task-wikilink-overlay-action operon-task-wikilink-overlay-standard-action operon-task-wikilink-settings-action operon-task-chip-action',
 			visuals.hoverColor,
 			t('tooltips', 'editTask'),
 			(button) => {
@@ -125,7 +129,7 @@ export function enhanceReadingTaskFileWikilinks(
 		parent.insertBefore(wrapper, anchor);
 		wrapper.appendChild(leftButton);
 		wrapper.appendChild(anchor);
-		const progressEl = createProgressElement(progress, wrapper);
+		const progressEl = createProgressElement(progress, wrapper, visuals.hoverColor);
 		if (progressEl) {
 			wrapper.appendChild(progressEl);
 		}
@@ -192,9 +196,11 @@ export function enhanceReadingTaskFileWikilinks(
 		const noteValue = resolved.task.fieldValues['note']?.trim();
 		if (settings.overlayTaskShowNoteAction && noteValue) {
 			const noteIndicator = createOwnerElement(wrapper, 'span');
-			noteIndicator.className = 'operon-live-preview-edit operon-live-preview-action operon-task-wikilink-overlay-action operon-task-chip-action is-active';
-			noteIndicator.setAttribute('role', 'img');
-			noteIndicator.setCssProps({ '--operon-live-hover-border': visuals.hoverColor });
+			noteIndicator.className = 'operon-live-preview-edit operon-live-preview-action operon-task-wikilink-overlay-action operon-task-wikilink-overlay-standard-action operon-task-wikilink-note-neutral operon-task-chip-action';
+			noteIndicator.setCssProps({
+				'--operon-live-hover-border': visuals.hoverColor,
+				'--operon-task-chip-hover-accent': visuals.hoverColor,
+			});
 			setIcon(noteIndicator, getConfiguredKeyMappingIcon('note', settings.keyMappings) || 'notebook-pen');
 			setAccessibleLabelWithoutTooltip(noteIndicator, t('taskEditor', 'notes'));
 			bindOperonHoverTooltip(noteIndicator, {
@@ -249,7 +255,11 @@ function createActionButton(
 	const button = createOwnerElement(owner, 'button');
 	button.type = 'button';
 	button.className = className;
-	button.setCssProps({ '--operon-task-wikilink-hover': hoverColor });
+	button.setCssProps({
+		'--operon-live-hover-border': hoverColor,
+		'--operon-task-chip-hover-accent': hoverColor,
+		'--operon-task-wikilink-hover': hoverColor,
+	});
 	renderIcon(button);
 	setAccessibleLabelWithoutTooltip(button, label);
 
@@ -284,7 +294,7 @@ function getCachedDescendantSummary(
 	return summary;
 }
 
-function createProgressElement(progress: TaskFileLinkProgressIndicator, owner?: Node | null): HTMLElement | null {
+function createProgressElement(progress: TaskFileLinkProgressIndicator, owner: Node | null | undefined, taskColor: string | null): HTMLElement | null {
 	if (progress.kind === 'none') return null;
 
 	const el = createOwnerElement(owner, 'span');
@@ -298,7 +308,7 @@ function createProgressElement(progress: TaskFileLinkProgressIndicator, owner?: 
 		bindOperonHoverTooltip(el, {
 			title: tooltip?.title,
 			content: tooltip?.content ?? progress.text,
-			taskColor: null,
+			taskColor,
 		});
 		return el;
 	}
@@ -308,7 +318,7 @@ function createProgressElement(progress: TaskFileLinkProgressIndicator, owner?: 
 	bindOperonHoverTooltip(el, {
 		title: tooltip?.title,
 		content: tooltip?.content ?? t('tooltips', 'allDescendantsDone'),
-		taskColor: null,
+		taskColor,
 	});
 	setIcon(el, progress.icon);
 	setAccessibleLabelWithoutTooltip(el, tooltip?.accessibleLabel ?? t('tooltips', 'allDescendantsDone'));

@@ -13,6 +13,53 @@ const RELEASE_NOTE_LIMIT = 5;
 
 export const OPERON_RELEASE_NOTES: OperonReleaseNote[] = [
 	{
+		version: '1.3.0',
+		date: '2026-06-11',
+		title: 'Custom Keys across Operon',
+		showOnUpdate: true,
+		bannerUrl: 'operon-1-3-0-compact-ui.png',
+		body: `
+This release makes **Custom Keys** a much more powerful part of Operon. You can now define your own task keys in Settings and use them across the places where real task work happens: Task Editor, Task Creator, compact chips, filters, search, embedded filters, Kanban sorting, and Kanban swimlanes.
+
+It also continues the calmer Operon interface direction from the previous release. Task editing, creation, picker controls, Pinned Tasks, FlowTime, Task Finder, and contextual menus now share more of the same compact, bordered, tool-like visual language.
+
+## New
+- Added **Custom Keys** management in Settings, giving user-defined task keys their own Core page with field types, icons, descriptions, usage indicators, ordering, and safer delete confirmation.
+- Added support for **Custom Keys** across Task Editor, Task Creator, Live Preview field menus, compact task chips, Filter Builder, task search, embedded filter search, Kanban sorting, and Kanban swimlanes.
+- Added dedicated **Custom Key pickers** for text, list, number, date, and datetime fields, so user-defined keys can be edited with controls that match their field type.
+- Added **Custom Key suggestions** from existing vault frontmatter values, so text and list pickers can reuse values already present in matching properties, not only values indexed from Operon tasks.
+- Added wikilink-aware **Custom Key** display, including plain labels, Page Preview support, and linked-note opening for wikilink-backed custom values where the chip is interactive.
+- Added a **Kanban swimlane visibility** toggle for Custom Keys, so user-defined keys only appear as swimlane grouping options when explicitly enabled.
+- Added a **mobile context menu auto-hide** setting so touch menus can close automatically after a user-defined delay.
+
+## Improved
+- Improved **Task Editor file body** spacing so heading collapse chevrons stay easier to see and click inside the embedded editor.
+- Improved **Task Editor workflow pickers** with a compact icon rail, letting workflow fields open from field icons while existing values stay visible below.
+- Improved **Task Editor workflow picker spacing** so the new icon rail is grouped more clearly with the Core section and has better separation from surrounding fields.
+- Improved **New Operon Task** toolbar icons with hover tooltips that follow the selected task color or fall back to the accent color, making icon-only task fields easier to identify without changing the compact creator layout.
+- Improved **New Operon Task**, **Task Finder**, **Kanban search scope**, **FlowTime**, **contextual task menus**, **Pinned Tasks**, and **plain checkbox list editor** controls with calmer bordered styling and clearer selected states.
+- Improved **Time Session History** rows with hover-revealed secondary actions, finished-task replay buttons, softer finished-task borders, aligned task icons, centered task titles, calmer session counters, and clearer edit targets.
+- Improved **Inline Tasks settings** spacing and active-row highlighting so conditional save-location fields feel cleaner and less crowded.
+- Improved **Priority settings** with a bordered editor frame that matches Pipeline settings and keeps the Add Priority action visually grouped with the priority list.
+- Improved **Settings Search** coverage for Location Map, Mobile Calendar, Mobile Kanban, Relationships, Recurrence, Tracker, and Pinned Dock settings in Obsidian 1.13.
+- Improved table-like settings pages so State Icons, Task Finder, Context Menu, Task Editor, and Mobile Task Editor keep their stable native page rendering for custom rows, matrices, and picker lists.
+- Improved **Recurrence settings** layout so YAML cleanup rules have clearer spacing, a cleaner section title, and a less crowded Add Property Cleanup Rule action.
+- Improved task **note action** icons so Live Preview, Reading View, Filter rows, and file task overlays use the task color when available and fall back to the accent color.
+
+## Changed
+- Changed first-run **Pinned Tasks** defaults so pinned cards start without task-color tinting and active timer tasks are pinned automatically.
+- Changed the new-user default for **Task Editor line numbers** to off, giving the file body panel a cleaner first-run editing view while keeping the setting available.
+
+## Fixed
+- Fixed **Pinned Tasks** sidebar mode so the floating dock hides immediately, stays hidden after restart, and the pinned tasks command opens the configured surface instead of reviving the dock.
+- Fixed **Settings Search** subpages in Obsidian 1.13 so Keymapping, Interface, and Mobile settings open through stable native page shells instead of occasionally rendering blank or missing sections.
+- Fixed **Kanban** optimistic card previews for multi-value swimlanes, so moving one tag, context, assignee, or Custom Key list value follows the same lane behavior as the saved write.
+
+## Validation
+- Local validation passed \`npm run check:local\` and \`git diff --check\`, including strict linting, production build, release guard, and 919/919 Phase 5 regression checks.
+`.trim(),
+	},
+	{
 		version: '1.2.1',
 		date: '2026-06-09',
 		title: 'A calmer visual direction for Operon',

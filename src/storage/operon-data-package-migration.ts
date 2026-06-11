@@ -26,6 +26,7 @@ import {
 	type OperonSettings,
 	migrateSettings,
 	normalizeFilterSet,
+	normalizeKeyMappingCollection,
 } from '../types/settings';
 
 export interface LegacyOperonStorageAdapter {
@@ -108,6 +109,7 @@ const DATA_PACKAGE_OWNED_SETTINGS_KEYS = [
 	'taskCreatorToolbar',
 	'taskEditorShowLineNumbers',
 	'taskEditorWorkflowPickers',
+	'taskEditorMobileCoreTools',
 	'inlineExpandedTaskChips',
 	'inlineTaskCompactChips',
 	'filterTaskCompactChips',
@@ -166,6 +168,7 @@ const TASK_UI_PREFERENCE_KEYS = [
 	'taskCreatorToolbar',
 	'taskEditorShowLineNumbers',
 	'taskEditorWorkflowPickers',
+	'taskEditorMobileCoreTools',
 	'inlineExpandedTaskChips',
 	'inlineTaskCompactChips',
 	'filterTaskCompactChips',
@@ -299,6 +302,7 @@ export function buildOperonDataPackageFromLegacySnapshot(
 						'contextualMenuMobileEnabled',
 						'contextualMenuMobileLongPressMs',
 						'contextualMenuMobileTransitionGraceMs',
+						'contextualMenuMobileAutoHideMs',
 					],
 				),
 			),
@@ -455,24 +459,39 @@ function buildKeyMappingsPackage(
 	entry: LegacyJsonFileSnapshot,
 	settings: OperonSettings,
 ): OperonKeyMappingsPackageV1 {
-	if (isRecord(entry.parsed)) {
-		return {
-			version: readVersion(entry.parsed),
-			system: readArray(entry.parsed.system, []).filter(isKeyMapping),
-			custom: readArray(entry.parsed.custom, []).filter(isKeyMapping),
-		};
-	}
-
+	const sourceMappings = isRecord(entry.parsed)
+		? [
+			...readKeyMappingSection(entry.parsed.system, true),
+			...readKeyMappingSection(entry.parsed.custom, false),
+		]
+		: settings.keyMappings;
+	const normalizedMappings = migrateSettings({
+		...settings,
+		keyMappings: sourceMappings,
+	}).keyMappings;
 	const system: KeyMapping[] = [];
 	const custom: KeyMapping[] = [];
-	for (const mapping of settings.keyMappings) {
+	for (const mapping of normalizeKeyMappingCollection(normalizedMappings)) {
 		if (mapping.isSystem) {
 			system.push(cloneJson(mapping));
 		} else {
 			custom.push(cloneJson(mapping));
 		}
 	}
+	if (isRecord(entry.parsed)) {
+		return {
+			version: readVersion(entry.parsed),
+			system,
+			custom,
+		};
+	}
 	return { version: 1, system, custom };
+}
+
+function readKeyMappingSection(value: unknown, isSystem: boolean): KeyMapping[] {
+	return readArray<KeyMapping>(value, [])
+		.filter(isKeyMapping)
+		.map(mapping => ({ ...mapping, isSystem }));
 }
 
 function buildPrioritiesPackage(
@@ -599,6 +618,7 @@ function buildContextualMenuPackage(
 		contextualMenuMobileEnabled: readBoolean(parsed.mobileEnabled, settings.contextualMenuMobileEnabled),
 		contextualMenuMobileLongPressMs: readNumber(parsed.mobileLongPressMs, settings.contextualMenuMobileLongPressMs),
 		contextualMenuMobileTransitionGraceMs: readNumber(parsed.mobileTransitionGraceMs, settings.contextualMenuMobileTransitionGraceMs),
+		contextualMenuMobileAutoHideMs: readNumber(parsed.mobileAutoHideMs, settings.contextualMenuMobileAutoHideMs),
 	};
 }
 

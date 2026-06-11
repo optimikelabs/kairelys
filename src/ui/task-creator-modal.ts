@@ -6,16 +6,19 @@ import { t } from '../core/i18n';
 import { resolveReverseWorkflowFromTerminalDate } from '../types/pipeline';
 import { FileTaskTemplateOption } from '../core/file-task-templates';
 import { IndexedTask } from '../types/fields';
-import { OperonSettings, TASK_CREATOR_FALLBACK_FIELD_ICONS, TASK_CREATOR_TOOLBAR_FIELD_ORDER, TaskCreatorToolbarFieldKey } from '../types/settings';
+import { OperonSettings, TASK_CREATOR_FALLBACK_FIELD_ICONS } from '../types/settings';
 import { ConfirmActionModal } from './confirm-action-modal';
 import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
+import { getTaskCreatorToolbarTooltipCopy } from './key-mapping-descriptions';
 import { suppressNativeModalCloseButton } from './modal-close-button';
 import { showDependencyTaskPicker } from './field-pickers/dependency-task-picker';
 import { showFileTaskTemplatePicker } from './field-pickers/file-task-template-picker';
 import type { ManualDatePickerOptions } from './field-pickers/date-picker';
 import { showSubtasksPicker } from './field-pickers/subtasks-picker';
 import { MOBILE_PICKER_CLOSE_EVENT, MOBILE_PICKER_OPEN_EVENT } from './field-pickers/common';
+import { bindOperonHoverTooltip } from './operon-hover-tooltip';
 import { openTaskFieldPicker } from './task-field-picker-dispatch';
+import { getCustomFieldIcon, getCustomFieldLabel, getCustomFieldMapping, isProjectedCustomFieldType } from './custom-field-surfaces';
 import {
 	debugTaskFieldSuggestion,
 	resolveTaskFieldSuggestions,
@@ -48,7 +51,7 @@ const TASK_CREATOR_DAY_PICKER_DATE_KEYS = new Set<string>([
 	'dateCancelled',
 ]);
 
-type TaskCreatorFieldKey = TaskCreatorToolbarFieldKey;
+type TaskCreatorFieldKey = string;
 
 export type TaskCreatorSubmitMode = 'both' | 'inline-only' | 'file-only';
 export type TaskCreatorCreateType = 'inline' | 'file';
@@ -967,6 +970,7 @@ export class TaskCreatorModal extends Modal {
 			beforeCaret,
 			this.options.settings,
 			this.draft.fieldValues,
+			'creator',
 		);
 		if (!resolution.trigger || resolution.items.length === 0) {
 			if (resolution.suppressionReason) {
@@ -1082,7 +1086,7 @@ export class TaskCreatorModal extends Modal {
 			return;
 		}
 
-		const anchorButton = this.fieldButtonMap.get(canonicalKey as TaskCreatorFieldKey);
+		const anchorButton = this.fieldButtonMap.get(canonicalKey);
 		const anchor = anchorButton ?? this.descriptionEl;
 		this.closeActivePicker();
 
@@ -1403,7 +1407,7 @@ export class TaskCreatorModal extends Modal {
 	}
 
 	private renderFieldButtons(): void {
-		for (const key of TASK_CREATOR_TOOLBAR_FIELD_ORDER) {
+		for (const key of this.getVisibleToolbarFieldOrder()) {
 			const button = this.fieldButtonMap.get(key);
 			if (!button) continue;
 			button.empty();
@@ -1423,6 +1427,7 @@ export class TaskCreatorModal extends Modal {
 			} else {
 				setIcon(iconWrap, this.resolveFieldIcon(key));
 			}
+			this.bindFieldButtonTooltip(button, key);
 		}
 	}
 
@@ -1477,13 +1482,26 @@ export class TaskCreatorModal extends Modal {
 	}
 
 	private resolveFieldIcon(key: TaskCreatorFieldKey): string {
-		return getConfiguredKeyMappingIcon(key, this.options.settings.keyMappings) || TASK_CREATOR_FALLBACK_FIELD_ICONS[key];
+		const customMapping = getCustomFieldMapping(this.options.settings.keyMappings, key);
+		if (customMapping) return getCustomFieldIcon(customMapping);
+		return getConfiguredKeyMappingIcon(key, this.options.settings.keyMappings)
+			|| (TASK_CREATOR_FALLBACK_FIELD_ICONS as Record<string, string>)[key]
+			|| 'circle-dot';
 	}
 
 	private getVisibleToolbarFieldOrder(): TaskCreatorFieldKey[] {
 		return (this.options.settings.taskCreatorToolbar ?? [])
 			.filter(item => item.visible)
-			.map(item => item.key);
+			.map(item => item.key)
+			.filter(key => this.canRenderToolbarField(key));
+	}
+
+	private canRenderToolbarField(key: TaskCreatorFieldKey): boolean {
+		const customMapping = getCustomFieldMapping(this.options.settings.keyMappings, key);
+		if (customMapping) return isProjectedCustomFieldType(customMapping);
+		return !!(TASK_CREATOR_FALLBACK_FIELD_ICONS as Record<string, string>)[key]
+			|| TASK_CREATOR_NON_FIELD_SUBMIT_KEYS.has(key)
+			|| TASK_CREATOR_DAY_PICKER_DATE_KEYS.has(key);
 	}
 
 	private getFieldLabel(key: TaskCreatorFieldKey): string {
@@ -1492,8 +1510,20 @@ export class TaskCreatorModal extends Modal {
 		if (key === 'blocking') return t('taskEditor', 'blocking');
 		if (key === 'blockedBy') return t('taskEditor', 'blockedBy');
 		if (key === 'pinned') return t('settings', 'taskCreatorToolbarPinned');
+		const customMapping = getCustomFieldMapping(this.options.settings.keyMappings, key);
+		if (customMapping) return getCustomFieldLabel(customMapping);
 		const mapping = this.options.settings.keyMappings.find(candidate => candidate.canonicalKey === key);
 		return mapping?.visiblePropertyName?.trim() || key;
+	}
+
+	private bindFieldButtonTooltip(button: HTMLButtonElement, key: TaskCreatorFieldKey): void {
+		const copy = getTaskCreatorToolbarTooltipCopy(key, this.options.settings.keyMappings);
+		if (!copy) return;
+		bindOperonHoverTooltip(button, {
+			title: copy.title,
+			content: copy.content,
+			taskColor: this.getThemeColor(),
+		});
 	}
 
 	private getSnapshot(): TaskCreatorDraft {

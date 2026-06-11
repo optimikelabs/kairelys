@@ -7,14 +7,11 @@
  */
 
 import { App, TFile } from 'obsidian';
-import { CANONICAL_KEY_MAP } from '../types/keys';
 import { isRetiredKeyMapping, KeyMapping } from '../types/settings';
+import { CANONICAL_KEYS, LEGACY_CANONICAL_KEY_ALIASES } from '../types/keys';
 import { normalizeTaskIconValue } from './task-icon-value';
 import { formatTaskColorYamlValue, normalizeTaskColorValue } from './task-color-value';
-
-const LEGACY_CANONICAL_ALIASES: Record<string, string[]> = {
-	datetimeCreated: ['dateCreated'],
-};
+import { getManagedTaskFieldType, isManagedTaskFieldCanonicalKey } from './managed-task-fields';
 
 export function normalizeLegacyCreatedDatetime(value: string): string {
 	const trimmed = value.trim();
@@ -45,7 +42,7 @@ export function getManagedYamlAliases(
 	return [...new Set([
 		getVisiblePropertyName(canonicalKey, keyMappings),
 		canonicalKey,
-		...(LEGACY_CANONICAL_ALIASES[canonicalKey] ?? []),
+		...(LEGACY_CANONICAL_KEY_ALIASES[canonicalKey] ?? []),
 	])];
 }
 
@@ -53,15 +50,22 @@ export function isManagedYamlCanonicalKey(
 	canonicalKey: string,
 	keyMappings: KeyMapping[],
 ): boolean {
-	if (isRetiredKeyMapping(canonicalKey)) return false;
-	if (CANONICAL_KEY_MAP.has(canonicalKey)) return true;
-	return keyMappings.some(mapping => mapping.canonicalKey === canonicalKey);
+	return isManagedTaskFieldCanonicalKey(canonicalKey, keyMappings);
 }
 
 function stringifyYamlScalar(value: unknown): string | null {
 	if (typeof value === 'string') return value;
 	if (typeof value === 'number' || typeof value === 'boolean') return String(value);
 	return null;
+}
+
+function isNumericYamlString(value: string): boolean {
+	return /^-?\d+(\.\d+)?$/.test(value.trim());
+}
+
+function isReadableYamlCanonicalKey(canonicalKey: string, keyMappings: KeyMapping[]): boolean {
+	if (canonicalKey === 'related') return true;
+	return isManagedYamlCanonicalKey(canonicalKey, keyMappings);
 }
 
 /**
@@ -85,6 +89,7 @@ export function readYamlFields(
         // Resolve visible property name back to canonical key
         const canonicalKey = reverseMap.get(yamlKey) ?? yamlKey;
         if (canonicalKey === 'pinned') continue;
+        if (!isReadableYamlCanonicalKey(canonicalKey, keyMappings)) continue;
 
         if (val === null || val === undefined) continue;
 
@@ -133,11 +138,11 @@ export async function writeYamlFields(
             const yamlKey = getVisiblePropertyName(canonicalKey, keyMappings);
 
             // Convert list values to YAML array format
-            const def = CANONICAL_KEY_MAP.get(canonicalKey);
-            if (def?.type === 'list' && value) {
+            const fieldType = getManagedTaskFieldType(canonicalKey, keyMappings);
+            if (fieldType === 'list' && value) {
                 fm[yamlKey] = value.split('; ').map(v => v.trim()).filter(v => v);
-            } else if (def?.type === 'number' && value) {
-                fm[yamlKey] = Number(value);
+            } else if (fieldType === 'number' && value) {
+                fm[yamlKey] = isNumericYamlString(value) ? Number(value) : value;
             } else if (canonicalKey === 'taskColor' && value) {
                 fm[yamlKey] = formatTaskColorYamlValue(value);
             } else if (value) {
@@ -154,9 +159,10 @@ export async function writeYamlFields(
 export function inlineToYamlValue(
     canonicalKey: string,
     value: string,
+    keyMappings: KeyMapping[] = [],
 ): unknown {
-    const def = CANONICAL_KEY_MAP.get(canonicalKey);
-    if (def?.type === 'list' && value) {
+    const fieldType = getManagedTaskFieldType(canonicalKey, keyMappings);
+    if (fieldType === 'list' && value) {
         return value.split('; ').map(v => v.trim()).filter(v => v);
     }
     return value;
@@ -174,7 +180,7 @@ export function buildForwardMapping(mappings: KeyMapping[]): Map<string, string>
 			map.set(m.canonicalKey, m.visiblePropertyName);
 		}
 	}
-    return map;
+	return map;
 }
 
 /**
@@ -183,21 +189,30 @@ export function buildForwardMapping(mappings: KeyMapping[]): Map<string, string>
  */
 export function buildReverseMapping(mappings: KeyMapping[]): Map<string, string> {
 	const map = new Map<string, string>();
+	const setIfAbsent = (sourceKey: string, canonicalKey: string): void => {
+		if (!sourceKey || map.has(sourceKey)) return;
+		map.set(sourceKey, canonicalKey);
+	};
+
+	for (const key of CANONICAL_KEYS) {
+		if (isRetiredKeyMapping(key.name)) continue;
+		setIfAbsent(key.name, key.name);
+	}
+	for (const [canonicalKey, aliases] of Object.entries(LEGACY_CANONICAL_KEY_ALIASES)) {
+		if (isRetiredKeyMapping(canonicalKey)) continue;
+		for (const alias of aliases) {
+			setIfAbsent(alias, canonicalKey);
+		}
+	}
 	for (const m of mappings) {
 		if (isRetiredKeyMapping(m.canonicalKey)) continue;
+		setIfAbsent(m.canonicalKey, m.canonicalKey);
 		if (m.visiblePropertyName) {
-			map.set(m.visiblePropertyName, m.canonicalKey);
+			setIfAbsent(m.visiblePropertyName, m.canonicalKey);
 		}
-		for (const alias of LEGACY_CANONICAL_ALIASES[m.canonicalKey] ?? []) {
-			map.set(alias, m.canonicalKey);
-		}
-	}
-	for (const [canonicalKey, aliases] of Object.entries(LEGACY_CANONICAL_ALIASES)) {
-		for (const alias of aliases) {
-			if (!map.has(alias)) {
-				map.set(alias, canonicalKey);
-			}
+		for (const alias of LEGACY_CANONICAL_KEY_ALIASES[m.canonicalKey] ?? []) {
+			setIfAbsent(alias, m.canonicalKey);
 		}
 	}
-    return map;
+	return map;
 }

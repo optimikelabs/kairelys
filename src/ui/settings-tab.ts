@@ -5,15 +5,15 @@
  * Spec Section 5.4.1 — Key Mapping Settings (UI):
  * - Full key mapping table with editable visiblePropertyName
  * - Type badge per key
- * - Custom key creation and deletion
  * - Validation (no duplicate visiblePropertyNames)
  *
  * Also covers: Timing, Index, Display, Pipelines sections.
  */
 
+import * as Obsidian from 'obsidian';
 import { AbstractInputSuggest, App, Notice, Plugin, PluginSettingTab, Setting, TFile, TFolder, ToggleComponent, getIcon, requireApiVersion, setIcon } from 'obsidian';
 import type { ButtonComponent, DropdownComponent, SettingControl, SettingDefinition, SettingDefinitionItem, SettingDefinitionPage, TextComponent } from 'obsidian';
-import { OperonSettings, DEFAULT_SETTINGS, DEFAULT_INLINE_TASK_TARGET_FILE, DEFAULT_INLINE_TASK_HEADING_KEYWORD, DEFAULT_INLINE_TASK_PARENT_FILE_HEADING_KEYWORD, KeyMapping, FilterSet, CALENDAR_TIME_GRID_SCALE_OPTIONS, CALENDAR_AUTO_SCROLL_POSITION_OPTIONS, CALENDAR_SIDEBAR_WIDTH_MIN, CALENDAR_SIDEBAR_WIDTH_MAX, CALENDAR_MOBILE_LAYOUT_MAX_WIDTH_MIN, CALENDAR_MOBILE_LAYOUT_MAX_WIDTH_MAX, CALENDAR_MOBILE_SLOT_MINUTES_OPTIONS, CALENDAR_MOBILE_AGENDA_PAST_DAYS_OPTIONS, CALENDAR_MOBILE_AGENDA_FUTURE_DAYS_OPTIONS, CALENDAR_MOBILE_ALL_DAY_VISIBLE_TASK_LIMIT_OPTIONS, KANBAN_EXPANDED_COLUMN_WIDTH_MIN, KANBAN_EXPANDED_COLUMN_WIDTH_MAX, KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MIN, KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MAX, KANBAN_MOBILE_LAYOUT_MAX_WIDTH_MIN, KANBAN_MOBILE_LAYOUT_MAX_WIDTH_MAX, KANBAN_MOBILE_COMPACT_SWIMLANE_WIDTH_MIN, KANBAN_MOBILE_COMPACT_SWIMLANE_WIDTH_MAX, DUPLICATE_ALERT_DELAY_SECONDS_OPTIONS, DYNAMIC_FILE_TASK_FILTER_SUBTASK_AUTO_EXPAND_LIMIT_OPTIONS, createExternalCalendarSourceId, ExternalCalendarSource, TaskCreatorToolbarFieldKey, TaskCreatorToolbarItem, TASK_CREATOR_FALLBACK_FIELD_ICONS, TASK_EDITOR_MOBILE_CORE_FALLBACK_ICONS, TaskEditorMobileCoreToolKey, TaskEditorMobileCoreToolItem, TaskEditorWorkflowPickerKey, TaskEditorWorkflowPickerItem, InlineTaskCompactChipKey, INLINE_TASK_COMPACT_FALLBACK_ICONS, TrackerTaskDescriptionClickAction, TASK_FINDER_DEFAULT_SCOPE_ORDER, TaskFinderDefaultScopeKey, normalizeTaskEditorMobileCoreTools, normalizeTaskFinderShortcutValue, FLOW_TIME_PAUSE_MINUTE_OPTIONS, FLOW_TIME_DEFAULT_SESSION_MINUTE_OPTIONS, cloneFilterSet, getNumericConstraint, isNumericSettingKey, normalizeCalendarSidebarDefaultExpansionState, normalizeFallbackTaskIconSource, normalizeInlineTaskHeadingKeyword, normalizeInlineTaskParentFileHeadingKeyword, setNumericSetting, isSupportedLanguage, type CalendarDayTitleAction, type CalendarMobileAgendaFutureDays, type CalendarMobileAgendaPastDays, type CalendarMobileAllDayVisibleTaskLimit, type CalendarSidebarDefaultStateKey, type FallbackTaskIconSource, type OperonLanguage } from '../types/settings';
+import { OperonSettings, DEFAULT_SETTINGS, DEFAULT_INLINE_TASK_TARGET_FILE, DEFAULT_INLINE_TASK_HEADING_KEYWORD, DEFAULT_INLINE_TASK_PARENT_FILE_HEADING_KEYWORD, KeyMapping, FilterSet, CALENDAR_TIME_GRID_SCALE_OPTIONS, CALENDAR_AUTO_SCROLL_POSITION_OPTIONS, CALENDAR_SIDEBAR_WIDTH_MIN, CALENDAR_SIDEBAR_WIDTH_MAX, CALENDAR_MOBILE_LAYOUT_MAX_WIDTH_MIN, CALENDAR_MOBILE_LAYOUT_MAX_WIDTH_MAX, CALENDAR_MOBILE_SLOT_MINUTES_OPTIONS, CALENDAR_MOBILE_AGENDA_PAST_DAYS_OPTIONS, CALENDAR_MOBILE_AGENDA_FUTURE_DAYS_OPTIONS, CALENDAR_MOBILE_ALL_DAY_VISIBLE_TASK_LIMIT_OPTIONS, KANBAN_EXPANDED_COLUMN_WIDTH_MIN, KANBAN_EXPANDED_COLUMN_WIDTH_MAX, KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MIN, KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MAX, KANBAN_MOBILE_LAYOUT_MAX_WIDTH_MIN, KANBAN_MOBILE_LAYOUT_MAX_WIDTH_MAX, KANBAN_MOBILE_COMPACT_SWIMLANE_WIDTH_MIN, KANBAN_MOBILE_COMPACT_SWIMLANE_WIDTH_MAX, DUPLICATE_ALERT_DELAY_SECONDS_OPTIONS, DYNAMIC_FILE_TASK_FILTER_SUBTASK_AUTO_EXPAND_LIMIT_OPTIONS, createExternalCalendarSourceId, ExternalCalendarSource, TaskCreatorToolbarItem, TASK_CREATOR_TOOLBAR_FIELD_ORDER, TASK_CREATOR_FALLBACK_FIELD_ICONS, TASK_EDITOR_WORKFLOW_PICKER_ORDER, TASK_EDITOR_MOBILE_CORE_TOOL_ORDER, TASK_EDITOR_MOBILE_CORE_FALLBACK_ICONS, TaskEditorMobileCoreToolItem, TaskEditorWorkflowPickerItem, INLINE_TASK_COMPACT_CHIP_ORDER, INLINE_TASK_COMPACT_FALLBACK_ICONS, TrackerTaskDescriptionClickAction, TASK_FINDER_DEFAULT_SCOPE_ORDER, TaskFinderDefaultScopeKey, normalizeTaskEditorMobileCoreTools, normalizeTaskFinderShortcutValue, FLOW_TIME_PAUSE_MINUTE_OPTIONS, FLOW_TIME_DEFAULT_SESSION_MINUTE_OPTIONS, cloneFilterSet, getNumericConstraint, hasDuplicateKeyMappingVisiblePropertyName, isNumericSettingKey, normalizeCalendarSidebarDefaultExpansionState, normalizeFallbackTaskIconSource, normalizeInlineTaskHeadingKeyword, normalizeInlineTaskParentFileHeadingKeyword, setNumericSetting, isSupportedLanguage, type CalendarDayTitleAction, type CalendarMobileAgendaFutureDays, type CalendarMobileAgendaPastDays, type CalendarMobileAllDayVisibleTaskLimit, type CalendarSidebarDefaultStateKey, type FallbackTaskIconSource, type OperonLanguage } from '../types/settings';
 import { clonePipeline, composeStatusValue, createPipelineId, createStatusId, Pipeline, StatusDefinition } from '../types/pipeline';
 import { PriorityDefinition, DEFAULT_PRIORITIES, clonePriorityDefinition, createPriorityId } from '../types/priority';
 import { CalendarPreset, createCalendarPresetId } from '../types/calendar';
@@ -36,6 +36,8 @@ import {
 	KanbanSwimlaneBy,
 	createDefaultKanbanSortRules,
 	createKanbanPresetId,
+	isBuiltInKanbanSwimlaneBy,
+	normalizeKanbanCustomFieldReference,
 } from '../types/kanban';
 import { OperonStorage } from '../storage/operon-storage';
 import type { OperonLegacyStorageCleanupStatus } from '../storage/operon-storage';
@@ -88,6 +90,16 @@ import {
 	getTopLevelMarkdownFilesInFolder,
 } from '../core/file-task-templates';
 import { getKeyMappingDescription } from './key-mapping-descriptions';
+import { CustomKeyMappingModal } from './custom-key-mapping-modal';
+import {
+	buildCustomFieldUsageSummaries,
+	getKanbanSwimlaneCustomFieldOptions,
+	getManagedCustomFieldMappings,
+	getManagedCustomFieldOptionMapping,
+	getManagedCustomFieldOptions,
+	moveCustomKeyMappingOrder,
+	type CustomFieldUsageSummary,
+} from '../core/managed-task-fields';
 import { CANONICAL_KEY_ORDER } from '../types/keys';
 import {
 	type RepeatSeriesPropertyRemovalPickerOption,
@@ -165,6 +177,7 @@ import {
 	type OperonSettingsSearchEntry,
 	type OperonSettingsSearchTextKey,
 } from './settings/settings-search-registry';
+import { getCustomFieldIcon, getCustomFieldLabel, getCustomFieldMapping } from './custom-field-surfaces';
 import {
 	createSettingsCollapsibleSection,
 	createSettingsAddButton,
@@ -199,6 +212,7 @@ type OperonSettingsSecondaryTabId =
 	| 'corePipelines'
 	| 'corePriority'
 	| 'coreKeymapping'
+	| 'coreCustomKeys'
 	| 'tasksInlineTasks'
 	| 'tasksFileTasks'
 	| 'tasksRelationships'
@@ -231,8 +245,15 @@ type TaskChipsSettingsPageId =
 type TaskChipsSettingsPageMeta = {
 	titleKey: string;
 	descKey: string;
-	searchEntryIds: readonly string[];
 };
+
+type CustomSurfaceSettingsTarget = 'editor' | 'creator' | 'chips' | 'kanbanSwimlane';
+type SurfaceSettingsListTarget = 'editorWorkflow' | 'editorMobile' | 'creator' | 'chips';
+
+const TASK_CREATOR_TOOLBAR_FIELD_KEY_SET = new Set<string>(TASK_CREATOR_TOOLBAR_FIELD_ORDER);
+const TASK_EDITOR_WORKFLOW_PICKER_KEY_SET = new Set<string>(TASK_EDITOR_WORKFLOW_PICKER_ORDER);
+const TASK_EDITOR_MOBILE_CORE_TOOL_KEY_SET = new Set<string>(TASK_EDITOR_MOBILE_CORE_TOOL_ORDER);
+const INLINE_TASK_COMPACT_CHIP_KEY_SET = new Set<string>(INLINE_TASK_COMPACT_CHIP_ORDER);
 
 const TASK_CHIPS_SETTINGS_PAGE_ORDER: readonly TaskChipsSettingsPageId[] = [
 	'taskCreatorToolbar',
@@ -246,27 +267,22 @@ const TASK_CHIPS_SETTINGS_PAGE_META: Record<TaskChipsSettingsPageId, TaskChipsSe
 	taskCreatorToolbar: {
 		titleKey: 'taskCreatorToolbarSection',
 		descKey: 'taskCreatorToolbarSectionDesc',
-		searchEntryIds: ['ui.taskCreatorToolbar'],
 	},
 	inlineTaskChips: {
 		titleKey: 'inlineTaskIconsSection',
 		descKey: 'inlineTaskIconsSectionDesc',
-		searchEntryIds: ['ui.inlineTaskChips'],
 	},
 	taskFinderChips: {
 		titleKey: 'taskFinderIconsSection',
 		descKey: 'taskFinderIconsSectionDesc',
-		searchEntryIds: ['ui.taskFinderChips'],
 	},
 	filterTaskChips: {
 		titleKey: 'filterTaskIconsSection',
 		descKey: 'filterTaskIconsSectionDesc',
-		searchEntryIds: ['ui.filterTaskChips', 'ui.filterTaskShowPlainCheckboxAction'],
 	},
 	fileTaskOverlayChips: {
 		titleKey: 'overlayTaskIconsSection',
 		descKey: 'overlayTaskIconsSectionDesc',
-		searchEntryIds: ['ui.fileTaskOverlayChips', 'ui.overlayTaskShowPlainCheckboxAction'],
 	},
 };
 
@@ -444,10 +460,79 @@ type SettingsSearchRefreshableTab = {
 	update?: () => void;
 };
 
+type ObsidianSettingPageShape = {
+	rootEl: HTMLElement;
+	titlebarEl: HTMLElement;
+	containerEl: HTMLElement;
+	title: string;
+	display(): void;
+	hide(): void;
+};
+
+type ObsidianSettingPageCtor = new () => ObsidianSettingPageShape;
+
+const createFallbackSettingPageCtor = (): ObsidianSettingPageCtor => class FallbackSettingPage implements ObsidianSettingPageShape {
+	rootEl = activeDocument.createElement('div');
+	titlebarEl = activeDocument.createElement('div');
+	containerEl = activeDocument.createElement('div');
+	title = '';
+
+	display(): void {
+		// Fallback is only used on unsupported Obsidian versions where Settings Search is gated off.
+	}
+
+	hide(): void {
+		this.containerEl.empty();
+	}
+};
+
+const getObsidianSettingPageCtor = (): ObsidianSettingPageCtor => {
+	const ctor = Reflect.get(Obsidian, 'SettingPage');
+	return typeof ctor === 'function'
+		? ctor as ObsidianSettingPageCtor
+		: createFallbackSettingPageCtor();
+};
+
+class OperonNativeSettingsPage extends getObsidianSettingPageCtor() {
+	constructor(
+		title: string,
+		private readonly renderPage: (containerEl: HTMLElement) => void,
+		private readonly hidePage: (containerEl: HTMLElement) => void,
+	) {
+		super();
+		this.title = title;
+	}
+
+	display(): void {
+		this.renderPage(this.containerEl);
+	}
+
+	hide(): void {
+		this.hidePage(this.containerEl);
+		super.hide();
+	}
+}
+
 const SETTINGS_SEARCH_NATIVE_TAB_IDS = new Set<OperonSettingsTabId>([
 	'coreGeneral',
-	'tasksRelationships',
 	'mobileGeneral',
+]);
+
+const SETTINGS_SEARCH_IMPERATIVE_PAGE_TAB_IDS = new Set<OperonSettingsTabId>([
+	'corePipelines',
+	'corePriority',
+	'coreKeymapping',
+	'coreCustomKeys',
+	'tasksFileTasks',
+	'tasksInlineTasks',
+	'viewsCalendar',
+	'viewsKanban',
+	'viewsFilters',
+	'interfaceTaskFinder',
+	'interfaceContextMenu',
+	'interfaceStateIcons',
+	'interfaceTaskEditor',
+	'mobileTaskEditor',
 ]);
 
 const SETTINGS_SEARCH_TAB_DESCRIPTION_KEYS: Record<OperonSettingsSecondaryTabId, OperonSettingsSearchTextKey> = {
@@ -455,6 +540,7 @@ const SETTINGS_SEARCH_TAB_DESCRIPTION_KEYS: Record<OperonSettingsSecondaryTabId,
 	corePipelines: { namespace: 'settings', key: 'pipelinesDesc' },
 	corePriority: { namespace: 'settings', key: 'priorityDesc' },
 	coreKeymapping: { namespace: 'settings', key: 'keyMappingsDesc' },
+	coreCustomKeys: { namespace: 'settings', key: 'customKeysDesc' },
 	tasksInlineTasks: { namespace: 'settings', key: 'settingsPageInlineTasksDesc' },
 	tasksFileTasks: { namespace: 'settings', key: 'settingsPageFileTasksDesc' },
 	tasksRelationships: { namespace: 'settings', key: 'settingsPageRelationshipsDesc' },
@@ -492,6 +578,7 @@ const SETTINGS_SEARCH_DOCK_KEYS = new Set<OperonSettingSearchKey>([
 
 const SETTINGS_SEARCH_DOM_REFRESH_KEYS = new Set<OperonSettingSearchKey>([
 	'timeFormat',
+	'fileRepeatDestination',
 	'flowTimeUseLastSelectedDuration',
 	'pinnedDockLayout',
 	'mobileGlobalTaskFabEnabled',
@@ -509,6 +596,8 @@ const SETTINGS_SEARCH_FOLDER_KEYS = new Set<OperonSettingSearchKey>([
 
 const SETTINGS_SEARCH_OPTION_NUMBER_KEYS = new Set<OperonSettingSearchKey>([
 	'duplicateAlertDelaySeconds',
+	'taskFinderRecentModifiedDays',
+	'taskFinderVisibleResultCount',
 	'pinnedDockGridCols',
 	'flowTimePauseMinutes',
 	'flowTimeDefaultSessionMinutes',
@@ -553,8 +642,8 @@ export class OperonSettingsTab extends PluginSettingTab {
 	private isDeclarativeSettingsRendererActive = false;
 	private activeNativeSettingsPage: {
 		tabId: OperonSettingsTabId;
-		taskChipsPageId?: TaskChipsSettingsPageId;
 		containerEl: HTMLElement;
+		taskChipsPageId?: TaskChipsSettingsPageId;
 	} | null = null;
 
 	constructor(
@@ -737,12 +826,92 @@ export class OperonSettingsTab extends PluginSettingTab {
 			};
 		}
 
+		if (tab.id === 'interfaceLocationMap') {
+			return {
+				type: 'page',
+				name: pageName,
+				desc,
+				items: this.buildLocationMapSettingsItems(entries),
+			};
+		}
+
+		if (tab.id === 'mobileCalendar') {
+			return {
+				type: 'page',
+				name: pageName,
+				desc,
+				items: this.buildMobileCalendarSettingsItems(entries),
+			};
+		}
+
+		if (tab.id === 'mobileKanban') {
+			return {
+				type: 'page',
+				name: pageName,
+				desc,
+				items: this.buildMobileKanbanSettingsItems(entries),
+			};
+		}
+
+		if (tab.id === 'tasksRelationships') {
+			return {
+				type: 'page',
+				name: pageName,
+				desc,
+				items: this.buildRelationshipsSettingsItems(entries),
+			};
+		}
+
+		if (tab.id === 'tasksRecurrence') {
+			return {
+				type: 'page',
+				name: pageName,
+				desc,
+				items: this.buildRecurrenceSettingsItems(entries),
+			};
+		}
+
+		if (tab.id === 'tasksTracker') {
+			return {
+				type: 'page',
+				name: pageName,
+				desc,
+				items: this.buildTrackerSettingsItems(entries),
+			};
+		}
+
+		if (tab.id === 'interfacePinnedDock') {
+			return {
+				type: 'page',
+				name: pageName,
+				desc,
+				items: this.buildPinnedDockSettingsItems(entries),
+			};
+		}
+
+		if (SETTINGS_SEARCH_IMPERATIVE_PAGE_TAB_IDS.has(tab.id)) {
+			return {
+				type: 'page',
+				name: pageName,
+				desc,
+				page: () => new OperonNativeSettingsPage(
+					pageName,
+					containerEl => this.renderNativeSettingsPage(tab.id, containerEl),
+					containerEl => this.hideNativeSettingsPage(containerEl),
+				),
+			};
+		}
+
 		if (!SETTINGS_SEARCH_NATIVE_TAB_IDS.has(tab.id)) {
 			return {
 				type: 'page',
 				name: pageName,
 				desc,
-				items: this.buildSettingsSearchCustomPageItems(tab.id, entries),
+				page: () => new OperonNativeSettingsPage(
+					pageName,
+					containerEl => this.renderNativeSettingsPage(tab.id, containerEl),
+					containerEl => this.hideNativeSettingsPage(containerEl),
+				),
 			};
 		}
 
@@ -754,37 +923,417 @@ export class OperonSettingsTab extends PluginSettingTab {
 		};
 	}
 
-	private buildTaskChipsSettingsPages(entries: OperonSettingsSearchEntry[]): SettingDefinitionPage[] {
+	private buildTaskChipsSettingsPages(_entries: OperonSettingsSearchEntry[]): SettingDefinitionPage[] {
 		return TASK_CHIPS_SETTINGS_PAGE_ORDER.map(pageId => {
 			const meta = TASK_CHIPS_SETTINGS_PAGE_META[pageId];
-			const pageEntries = entries.filter(entry => meta.searchEntryIds.includes(entry.id));
+			const pageName = t('settings', meta.titleKey);
 			return {
 				type: 'page',
-				name: t('settings', meta.titleKey),
+				name: pageName,
 				desc: t('settings', meta.descKey),
-				items: this.buildTaskChipsSettingsPageItems(pageId, pageEntries),
+				page: () => new OperonNativeSettingsPage(
+					pageName,
+					containerEl => this.renderNativeTaskChipsSettingsPage(pageId, containerEl),
+					containerEl => this.hideNativeSettingsPage(containerEl),
+				),
 			};
 		});
 	}
 
-	private buildTaskChipsSettingsPageItems(
-		pageId: TaskChipsSettingsPageId,
-		entries: OperonSettingsSearchEntry[],
-	): SettingDefinition[] {
+	private buildStateIconsSettingsItems(entries: OperonSettingsSearchEntry[]): SettingDefinitionItem[] {
+		const sourceEntry = this.buildSettingsSearchSettingDefinition(entries, 'fallbackTaskIconSource');
 		return [
 			{
-				name: '',
-				searchable: false,
-				render: (setting, group) => {
-					setting.settingEl.detach();
-					const pageRoot = asHTMLElement(Reflect.get(group, 'listEl'), setting.settingEl);
-					if (!pageRoot) return;
-					this.renderNativeTaskChipsSettingsPage(pageId, pageRoot);
-					return () => this.hideNativeSettingsPage(pageRoot);
-				},
+				type: 'group',
+				heading: t('settings', 'fallbackTaskStateIcons'),
+				items: this.compactSettingsSearchDefinitions([
+					sourceEntry,
+					this.buildStateIconRowsSettingsDefinition(),
+				]),
 			},
-			...entries.map(entry => this.buildSettingsSearchTargetDefinition(entry)),
 		];
+	}
+
+	private buildTaskFinderSettingsItems(entries: OperonSettingsSearchEntry[]): SettingDefinitionItem[] {
+		const hotkeysEntry = entries.find(entry => entry.id === 'ui.taskFinderHotkeys');
+		return this.compactSettingsSearchItems([
+			{
+				type: 'group',
+				heading: t('settings', 'taskFinderBehaviorSection'),
+				items: this.compactSettingsSearchDefinitions([
+					this.buildSettingsSearchSettingDefinition(entries, 'taskFinderRecentModifiedDays'),
+					this.buildSettingsSearchSettingDefinition(entries, 'taskFinderVisibleResultCount'),
+					this.buildSettingsSearchSettingDefinition(entries, 'taskFinderRememberLastScopes'),
+				]),
+			},
+			this.buildSettingsSearchRenderDefinition(hotkeysEntry, containerEl => {
+				this.renderTaskFinderShortcutSettings(containerEl);
+			}),
+		]);
+	}
+
+	private buildTaskEditorSettingsItems(entries: OperonSettingsSearchEntry[]): SettingDefinitionItem[] {
+		const workflowPickerEntry = entries.find(entry => entry.id === 'ui.taskEditorWorkflowPickers');
+		return this.compactSettingsSearchItems([
+			{
+				type: 'group',
+				heading: t('settings', 'subtabTaskEditor'),
+				items: this.compactSettingsSearchDefinitions([
+					this.buildSettingsSearchSettingDefinition(entries, 'taskEditorShowLineNumbers'),
+				]),
+			},
+			this.buildSettingsSearchRenderDefinition(workflowPickerEntry, containerEl => {
+				const sectionEl = renderNativeSettingsGroupedSection(containerEl, t('settings', 'taskEditorWorkflowPickers'));
+				this.applyInterfaceIconListSectionStyle(sectionEl);
+				this.renderTaskEditorWorkflowPickerSettingsSection(sectionEl);
+				this.markSettingsSearchSectionTarget(sectionEl, 'ui.taskEditorWorkflowPickers');
+			}),
+		]);
+	}
+
+	private buildMobileCalendarSettingsItems(entries: OperonSettingsSearchEntry[]): SettingDefinitionItem[] {
+		return [
+			{
+				type: 'group',
+				heading: t('settings', 'mobileSubtabCalendar'),
+				items: this.compactSettingsSearchDefinitions([
+					this.buildSettingsSearchSettingDefinition(entries, 'calendarMobileEnabled'),
+					this.buildSettingsSearchSettingDefinition(entries, 'calendarMobileMaxWidthPx'),
+					this.buildSettingsSearchSettingDefinition(entries, 'calendarMobileDefaultView'),
+					this.buildSettingsSearchSettingDefinition(entries, 'calendarMobileDefaultSourcePresetId'),
+					this.buildSettingsSearchSettingDefinition(entries, 'calendarMobileSlotMinutes'),
+					this.buildSettingsSearchSettingDefinition(entries, 'calendarMobileShowProjectedOccurrences'),
+					this.buildSettingsSearchSettingDefinition(entries, 'calendarMobileShowExternalCalendars'),
+					this.buildSettingsSearchSettingDefinition(entries, 'calendarMobileColorSource'),
+					this.buildSettingsSearchSettingDefinition(entries, 'calendarMobileShowDueMarkers'),
+					this.buildSettingsSearchSettingDefinition(entries, 'calendarMobileShowAllDayItems'),
+					this.buildSettingsSearchSettingDefinition(entries, 'calendarMobileAgendaPastDays'),
+					this.buildSettingsSearchSettingDefinition(entries, 'calendarMobileAgendaFutureDays'),
+					this.buildSettingsSearchSettingDefinition(entries, 'calendarMobileAgendaShowCompletedItems'),
+					this.buildSettingsSearchSettingDefinition(entries, 'calendarMobileAllDayVisibleTaskLimit'),
+					this.buildSettingsSearchSettingDefinition(entries, 'calendarMobileShowCompletedItems'),
+				]),
+			},
+		];
+	}
+
+	private buildMobileKanbanSettingsItems(entries: OperonSettingsSearchEntry[]): SettingDefinitionItem[] {
+		return [
+			{
+				type: 'group',
+				heading: t('settings', 'mobileSubtabKanban'),
+				items: this.compactSettingsSearchDefinitions([
+					this.buildSettingsSearchSettingDefinition(entries, 'kanbanMobileLayoutChromeEnabled'),
+					this.buildSettingsSearchSettingDefinition(entries, 'kanbanMobileLayoutMaxWidthPx'),
+					this.buildSettingsSearchSettingDefinition(entries, 'kanbanMobileCompactSwimlaneWidthPx'),
+					this.buildSettingsSearchSettingDefinition(entries, 'kanbanMobileSwimlaneRailAlwaysVisible'),
+					this.buildSettingsSearchSettingDefinition(entries, 'kanbanMobileHorizontalStatusSnapEnabled'),
+				]),
+			},
+		];
+	}
+
+	private buildRelationshipsSettingsItems(entries: OperonSettingsSearchEntry[]): SettingDefinitionItem[] {
+		return [
+			{
+				type: 'group',
+				heading: t('settings', 'subtabRelationships'),
+				items: this.compactSettingsSearchDefinitions([
+					this.buildSettingsSearchSettingDefinition(entries, 'estimateAutoReallocation'),
+					this.buildSettingsSearchSettingDefinition(entries, 'autoParentFileTask'),
+					this.buildSettingsSearchSettingDefinition(entries, 'autoParentLinkedFileSubtasks'),
+				]),
+			},
+		];
+	}
+
+	private buildRecurrenceSettingsItems(entries: OperonSettingsSearchEntry[]): SettingDefinitionItem[] {
+		const cleanupEntry = entries.find(entry => entry.id === 'automation.repeatYamlCleanup');
+		const cleanupDefinition = this.buildSettingsSearchRenderDefinition(cleanupEntry, containerEl => {
+			this.renderRepeatSeriesYamlPropertyRemovalBody(containerEl);
+		});
+		return this.compactSettingsSearchItems([
+			{
+				type: 'group',
+				heading: t('settings', 'repeatingTasks'),
+				items: this.compactSettingsSearchDefinitions([
+					this.buildSettingsSearchSettingDefinition(entries, 'newOccurrencePosition'),
+					this.buildSettingsSearchSettingDefinition(entries, 'fileRepeatDestination'),
+					this.buildFileRepeatCustomFolderSettingsDefinition(entries),
+				]),
+			},
+			cleanupDefinition
+				? {
+					type: 'group',
+					heading: t('settings', 'repeatYamlPropertyRemovalTitle'),
+					items: [cleanupDefinition],
+				}
+				: null,
+		]);
+	}
+
+	private buildFileRepeatCustomFolderSettingsDefinition(entries: OperonSettingsSearchEntry[]): SettingDefinition | null {
+		const definition = this.buildSettingsSearchSettingDefinition(entries, 'fileRepeatCustomFolder');
+		if (!definition) return null;
+		return {
+			...definition,
+			visible: () => this.settings.fileRepeatDestination === 'custom-folder',
+		};
+	}
+
+	private buildTrackerSettingsItems(entries: OperonSettingsSearchEntry[]): SettingDefinitionItem[] {
+		return [
+			{
+				type: 'group',
+				heading: t('settings', 'trackerMainSettingsSection'),
+				items: this.compactSettingsSearchDefinitions([
+					this.buildSettingsSearchSettingDefinition(entries, 'trackerSplitSessionsAtMidnight'),
+					this.buildSettingsSearchSettingDefinition(entries, 'trackerShowStatusBarTimer'),
+				]),
+			},
+			{
+				type: 'group',
+				heading: t('settings', 'trackerSessionHistorySection'),
+				items: this.compactSettingsSearchDefinitions([
+					this.buildSettingsSearchSettingDefinition(entries, 'trackerHistoryDays'),
+					this.buildSettingsSearchSettingDefinition(entries, 'trackerTaskDescriptionClickAction'),
+				]),
+			},
+			{
+				type: 'group',
+				heading: t('settings', 'trackerFlowTimeSection'),
+				items: this.compactSettingsSearchDefinitions([
+					this.buildSettingsSearchSettingDefinition(entries, 'flowTimePauseMinutes'),
+					this.buildSettingsSearchSettingDefinition(entries, 'flowTimeUseLastSelectedDuration'),
+					this.buildSettingsSearchSettingDefinition(entries, 'flowTimeDefaultSessionMinutes'),
+					this.buildSettingsSearchSettingDefinition(entries, 'flowTimeShowNumericTimer'),
+					this.buildSettingsSearchSettingDefinition(entries, 'flowTimeNotifyOnTargetReached'),
+				]),
+			},
+		];
+	}
+
+	private buildPinnedDockSettingsItems(entries: OperonSettingsSearchEntry[]): SettingDefinitionItem[] {
+		return [
+			{
+				type: 'group',
+				heading: t('settings', 'pinnedTasksSection'),
+				items: this.compactSettingsSearchDefinitions([
+					this.buildSettingsSearchSettingDefinition(entries, 'pinnedTasksDesktopSurface'),
+				]),
+			},
+			{
+				type: 'group',
+				heading: t('settings', 'pinnedTasksSharedSettings'),
+				items: this.compactSettingsSearchDefinitions([
+					this.buildSettingsSearchSettingDefinition(entries, 'pinnedDockColorSource'),
+					this.buildSettingsSearchSettingDefinition(entries, 'pinnedDockAutoPin'),
+					this.buildSettingsSearchSettingDefinition(entries, 'pinnedDockAutoUnpinFinished'),
+				]),
+			},
+			{
+				type: 'group',
+				heading: t('settings', 'pinnedTasksSidebarSection'),
+				items: this.compactSettingsSearchDefinitions([
+					this.buildSettingsSearchSettingDefinition(entries, 'pinnedTasksSidebarSide'),
+				]),
+			},
+			{
+				type: 'group',
+				heading: t('settings', 'pinnedDockSection'),
+				items: this.compactSettingsSearchDefinitions([
+					this.buildSettingsSearchSettingDefinition(entries, 'pinnedDockAutoCloseEnabled'),
+					this.buildSettingsSearchSettingDefinition(entries, 'floatingAutoCloseSec'),
+					this.buildSettingsSearchSettingDefinition(entries, 'pinnedTaskItemWidth'),
+					this.buildSettingsSearchSettingDefinition(entries, 'pinnedDockDisableOnMobile'),
+					this.buildSettingsSearchSettingDefinition(entries, 'pinnedDockLayout'),
+					this.buildSettingsSearchSettingDefinition(entries, 'pinnedDockGridCols'),
+				]),
+			},
+		];
+	}
+
+	private buildContextMenuSettingsItems(entries: OperonSettingsSearchEntry[]): SettingDefinitionItem[] {
+		const actionsEntry = entries.find(entry => entry.id === 'ui.contextMenuActions');
+		const matrixEntry = entries.find(entry => entry.id === 'ui.contextMenuMatrix');
+		const mobileAutoHideEntry = this.findSettingsSearchEntryByKey('contextualMenuMobileAutoHideMs');
+		return this.compactSettingsSearchItems([
+			{
+				type: 'group',
+				heading: t('settings', 'contextMenuDelaySection'),
+				items: this.compactSettingsSearchDefinitions([
+					this.buildSettingsSearchSettingDefinition(entries, 'contextualMenuOpenDelayMs'),
+				]),
+			},
+			{
+				type: 'group',
+				heading: t('settings', 'contextualMenuMobile'),
+				items: this.compactSettingsSearchDefinitions([
+					this.buildSettingsSearchSettingDefinition(entries, 'contextualMenuMobileEnabled'),
+					this.buildSettingsSearchSettingDefinition(entries, 'contextualMenuMobileLongPressMs'),
+					this.buildSettingsSearchSettingDefinition(entries, 'contextualMenuMobileTransitionGraceMs'),
+					this.buildSettingsSearchSettingDefinitionFromEntry(mobileAutoHideEntry),
+				]),
+			},
+			this.buildSettingsSearchRenderDefinition(actionsEntry, containerEl => {
+				this.renderContextualMenuActionsSettingsSection(containerEl);
+			}),
+			this.buildSettingsSearchRenderDefinition(matrixEntry, containerEl => {
+				this.renderContextualMenuMatrixSettingsSection(containerEl);
+			}),
+		]);
+	}
+
+	private buildMobileTaskEditorSettingsItems(entries: OperonSettingsSearchEntry[]): SettingDefinitionItem[] {
+		const coreToolsEntry = entries.find(entry => entry.id === 'ui.taskEditorMobileCoreTools');
+		return this.compactSettingsSearchItems([
+			this.buildSettingsSearchRenderDefinition(coreToolsEntry, containerEl => {
+				const sectionEl = renderNativeSettingsGroupedSection(containerEl, t('settings', 'taskEditorMobileCoreTools'));
+				this.applyInterfaceIconListSectionStyle(sectionEl);
+				this.renderTaskEditorMobileCoreToolSettingsSection(sectionEl);
+				this.markSettingsSearchSectionTarget(sectionEl, 'ui.taskEditorMobileCoreTools');
+			}),
+		]);
+	}
+
+	private buildSettingsSearchSettingDefinition(
+		entries: OperonSettingsSearchEntry[],
+		key: OperonSettingSearchKey,
+		extraEntries: OperonSettingsSearchEntry[] = [],
+	): SettingDefinition | null {
+		const entry = entries.find(candidate => candidate.key === key);
+		return this.buildSettingsSearchSettingDefinitionFromEntry(entry, extraEntries);
+	}
+
+	private buildSettingsSearchSettingDefinitionFromEntry(
+		entry: OperonSettingsSearchEntry | null | undefined,
+		extraEntries: OperonSettingsSearchEntry[] = [],
+	): SettingDefinition | null {
+		if (!entry) return null;
+		return {
+			name: this.getSettingsSearchText(entry.name),
+			desc: this.getSettingsSearchText(entry.desc),
+			aliases: this.getSettingsSearchAliasesForEntries([entry, ...extraEntries]),
+			control: this.buildSettingsSearchControl(entry),
+		};
+	}
+
+	private buildSettingsSearchRenderDefinition(
+		entry: OperonSettingsSearchEntry | undefined,
+		render: (containerEl: HTMLElement) => void,
+	): SettingDefinition | null {
+		if (!entry) return null;
+		return {
+			name: this.getSettingsSearchText(entry.name),
+			desc: this.getSettingsSearchText(entry.desc),
+			aliases: this.getSettingsSearchAliases(entry),
+			render: setting => {
+				setting.settingEl.empty();
+				setting.settingEl.addClass('operon-settings-search-bounded-render');
+				render(setting.settingEl);
+			},
+		};
+	}
+
+	private buildStateIconRowsSettingsDefinition(): SettingDefinition {
+		return {
+			name: t('settings', 'fallbackTaskStateIcons'),
+			desc: this.getSettingsSearchTabDescription('interfaceStateIcons'),
+			aliases: [
+				'state icons',
+				'fallback icons',
+				'open state icon',
+				'finished state icon',
+				'cancelled state icon',
+			],
+			render: setting => {
+				setting.settingEl.empty();
+				setting.settingEl.addClass('operon-settings-search-bounded-render');
+				this.renderStateIconSetting(setting.settingEl, 'open', t('settings', 'fallbackOpenStateIcon'), t('settings', 'fallbackOpenStateIconDesc'));
+				this.renderStateIconSetting(setting.settingEl, 'done', t('settings', 'fallbackFinishedStateIcon'), t('settings', 'fallbackFinishedStateIconDesc'));
+				this.renderStateIconSetting(setting.settingEl, 'cancelled', t('settings', 'fallbackCancelledStateIcon'), t('settings', 'fallbackCancelledStateIconDesc'));
+			},
+		};
+	}
+
+	private compactSettingsSearchItems(items: Array<SettingDefinitionItem | null>): SettingDefinitionItem[] {
+		return items.filter((item): item is SettingDefinitionItem => item !== null);
+	}
+
+	private compactSettingsSearchDefinitions(items: Array<SettingDefinition | null>): SettingDefinition[] {
+		return items.filter((item): item is SettingDefinition => item !== null);
+	}
+
+	private buildLocationMapSettingsItems(entries: OperonSettingsSearchEntry[]): SettingDefinitionItem[] {
+		const placeVisualsSectionEntry = entries.find(entry => entry.id === 'ui.locationPlaceVisualProperties');
+		const entry = (key: OperonSettingSearchKey, extraEntries: OperonSettingsSearchEntry[] = []): SettingDefinition | null =>
+			this.buildLocationMapSettingDefinition(entries, key, extraEntries);
+
+		const visualItems = [
+			entry('locationPlaceIconPropertyName', placeVisualsSectionEntry ? [placeVisualsSectionEntry] : []),
+			entry('locationPlaceColorPropertyName'),
+		].filter((definition): definition is SettingDefinition => definition !== null);
+		const pickerItems = [
+			entry('locationMapsAlwaysLightMode'),
+			entry('locationPickerMapDefaultCenter'),
+			entry('locationPickerMapDefaultZoom'),
+		].filter((definition): definition is SettingDefinition => definition !== null);
+		const previewItems = [
+			entry('locationPreviewWidth'),
+			entry('locationPreviewHeight'),
+			entry('locationPreviewDefaultZoom'),
+			entry('locationPreviewMinZoom'),
+			entry('locationPreviewMaxZoom'),
+		].filter((definition): definition is SettingDefinition => definition !== null);
+
+		return [
+			{
+				type: 'group',
+				heading: t('settings', 'locationPlaceVisualPropertiesSection'),
+				items: visualItems,
+			},
+			{
+				type: 'group',
+				heading: t('settings', 'locationPickerMapSection'),
+				items: pickerItems,
+			},
+			{
+				type: 'group',
+				heading: t('settings', 'locationPreviewSection'),
+				items: previewItems,
+			},
+		];
+	}
+
+	private buildLocationMapSettingDefinition(
+		entries: OperonSettingsSearchEntry[],
+		key: OperonSettingSearchKey,
+		extraEntries: OperonSettingsSearchEntry[] = [],
+	): SettingDefinition | null {
+		const entry = entries.find(candidate => candidate.key === key);
+		if (!entry) return null;
+		return {
+			name: this.getSettingsSearchText(entry.name),
+			desc: this.getSettingsSearchText(entry.desc),
+			aliases: this.getSettingsSearchAliasesForEntries([entry, ...extraEntries]),
+			control: this.buildLocationMapSettingControl(entry),
+		};
+	}
+
+	private buildLocationMapSettingControl(entry: OperonSettingsSearchEntry): SettingControl {
+		const control = this.buildSettingsSearchControl(entry);
+		if (entry.control !== 'text') return control;
+		const textControl = control as Extract<SettingControl, { type: 'text' }>;
+		if (entry.key === 'locationPlaceIconPropertyName') {
+			return { ...textControl, placeholder: 'Icon' };
+		}
+		if (entry.key === 'locationPlaceColorPropertyName') {
+			return { ...textControl, placeholder: 'Color' };
+		}
+		if (entry.key === 'locationPickerMapDefaultCenter') {
+			return { ...textControl, placeholder: t('location', 'coordinatePlaceholder') };
+		}
+		return control;
 	}
 
 	private buildReleaseNotesOverviewDefinition(): SettingDefinition {
@@ -808,33 +1357,13 @@ export class OperonSettingsTab extends PluginSettingTab {
 		};
 	}
 
-	private buildSettingsSearchCustomPageItems(
-		tabId: OperonSettingsTabId,
-		entries: OperonSettingsSearchEntry[],
-	): SettingDefinition[] {
-		return [
-			{
-				name: '',
-				searchable: false,
-				render: (setting, group) => {
-					setting.settingEl.detach();
-					const pageRoot = asHTMLElement(Reflect.get(group, 'listEl'), setting.settingEl);
-					if (!pageRoot) return;
-					this.renderNativeSettingsPage(tabId, pageRoot);
-					return () => this.hideNativeSettingsPage(pageRoot);
-				},
-			},
-			...entries.map(entry => this.buildSettingsSearchTargetDefinition(entry)),
-		];
-	}
-
 	private buildSettingsSearchTargetDefinition(entry: OperonSettingsSearchEntry): SettingDefinition {
 		return {
 			name: this.getSettingsSearchText(entry.name),
 			desc: this.getSettingsSearchText(entry.desc),
 			aliases: this.getSettingsSearchAliases(entry),
 			render: (setting, group) => {
-				const pageRoot = asHTMLElement(Reflect.get(group, 'listEl'), setting.settingEl);
+				const pageRoot = this.resolveSettingsSearchRenderRoot(setting, group);
 				if (!pageRoot?.hasClass('operon-settings-native-page-root')) {
 					this.hideSettingsSearchMissingTarget(setting.settingEl);
 					return;
@@ -843,6 +1372,16 @@ export class OperonSettingsTab extends PluginSettingTab {
 				this.replaceSettingsSearchTarget(setting.settingEl, targetEl);
 			},
 		};
+	}
+
+	private resolveSettingsSearchRenderRoot(setting: Setting, group: unknown): HTMLElement | null {
+		if (typeof group === 'object' && group !== null) {
+			for (const key of ['listEl', 'containerEl', 'contentEl'] as const) {
+				const candidate = asHTMLElement(Reflect.get(group, key), setting.settingEl);
+				if (candidate && candidate !== setting.settingEl) return candidate;
+			}
+		}
+		return setting.settingEl.parentElement;
 	}
 
 	private findSettingsSearchTarget(pageRoot: HTMLElement, entry: OperonSettingsSearchEntry, searchEl: HTMLElement): HTMLElement | null {
@@ -946,13 +1485,11 @@ export class OperonSettingsTab extends PluginSettingTab {
 			this.clearActiveNativeSettingsPage(containerEl);
 		}
 
-		this.activeNativeSettingsPage = { tabId: 'interfaceTaskChips', taskChipsPageId: pageId, containerEl };
+		this.activeNativeSettingsPage = { tabId: 'interfaceTaskChips', containerEl, taskChipsPageId: pageId };
 		containerEl.empty();
 		containerEl.addClass('operon-settings-tab-root');
 		containerEl.addClass('operon-settings-native-page-root');
-		this.renderTaskChipsSettingsPageContent(pageId, containerEl, {
-			omitNativeTitle: true,
-		});
+		this.renderTaskChipsSettingsPageContent(pageId, containerEl, { omitNativeTitle: true });
 	}
 
 	private hideNativeSettingsPage(containerEl: HTMLElement): void {
@@ -1237,6 +1774,8 @@ export class OperonSettingsTab extends PluginSettingTab {
 
 	private getSettingsSearchNumberOptions(key: OperonSettingSearchKey): number[] {
 		if (key === 'duplicateAlertDelaySeconds') return [...DUPLICATE_ALERT_DELAY_SECONDS_OPTIONS];
+		if (key === 'taskFinderRecentModifiedDays') return [1, 2, 3, 4, 5, 6, 7];
+		if (key === 'taskFinderVisibleResultCount') return [3, 4, 5, 6, 7, 8, 9];
 		if (key === 'pinnedDockGridCols') return [2, 3, 4, 5];
 		if (key === 'flowTimePauseMinutes') return [...FLOW_TIME_PAUSE_MINUTE_OPTIONS];
 		if (key === 'flowTimeDefaultSessionMinutes') return [...FLOW_TIME_DEFAULT_SESSION_MINUTE_OPTIONS];
@@ -1450,6 +1989,22 @@ export class OperonSettingsTab extends PluginSettingTab {
 				right: t('settings', 'pinnedTasksSidebarSideRight'),
 			};
 		}
+		if (key === 'taskFinderRecentModifiedDays') {
+			return Object.fromEntries([1, 2, 3, 4, 5, 6, 7].map(days => [
+				String(days),
+				t('settings', days === 1 ? 'taskFinderRecentModifiedDaysOptionOne' : 'taskFinderRecentModifiedDaysOptionMany', {
+					count: String(days),
+				}),
+			]));
+		}
+		if (key === 'taskFinderVisibleResultCount') {
+			return Object.fromEntries([3, 4, 5, 6, 7, 8, 9].map(count => [
+				String(count),
+				t('settings', 'taskFinderVisibleResultCountOption', {
+					count: String(count),
+				}),
+			]));
+		}
 		if (key === 'calendarDefaultPresetId' || key === 'calendarMobileDefaultSourcePresetId') {
 			return this.settings.calendarPresets.length > 0
 				? Object.fromEntries(this.settings.calendarPresets.map(preset => [preset.id, preset.name]))
@@ -1489,6 +2044,24 @@ export class OperonSettingsTab extends PluginSettingTab {
 				limit === 'all'
 					? t('settings', 'calendarMobileAllDayVisibleTaskLimitAll')
 					: t('settings', 'calendarMobileAllDayVisibleTaskLimitOption', { count: String(limit) }),
+			]));
+		}
+		if (key === 'calendarMobileSlotMinutes') {
+			return Object.fromEntries(CALENDAR_MOBILE_SLOT_MINUTES_OPTIONS.map(minutes => [
+				String(minutes),
+				t('settings', 'calendarMobileSlotMinutesOption', { minutes: String(minutes) }),
+			]));
+		}
+		if (key === 'calendarMobileAgendaPastDays' || key === 'calendarMobileAgendaFutureDays') {
+			return Object.fromEntries(this.getSettingsSearchNumberOptions(key).map(days => [
+				String(days),
+				t('settings', 'calendarMobileAgendaDaysOption', { count: String(days) }),
+			]));
+		}
+		if (key === 'flowTimePauseMinutes' || key === 'flowTimeDefaultSessionMinutes') {
+			return Object.fromEntries(this.getSettingsSearchNumberOptions(key).map(minutes => [
+				String(minutes),
+				t('settings', 'flowTimeMinutesOption', { minutes: String(minutes) }),
 			]));
 		}
 		if (key === 'duplicateAlertDelaySeconds') {
@@ -1543,6 +2116,13 @@ export class OperonSettingsTab extends PluginSettingTab {
 		}
 		if (key === 'flowTimeDefaultSessionMinutes' && !this.settings.flowTimeUseLastSelectedDuration && typeof value === 'number') {
 			this.settings.flowTimeSessionMinutes = value;
+		}
+		if (key === 'taskFinderRememberLastScopes' && value === false) {
+			this.settings.taskFinderDefaultScope = TASK_FINDER_DEFAULT_SCOPE_ORDER.map((scopeKey: TaskFinderDefaultScopeKey) => ({
+				key: scopeKey,
+				visible: scopeKey === 'includeInline' || scopeKey === 'includeFile',
+			}));
+			this.settings.taskFinderSelectedProjectId = '';
 		}
 	}
 
@@ -1674,6 +2254,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 			{ id: 'corePipelines', groupId: 'core', label: t('settings', 'tabPipelines') },
 			{ id: 'corePriority', groupId: 'core', label: t('settings', 'tabPriority') },
 			{ id: 'coreKeymapping', groupId: 'core', label: t('settings', 'tabKeyMappings') },
+			{ id: 'coreCustomKeys', groupId: 'core', label: t('settings', 'tabCustomKeys') },
 			{ id: 'tasksInlineTasks', groupId: 'tasks', label: t('settings', 'subtabInlineTasks') },
 			{ id: 'tasksFileTasks', groupId: 'tasks', label: t('settings', 'subtabFileTasks') },
 			{ id: 'tasksRelationships', groupId: 'tasks', label: t('settings', 'subtabRelationships') },
@@ -1705,6 +2286,8 @@ export class OperonSettingsTab extends PluginSettingTab {
 			this.renderPriorityTab(contentEl);
 		} else if (tabId === 'coreKeymapping') {
 			this.renderKeyMappingsSection(contentEl);
+		} else if (tabId === 'coreCustomKeys') {
+			this.renderCustomKeysSection(contentEl);
 		} else if (tabId === 'tasks' || tabId === 'tasksInlineTasks') {
 			this.renderTasksInlineTasksTab(contentEl);
 		} else if (tabId === 'tasksFileTasks') {
@@ -1853,6 +2436,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 		const sectionEl = renderNativeSettingsGroupedSection(containerEl, t('settings', 'taskEditorWorkflowPickers'));
 		this.applyInterfaceIconListSectionStyle(sectionEl);
 		this.renderTaskEditorWorkflowPickerSettingsSection(sectionEl);
+		this.markSettingsSearchSectionTarget(sectionEl, 'ui.taskEditorWorkflowPickers');
 	}
 
 	private renderInterfaceLocationMapTab(containerEl: HTMLElement): void {
@@ -1937,6 +2521,12 @@ export class OperonSettingsTab extends PluginSettingTab {
 		this.renderBoundToggleSetting(containerEl, t('settings', 'mobileGlobalTaskFabEnabled'), t('settings', 'mobileGlobalTaskFabEnabledDesc'), 'mobileGlobalTaskFabEnabled');
 		this.renderBoundToggleSetting(containerEl, t('settings', 'mobileGlobalTaskFabHideInCalendar'), t('settings', 'mobileGlobalTaskFabHideInCalendarDesc'), 'mobileGlobalTaskFabHideInCalendar');
 		this.renderBoundToggleSetting(containerEl, t('settings', 'mobileGlobalTaskFabHideInKanban'), t('settings', 'mobileGlobalTaskFabHideInKanbanDesc'), 'mobileGlobalTaskFabHideInKanban');
+		this.renderBoundClampedNumericSetting(containerEl, t('settings', 'contextualMenuMobileAutoHide'), t('settings', 'contextualMenuMobileAutoHideDesc'), 'contextualMenuMobileAutoHideMs', {
+			min: 1000,
+			max: 30000,
+			fallback: DEFAULT_SETTINGS.contextualMenuMobileAutoHideMs,
+			step: '1000',
+		});
 		new Setting(containerEl)
 			.setName(t('settings', 'mobileGlobalTaskFabResetPosition'))
 			.setDesc(t('settings', 'mobileGlobalTaskFabResetPositionDesc'))
@@ -1954,6 +2544,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 		const sectionEl = renderNativeSettingsGroupedSection(containerEl, t('settings', 'taskEditorMobileCoreTools'));
 		this.applyInterfaceIconListSectionStyle(sectionEl);
 		this.renderTaskEditorMobileCoreToolSettingsSection(sectionEl);
+		this.markSettingsSearchSectionTarget(sectionEl, 'ui.taskEditorMobileCoreTools');
 	}
 
 	private renderMobileCalendarTab(containerEl: HTMLElement): void {
@@ -2805,16 +3396,22 @@ export class OperonSettingsTab extends PluginSettingTab {
 	}
 
 	private renderRepeatSeriesYamlPropertyRemovalSection(containerEl: HTMLElement): void {
-		const sectionEl = containerEl.createDiv('operon-repeat-property-cleanup-section');
-		const sectionBody = renderNativeSettingsGroupedSection(sectionEl, t('settings', 'repeatYamlPropertyRemovalTitle'));
-		sectionBody.addClass('operon-settings-add-list-section');
-		sectionBody.addClass('operon-settings-card-list-section');
-		const repeatYamlCleanupDescEl = sectionBody.createEl('p', {
+		const sectionBody = renderNativeSettingsGroupedSection(containerEl, t('settings', 'repeatYamlPropertyRemovalTitle'));
+		this.renderRepeatSeriesYamlPropertyRemovalBody(sectionBody);
+	}
+
+	private renderRepeatSeriesYamlPropertyRemovalBody(containerEl: HTMLElement): void {
+		if (containerEl.hasClass('operon-settings-search-bounded-render')) {
+			containerEl.addClass('operon-repeat-property-cleanup-render-host');
+		}
+		containerEl.addClass('operon-settings-add-list-section');
+		containerEl.addClass('operon-settings-card-list-section');
+		const repeatYamlCleanupDescEl = containerEl.createEl('p', {
 			text: t('settings', 'repeatYamlPropertyRemovalDesc'),
 			cls: 'operon-settings-muted-block',
 		});
 		repeatYamlCleanupDescEl.dataset.operonSettingsSearchId = 'automation.repeatYamlCleanup';
-		const listEl = sectionBody.createDiv('operon-repeat-property-cleanup-list');
+		const listEl = containerEl.createDiv('operon-repeat-property-cleanup-list');
 		const renderRows = (): void => {
 			listEl.empty();
 			const rowModels = this.getRepeatSeriesYamlRemovalRowModels();
@@ -2831,7 +3428,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 			}
 		};
 
-		const addRowEl = sectionBody.createDiv('operon-settings-add-row');
+		const addRowEl = containerEl.createDiv('operon-settings-add-row operon-repeat-property-cleanup-add-row');
 		const addBtn = createSettingsAddButton(addRowEl, t('settings', 'repeatYamlPropertyRemovalAdd'));
 		addBtn.addEventListener('click', () => {
 			this.openRepeatSeriesYamlPropertyRemovalModal(null, renderRows);
@@ -3071,8 +3668,132 @@ export class OperonSettingsTab extends PluginSettingTab {
 		return basename.replace(/ - \d{4}-\d{2}-\d{2}(?: \(\d+\))?$/u, '').trim() || basename;
 	}
 
+	private isCustomSurfaceMappingVisible(mapping: KeyMapping, surface: CustomSurfaceSettingsTarget): boolean {
+		if (surface === 'kanbanSwimlane') return mapping.showInKanbanSwimlane === true;
+		const entries = surface === 'editor'
+			? [...this.settings.taskEditorWorkflowPickers, ...this.settings.taskEditorMobileCoreTools]
+			: surface === 'creator'
+				? this.settings.taskCreatorToolbar
+				: [
+					...this.settings.inlineTaskCompactChips,
+					...this.settings.taskFinderCompactChips,
+					...this.settings.filterTaskCompactChips,
+					...this.settings.overlayTaskCompactChips,
+				];
+		const matches = entries.filter(entry => entry.key === mapping.canonicalKey);
+		if (matches.length > 0) return matches.some(entry => entry.visible);
+		if (surface === 'editor') return mapping.showInEditor !== false;
+		if (surface === 'creator') return mapping.showInCreator !== false;
+		return mapping.showInChips === true;
+	}
+
+	private setCustomSurfaceMappingVisible(mapping: KeyMapping, surface: CustomSurfaceSettingsTarget, visible: boolean): void {
+		if (surface === 'editor') {
+			mapping.showInEditor = visible;
+			this.settings.taskEditorWorkflowPickers = this.setSurfaceEntryVisibility(
+				this.settings.taskEditorWorkflowPickers,
+				mapping.canonicalKey,
+				visible,
+				() => ({ key: mapping.canonicalKey, visible }),
+			);
+			this.settings.taskEditorMobileCoreTools = normalizeTaskEditorMobileCoreTools(
+				this.setSurfaceEntryVisibility(
+					this.settings.taskEditorMobileCoreTools,
+					mapping.canonicalKey,
+					visible,
+					() => ({ key: mapping.canonicalKey, visible }),
+				),
+				DEFAULT_SETTINGS.taskEditorMobileCoreTools,
+				this.settings.keyMappings,
+			);
+		} else if (surface === 'creator') {
+			mapping.showInCreator = visible;
+			this.settings.taskCreatorToolbar = this.setSurfaceEntryVisibility(
+				this.settings.taskCreatorToolbar,
+				mapping.canonicalKey,
+				visible,
+				() => ({ key: mapping.canonicalKey, visible }),
+			);
+		} else if (surface === 'chips') {
+			mapping.showInChips = visible;
+			this.settings.inlineTaskCompactChips = this.setSurfaceEntryVisibility(
+				this.settings.inlineTaskCompactChips,
+				mapping.canonicalKey,
+				visible,
+				() => ({ key: mapping.canonicalKey, visible, iconOnly: false }),
+			);
+			this.settings.taskFinderCompactChips = this.setSurfaceEntryVisibility(
+				this.settings.taskFinderCompactChips,
+				mapping.canonicalKey,
+				visible,
+				() => ({ key: mapping.canonicalKey, visible, iconOnly: false }),
+			).map(item => ({ ...item, iconOnly: false }));
+			this.settings.filterTaskCompactChips = this.setSurfaceEntryVisibility(
+				this.settings.filterTaskCompactChips,
+				mapping.canonicalKey,
+				visible,
+				() => ({ key: mapping.canonicalKey, visible, iconOnly: false }),
+			);
+			this.settings.overlayTaskCompactChips = this.setSurfaceEntryVisibility(
+				this.settings.overlayTaskCompactChips,
+				mapping.canonicalKey,
+				visible,
+				() => ({ key: mapping.canonicalKey, visible, iconOnly: false }),
+			);
+		} else {
+			mapping.showInKanbanSwimlane = visible;
+		}
+	}
+
+	private setSurfaceEntryVisibility<T extends { key: string; visible: boolean }>(
+		items: T[],
+		key: string,
+		visible: boolean,
+		createItem: () => T,
+	): T[] {
+		let found = false;
+		const next = items.map(item => {
+			if (item.key !== key) return item;
+			found = true;
+			return { ...item, visible };
+		});
+		if (!found) next.push(createItem());
+		return next;
+	}
+
+	private getRenderableSurfaceItems<T extends { key: string }>(items: T[], target: SurfaceSettingsListTarget): T[] {
+		return items.filter(item => this.isRenderableSurfaceKey(item.key, target));
+	}
+
+	private mergeRenderableSurfaceItems<T extends { key: string }>(
+		previousItems: T[],
+		renderedItems: T[],
+		target: SurfaceSettingsListTarget,
+	): T[] {
+		const renderedQueue = [...renderedItems];
+		const next: T[] = [];
+		for (const previous of previousItems) {
+			if (this.isRenderableSurfaceKey(previous.key, target)) {
+				const replacement = renderedQueue.shift();
+				if (replacement) next.push(replacement);
+			} else {
+				next.push(previous);
+			}
+		}
+		next.push(...renderedQueue);
+		return next;
+	}
+
+	private isRenderableSurfaceKey(key: string, target: SurfaceSettingsListTarget): boolean {
+		if (target === 'creator' && TASK_CREATOR_TOOLBAR_FIELD_KEY_SET.has(key)) return true;
+		if (target === 'editorWorkflow' && TASK_EDITOR_WORKFLOW_PICKER_KEY_SET.has(key)) return true;
+		if (target === 'editorMobile' && TASK_EDITOR_MOBILE_CORE_TOOL_KEY_SET.has(key)) return true;
+		if (target === 'chips' && INLINE_TASK_COMPACT_CHIP_KEY_SET.has(key)) return true;
+		return getManagedCustomFieldOptionMapping(key, this.settings.keyMappings) !== null;
+	}
+
 	private renderTaskEditorWorkflowPickerSettingsSection(containerEl: HTMLElement): void {
-		renderInterfaceIconToggleSection<TaskEditorWorkflowPickerKey, TaskEditorWorkflowPickerItem>({
+		renderInterfaceIconToggleSection<string, TaskEditorWorkflowPickerItem>({
 			layout: 'row-list',
 			containerEl,
 			description: t('settings', 'taskEditorWorkflowPickersDesc'),
@@ -3081,9 +3802,13 @@ export class OperonSettingsTab extends PluginSettingTab {
 			moveUpLabel: t('settings', 'taskEditorWorkflowPickersMoveUp'),
 			moveDownLabel: t('settings', 'taskEditorWorkflowPickersMoveDown'),
 			descriptionSearchTargetId: 'ui.taskEditorWorkflowPickers',
-			getItems: () => this.settings.taskEditorWorkflowPickers,
+			getItems: () => this.getRenderableSurfaceItems(this.settings.taskEditorWorkflowPickers, 'editorWorkflow'),
 			setItems: items => {
-				this.settings.taskEditorWorkflowPickers = items;
+				this.settings.taskEditorWorkflowPickers = this.mergeRenderableSurfaceItems(
+					this.settings.taskEditorWorkflowPickers,
+					items,
+					'editorWorkflow',
+				);
 			},
 			getLabel: key => this.getTaskEditorWorkflowPickerLabel(key),
 			getIcon: key => this.getTaskEditorWorkflowPickerIcon(key),
@@ -3097,7 +3822,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 	}
 
 	private renderTaskEditorMobileCoreToolSettingsSection(containerEl: HTMLElement): void {
-		renderInterfaceIconToggleSection<TaskEditorMobileCoreToolKey, TaskEditorMobileCoreToolItem>({
+		renderInterfaceIconToggleSection<string, TaskEditorMobileCoreToolItem>({
 			layout: 'row-list',
 			containerEl,
 			description: t('settings', 'taskEditorMobileCoreToolsDesc'),
@@ -3106,9 +3831,13 @@ export class OperonSettingsTab extends PluginSettingTab {
 			moveUpLabel: t('settings', 'taskEditorMobileCoreToolsMoveUp'),
 			moveDownLabel: t('settings', 'taskEditorMobileCoreToolsMoveDown'),
 			descriptionSearchTargetId: 'ui.taskEditorMobileCoreTools',
-			getItems: () => this.settings.taskEditorMobileCoreTools,
+			getItems: () => this.getRenderableSurfaceItems(this.settings.taskEditorMobileCoreTools, 'editorMobile'),
 			setItems: items => {
-				this.settings.taskEditorMobileCoreTools = normalizeTaskEditorMobileCoreTools(items);
+				this.settings.taskEditorMobileCoreTools = normalizeTaskEditorMobileCoreTools(
+					this.mergeRenderableSurfaceItems(this.settings.taskEditorMobileCoreTools, items, 'editorMobile'),
+					DEFAULT_SETTINGS.taskEditorMobileCoreTools,
+					this.settings.keyMappings,
+				);
 			},
 			getLabel: key => this.getTaskEditorMobileCoreToolLabel(key),
 			getIcon: key => this.getTaskEditorMobileCoreToolIcon(key),
@@ -3124,7 +3853,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 	}
 
 	private renderTaskCreatorToolbarSettingsSection(containerEl: HTMLElement): void {
-		renderInterfaceIconToggleSection<TaskCreatorToolbarFieldKey, TaskCreatorToolbarItem>({
+		renderInterfaceIconToggleSection<string, TaskCreatorToolbarItem>({
 			layout: 'row-list',
 			containerEl,
 			description: t('settings', 'taskCreatorToolbarSectionDesc'),
@@ -3133,9 +3862,13 @@ export class OperonSettingsTab extends PluginSettingTab {
 			reorderTitle: t('settings', 'taskCreatorToolbarReorder'),
 			moveUpLabel: t('settings', 'taskCreatorToolbarMoveUp'),
 			moveDownLabel: t('settings', 'taskCreatorToolbarMoveDown'),
-			getItems: () => this.settings.taskCreatorToolbar,
+			getItems: () => this.getRenderableSurfaceItems(this.settings.taskCreatorToolbar, 'creator'),
 			setItems: items => {
-				this.settings.taskCreatorToolbar = items;
+				this.settings.taskCreatorToolbar = this.mergeRenderableSurfaceItems(
+					this.settings.taskCreatorToolbar,
+					items,
+					'creator',
+				);
 			},
 			getLabel: key => this.getTaskCreatorToolbarFieldLabel(key),
 			getIcon: key => this.getTaskCreatorToolbarFieldIcon(key),
@@ -3159,9 +3892,13 @@ export class OperonSettingsTab extends PluginSettingTab {
 			reorderTitle: t('settings', 'inlineTaskIconsReorder'),
 			moveUpLabel: t('settings', 'inlineTaskIconsMoveUp'),
 			moveDownLabel: t('settings', 'inlineTaskIconsMoveDown'),
-			getItems: () => this.settings.inlineTaskCompactChips,
+			getItems: () => this.getRenderableSurfaceItems(this.settings.inlineTaskCompactChips, 'chips'),
 			setItems: items => {
-				this.settings.inlineTaskCompactChips = items;
+				this.settings.inlineTaskCompactChips = this.mergeRenderableSurfaceItems(
+					this.settings.inlineTaskCompactChips,
+					items,
+					'chips',
+				);
 			},
 			getLabel: key => this.getInlineTaskCompactChipLabel(key),
 			getIcon: key => this.getInlineTaskCompactChipIcon(key),
@@ -3213,9 +3950,13 @@ export class OperonSettingsTab extends PluginSettingTab {
 			reorderTitle: t('settings', 'taskFinderIconsReorder'),
 			moveUpLabel: t('settings', 'taskFinderIconsMoveUp'),
 			moveDownLabel: t('settings', 'taskFinderIconsMoveDown'),
-			getItems: () => this.settings.taskFinderCompactChips,
+			getItems: () => this.getRenderableSurfaceItems(this.settings.taskFinderCompactChips, 'chips'),
 			setItems: items => {
-				this.settings.taskFinderCompactChips = items.map(entry => ({ ...entry, iconOnly: false }));
+				this.settings.taskFinderCompactChips = this.mergeRenderableSurfaceItems(
+					this.settings.taskFinderCompactChips,
+					items,
+					'chips',
+				).map(entry => ({ ...entry, iconOnly: false }));
 			},
 			getLabel: key => this.getInlineTaskCompactChipLabel(key),
 			getIcon: key => this.getInlineTaskCompactChipIcon(key),
@@ -3236,9 +3977,13 @@ export class OperonSettingsTab extends PluginSettingTab {
 			reorderTitle: t('settings', 'overlayTaskIconsReorder'),
 			moveUpLabel: t('settings', 'overlayTaskIconsMoveUp'),
 			moveDownLabel: t('settings', 'overlayTaskIconsMoveDown'),
-			getItems: () => this.settings.overlayTaskCompactChips,
+			getItems: () => this.getRenderableSurfaceItems(this.settings.overlayTaskCompactChips, 'chips'),
 			setItems: items => {
-				this.settings.overlayTaskCompactChips = items;
+				this.settings.overlayTaskCompactChips = this.mergeRenderableSurfaceItems(
+					this.settings.overlayTaskCompactChips,
+					items,
+					'chips',
+				);
 			},
 			getLabel: key => this.getInlineTaskCompactChipLabel(key),
 			getIcon: key => this.getInlineTaskCompactChipIcon(key),
@@ -3299,7 +4044,9 @@ export class OperonSettingsTab extends PluginSettingTab {
 		});
 	}
 
-	private getTaskEditorWorkflowPickerLabel(key: TaskEditorWorkflowPickerKey): string {
+	private getTaskEditorWorkflowPickerLabel(key: string): string {
+		const customMapping = getCustomFieldMapping(this.settings.keyMappings, key);
+		if (customMapping) return getCustomFieldLabel(customMapping);
 		if (key === 'tags') return t('taskEditor', 'tags');
 		if (key === 'contexts') return t('taskEditor', 'contexts');
 		if (key === 'assignees') return t('taskEditor', 'assignees');
@@ -3311,12 +4058,16 @@ export class OperonSettingsTab extends PluginSettingTab {
 		return t('taskEditor', 'blockedBy');
 	}
 
-	private getTaskEditorWorkflowPickerIcon(key: TaskEditorWorkflowPickerKey): string {
+	private getTaskEditorWorkflowPickerIcon(key: string): string {
+		const customMapping = getCustomFieldMapping(this.settings.keyMappings, key);
+		if (customMapping) return getCustomFieldIcon(customMapping);
 		const mapping = this.settings.keyMappings.find(candidate => candidate.canonicalKey === key);
-		return mapping?.icon?.trim() || TASK_CREATOR_FALLBACK_FIELD_ICONS[key];
+		return mapping?.icon?.trim() || (TASK_CREATOR_FALLBACK_FIELD_ICONS as Record<string, string>)[key] || 'circle-dot';
 	}
 
-	private getTaskEditorMobileCoreToolLabel(key: TaskEditorMobileCoreToolKey): string {
+	private getTaskEditorMobileCoreToolLabel(key: string): string {
+		const customMapping = getCustomFieldMapping(this.settings.keyMappings, key);
+		if (customMapping) return getCustomFieldLabel(customMapping);
 		if (key === 'goToSource') return t('taskEditor', 'goToSource');
 		if (key === 'play') return t('taskEditor', 'trackerStartButton');
 		if (key === 'note') return t('taskEditor', 'notes');
@@ -3336,17 +4087,21 @@ export class OperonSettingsTab extends PluginSettingTab {
 		return mapping?.visiblePropertyName?.trim() || key;
 	}
 
-	private getTaskEditorMobileCoreToolIcon(key: TaskEditorMobileCoreToolKey): string {
+	private getTaskEditorMobileCoreToolIcon(key: string): string {
+		const customMapping = getCustomFieldMapping(this.settings.keyMappings, key);
+		if (customMapping) return getCustomFieldIcon(customMapping);
 		const mapping = this.settings.keyMappings.find(candidate => candidate.canonicalKey === key);
-		return mapping?.icon?.trim() || TASK_EDITOR_MOBILE_CORE_FALLBACK_ICONS[key];
+		return mapping?.icon?.trim() || (TASK_EDITOR_MOBILE_CORE_FALLBACK_ICONS as Record<string, string>)[key] || 'circle-dot';
 	}
 
-	private getTaskEditorMobileCoreToolCanonicalLabel(key: TaskEditorMobileCoreToolKey): string {
+	private getTaskEditorMobileCoreToolCanonicalLabel(key: string): string {
 		const mapping = this.settings.keyMappings.find(candidate => candidate.canonicalKey === key);
 		return mapping ? `{{${mapping.canonicalKey}:: }}` : key;
 	}
 
-	private getTaskCreatorToolbarFieldLabel(key: TaskCreatorToolbarFieldKey): string {
+	private getTaskCreatorToolbarFieldLabel(key: string): string {
+		const customMapping = getCustomFieldMapping(this.settings.keyMappings, key);
+		if (customMapping) return getCustomFieldLabel(customMapping);
 		if (key === 'note') return t('taskEditor', 'notes');
 		if (key === 'subtasks') return t('taskEditor', 'subtasks');
 		if (key === 'blocking') return t('taskEditor', 'blocking');
@@ -3356,21 +4111,27 @@ export class OperonSettingsTab extends PluginSettingTab {
 		return mapping?.visiblePropertyName?.trim() || key;
 	}
 
-	private getTaskCreatorToolbarFieldIcon(key: TaskCreatorToolbarFieldKey): string {
+	private getTaskCreatorToolbarFieldIcon(key: string): string {
+		const customMapping = getCustomFieldMapping(this.settings.keyMappings, key);
+		if (customMapping) return getCustomFieldIcon(customMapping);
 		const mapping = this.settings.keyMappings.find(candidate => candidate.canonicalKey === key);
-		return mapping?.icon?.trim() || TASK_CREATOR_FALLBACK_FIELD_ICONS[key];
+		return mapping?.icon?.trim() || (TASK_CREATOR_FALLBACK_FIELD_ICONS as Record<string, string>)[key] || 'circle-dot';
 	}
 
-	private getInlineTaskCompactChipLabel(key: InlineTaskCompactChipKey): string {
+	private getInlineTaskCompactChipLabel(key: string): string {
+		const customMapping = getCustomFieldMapping(this.settings.keyMappings, key);
+		if (customMapping) return getCustomFieldLabel(customMapping);
 		if (key === 'tags') return t('settings', 'chipTags');
 		if (key === 'status') return t('settings', 'chipStatus');
 		const mapping = this.settings.keyMappings.find(candidate => candidate.canonicalKey === key);
 		return mapping?.visiblePropertyName?.trim() || key;
 	}
 
-	private getInlineTaskCompactChipIcon(key: InlineTaskCompactChipKey): string {
+	private getInlineTaskCompactChipIcon(key: string): string {
+		const customMapping = getCustomFieldMapping(this.settings.keyMappings, key);
+		if (customMapping) return getCustomFieldIcon(customMapping);
 		const mapping = this.settings.keyMappings.find(candidate => candidate.canonicalKey === key);
-		return mapping?.icon?.trim() || INLINE_TASK_COMPACT_FALLBACK_ICONS[key];
+		return mapping?.icon?.trim() || (INLINE_TASK_COMPACT_FALLBACK_ICONS as Record<string, string>)[key] || 'circle-dot';
 	}
 
 	private getTaskFinderScopeLabel(key: TaskFinderDefaultScopeKey): string {
@@ -3515,7 +4276,18 @@ export class OperonSettingsTab extends PluginSettingTab {
 			fallback: DEFAULT_SETTINGS.contextualMenuMobileTransitionGraceMs,
 			step: '1',
 		});
+		this.renderBoundClampedNumericSetting(mobileSection, t('settings', 'contextualMenuMobileAutoHide'), t('settings', 'contextualMenuMobileAutoHideDesc'), 'contextualMenuMobileAutoHideMs', {
+			min: 1000,
+			max: 30000,
+			fallback: DEFAULT_SETTINGS.contextualMenuMobileAutoHideMs,
+			step: '1000',
+		});
 
+		this.renderContextualMenuActionsSettingsSection(containerEl);
+		this.renderContextualMenuMatrixSettingsSection(containerEl);
+	}
+
+	private renderContextualMenuActionsSettingsSection(containerEl: HTMLElement): void {
 		const actionsSection = renderNativeSettingsGroupedSection(containerEl, t('settings', 'contextualMenuActions'));
 		actionsSection.addClass('operon-settings-add-list-section');
 		actionsSection.addClass('operon-settings-card-list-section');
@@ -3597,7 +4369,9 @@ export class OperonSettingsTab extends PluginSettingTab {
 			}
 		};
 		renderActionList();
+	}
 
+	private renderContextualMenuMatrixSettingsSection(containerEl: HTMLElement): void {
 		const matrixSection = renderNativeSettingsGroupedSection(containerEl, t('settings', 'contextualMenuMatrix'));
 		matrixSection.addClass('operon-settings-add-list-section');
 		const matrixDescription = matrixSection.createEl('p', {
@@ -4615,13 +5389,13 @@ export class OperonSettingsTab extends PluginSettingTab {
 				fieldSelect,
 				t('settings', 'kanbanSortFieldAria', { index: ruleIndex }),
 			);
-			for (const option of KANBAN_SORT_FIELD_OPTIONS) {
-				fieldSelect.add(new Option(this.getKanbanSortFieldLabel(option), option.value));
+			for (const option of this.getKanbanSortFieldOptions()) {
+				fieldSelect.add(new Option(option.label, option.value));
 			}
 			fieldSelect.value = rule.field;
 			fieldSelect.addEventListener('change', settingsAsyncHandler('settings kanban sort field change failed', async () => {
 				await this.updateKanbanPreset(preset.id, current => {
-					current.sortRules[index].field = fieldSelect.value as KanbanSortRule['field'];
+					current.sortRules[index].field = fieldSelect.value;
 				});
 			}));
 
@@ -5351,11 +6125,31 @@ export class OperonSettingsTab extends PluginSettingTab {
 		dropdown.addOption('assignees', this.getKanbanSwimlaneLabel('assignees'));
 		dropdown.addOption('dateDue', this.getKanbanSwimlaneLabel('dateDue'));
 		dropdown.addOption('dateScheduled', this.getKanbanSwimlaneLabel('dateScheduled'));
+		for (const option of getKanbanSwimlaneCustomFieldOptions(this.settings.keyMappings)) {
+			dropdown.addOption(option.field, option.label);
+		}
 	}
 
 	private getKanbanSwimlaneLabel(value: KanbanSwimlaneBy | null): string {
 		if (!value) return t('settings', 'kanbanNoSwimlane');
-		return t('settings', `kanbanSwimlane_${value}`);
+		const customMapping = getManagedCustomFieldOptionMapping(value, this.settings.keyMappings);
+		if (customMapping) return customMapping.visiblePropertyName?.trim() || customMapping.canonicalKey;
+		const key = `kanbanSwimlane_${value}`;
+		const localized = t('settings', key);
+		return localized === key ? value : localized;
+	}
+
+	private getKanbanSortFieldOptions(): Array<{ value: KanbanSortRule['field']; label: string }> {
+		return [
+			...KANBAN_SORT_FIELD_OPTIONS.map(option => ({
+				value: option.value,
+				label: this.getKanbanSortFieldLabel(option),
+			})),
+			...getManagedCustomFieldOptions(this.settings.keyMappings).map(option => ({
+				value: option.field,
+				label: option.label,
+			})),
+		];
 	}
 
 	private getKanbanSortFieldLabel(option: typeof KANBAN_SORT_FIELD_OPTIONS[number]): string {
@@ -5365,14 +6159,8 @@ export class OperonSettingsTab extends PluginSettingTab {
 	}
 
 	private parseKanbanSwimlaneBy(value: string): KanbanSwimlaneBy | null {
-		return value === 'priority'
-			|| value === 'tags'
-			|| value === 'contexts'
-			|| value === 'assignees'
-			|| value === 'dateDue'
-			|| value === 'dateScheduled'
-			? value
-			: null;
+		if (isBuiltInKanbanSwimlaneBy(value)) return value;
+		return normalizeKanbanCustomFieldReference(value);
 	}
 
 	private renderHiddenTimeSetting(container: HTMLElement, preset: CalendarPreset): void {
@@ -5504,7 +6292,8 @@ export class OperonSettingsTab extends PluginSettingTab {
 		renderSettingsInfoBox(containerEl, t('settings', 'priorityTitle'), t('settings', 'priorityDesc'), 'taxonomy.priorities');
 
 		// Priority rows
-		const listEl = containerEl.createDiv();
+		const cardEl = containerEl.createDiv('operon-priority-card');
+		const listEl = cardEl.createDiv();
 		createWorkflowGridHeader({
 			containerEl: listEl,
 			className: 'operon-priority-column-header',
@@ -5528,7 +6317,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 		const refresh = renderRows;
 
 		createWorkflowActionButton({
-			containerEl,
+			containerEl: cardEl,
 			text: t('settings', 'addPriority'),
 			label: t('settings', 'addPriority'),
 			className: 'operon-settings-primary-button operon-settings-spaced-top',
@@ -6439,12 +7228,16 @@ export class OperonSettingsTab extends PluginSettingTab {
 
 	/**
 	 * Render the Key Mappings section (Spec Section 5.4.1).
-	 * Shows all canonical + custom keys with editable visible property names.
+	 * Shows system canonical keys with editable visible property names.
 	 */
 	private renderKeyMappingsSection(containerEl: HTMLElement): void {
-		const refresh = () => { containerEl.empty(); this.renderKeyMappingsSection(containerEl); };
+		const refreshSection = () => {
+			containerEl.empty();
+			this.renderKeyMappingsSection(containerEl);
+		};
 		const keyMappingSection = renderNativeSettingsGroupedSection(containerEl, t('settings', 'keyMappings'));
 		keyMappingSection.addClass('operon-key-mapping-section');
+		keyMappingSection.dataset.operonSettingsSearchId = 'taxonomy.keyMappings';
 
 		const explanationBox = keyMappingSection.createDiv('operon-key-mapping-explanation-box');
 		explanationBox.dataset.operonSettingsSearchId = 'taxonomy.keyMappings';
@@ -6476,41 +7269,171 @@ export class OperonSettingsTab extends PluginSettingTab {
 				const leftIndex = canonicalSortIndex.get(left.canonicalKey) ?? Number.MAX_SAFE_INTEGER;
 				const rightIndex = canonicalSortIndex.get(right.canonicalKey) ?? Number.MAX_SAFE_INTEGER;
 				return leftIndex - rightIndex;
-		});
-		const customMappings = this.settings.keyMappings.filter(m => !m.isSystem);
-		const showCustomKeyControls = false;
+			});
 
 		const systemSection = keyMappingSection.createDiv('operon-key-mapping-list');
 		for (const mapping of systemMappings) {
-			this.renderKeyMappingRow(systemSection, mapping, true);
+			this.renderKeyMappingRow(systemSection, mapping, { refresh: refreshSection });
 		}
+	}
 
-		// --- Custom Keys ---
-		let customSection: HTMLElement | null = null;
-		if (showCustomKeyControls) {
-			customSection = renderNativeSettingsGroupedSection(containerEl, t('settings', 'keyMappingsCustomHeader', { count: String(customMappings.length) }));
-		}
-		if (customSection && customMappings.length > 0) {
+	private renderCustomKeysSection(containerEl: HTMLElement): void {
+		const refreshSection = () => {
+			containerEl.empty();
+			this.renderCustomKeysSection(containerEl);
+		};
+		const customMappings = getManagedCustomFieldMappings(this.settings.keyMappings, { includeCheckbox: true });
+		const customKeysSection = renderNativeSettingsGroupedSection(
+			containerEl,
+			t('settings', 'keyMappingsCustomHeader', { count: String(customMappings.length) }),
+			t('settings', 'customKeysDesc'),
+		);
+		customKeysSection.addClass('operon-key-mapping-section');
+		customKeysSection.addClass('operon-custom-keys-section');
+		customKeysSection.dataset.operonSettingsSearchId = 'taxonomy.customKeys';
+		const customUsageSummaries = buildCustomFieldUsageSummaries({
+			keyMappings: this.settings.keyMappings,
+			filterSets: this.settings.filterSets,
+			kanbanPresets: this.settings.kanbanPresets,
+			tasks: this.indexer?.getAllTasks() ?? null,
+			surfaces: {
+				taskCreatorToolbar: this.settings.taskCreatorToolbar,
+				taskEditorWorkflowPickers: this.settings.taskEditorWorkflowPickers,
+				taskEditorMobileCoreTools: this.settings.taskEditorMobileCoreTools,
+				inlineTaskCompactChips: this.settings.inlineTaskCompactChips,
+				taskFinderCompactChips: this.settings.taskFinderCompactChips,
+				filterTaskCompactChips: this.settings.filterTaskCompactChips,
+				overlayTaskCompactChips: this.settings.overlayTaskCompactChips,
+			},
+		});
+		const usageByCanonical = new Map(customUsageSummaries.map(usage => [usage.canonicalKey, usage] as const));
 
-			for (const mapping of customMappings) {
-				this.renderKeyMappingRow(customSection, mapping, false, refresh);
+		if (customMappings.length > 0) {
+			const customSection = customKeysSection.createDiv('operon-key-mapping-list');
+			for (let index = 0; index < customMappings.length; index += 1) {
+				const mapping = customMappings[index];
+				if (!mapping) continue;
+				this.renderKeyMappingRow(customSection, mapping, {
+					refresh: refreshSection,
+					usage: usageByCanonical.get(mapping.canonicalKey),
+					customIndex: index,
+					customCount: customMappings.length,
+				});
 			}
-		} else if (customSection) {
-			customSection.createEl('p', {
+		} else {
+			customKeysSection.createEl('p', {
 				text: t('settings', 'keyMappingsNoCustom'),
 				cls: 'setting-item-description operon-key-mapping-empty-note',
 			});
 		}
 
-		if (customSection) {
-			createWorkflowActionButton({
-				containerEl: customSection,
-				text: t('settings', 'keyMappingsAddKey'),
-				label: t('settings', 'keyMappingsAddKey'),
-				className: 'operon-settings-primary-button operon-settings-spaced-top',
-				onClick: () => this.addCustomKey(containerEl, refresh),
-			});
-		}
+		const addRowEl = customKeysSection.createDiv('operon-settings-add-row operon-key-mapping-add-row');
+		const addBtn = createSettingsAddButton(addRowEl, t('settings', 'keyMappingsAddCustomField'));
+		addBtn.addEventListener('click', () => {
+			new CustomKeyMappingModal({
+				app: this.app,
+				keyMappings: this.settings.keyMappings,
+				onSave: settingsAsyncHandler('settings custom key mapping create failed', async mapping => {
+					this.settings.keyMappings = [...this.settings.keyMappings, mapping];
+					if (mapping.type !== 'checkbox') {
+						this.setCustomSurfaceMappingVisible(mapping, 'editor', mapping.showInEditor !== false);
+						this.setCustomSurfaceMappingVisible(mapping, 'creator', mapping.showInCreator !== false);
+						this.setCustomSurfaceMappingVisible(mapping, 'chips', mapping.showInChips === true);
+					}
+					await this.saveSettings();
+					refreshSection();
+				}),
+			}).open();
+		});
+	}
+
+	private async confirmDeleteCustomKeyMapping(
+		mapping: KeyMapping,
+		usage: CustomFieldUsageSummary | undefined,
+	): Promise<boolean> {
+		return await new Promise(resolve => {
+			new ConfirmActionModal(this.app, {
+				title: t('settings', 'keyMappingsDeleteCustomFieldTitle', { name: mapping.canonicalKey }),
+				message: t('settings', 'keyMappingsDeleteCustomFieldMessage'),
+				confirmText: t('settings', 'keyMappingsDeleteCustomFieldConfirm'),
+				cancelText: t('buttons', 'cancel'),
+				danger: true,
+				detailsTable: [
+					{ label: t('settings', 'keyMappingsCustomFieldCanonicalLabel'), before: mapping.canonicalKey, after: '' },
+					{ label: t('settings', 'keyMappingsPropertyLabel'), before: mapping.visiblePropertyName, after: '' },
+					...this.buildCustomFieldUsageDetailRows(usage),
+				],
+			}, resolve).open();
+		});
+	}
+
+	private formatCustomFieldUsageSummary(usage: CustomFieldUsageSummary | undefined): string {
+		const tasks = usage?.taskValueCount === null || usage === undefined
+			? t('settings', 'keyMappingsUsageTasksUnavailable')
+			: t('settings', 'keyMappingsUsageTasks', { count: String(usage.taskValueCount) });
+		const filters = this.formatCustomFieldUsageNames(
+			usage?.filterNames ?? [],
+			'keyMappingsUsageFilters',
+			'keyMappingsUsageFiltersNone',
+		);
+		const kanban = this.formatCustomFieldUsageNames(
+			usage?.kanbanPresetNames ?? [],
+			'keyMappingsUsageKanban',
+			'keyMappingsUsageKanbanNone',
+		);
+		return `${t('settings', 'keyMappingsUsageLabel')}: ${tasks} · ${filters} · ${kanban}`;
+	}
+
+	private buildCustomFieldUsageDetailRows(usage: CustomFieldUsageSummary | undefined): Array<{ label: string; before: string; after: string }> {
+		const taskUsage = usage?.taskValueCount === null || usage === undefined
+			? t('settings', 'keyMappingsUsageTasksUnavailable')
+			: t('settings', 'keyMappingsUsageTasks', { count: String(usage.taskValueCount) });
+		return [
+			{ label: t('settings', 'keyMappingsUsageTasksLabel'), before: taskUsage, after: '' },
+			{
+				label: t('settings', 'keyMappingsUsageFiltersLabel'),
+				before: usage?.filterNames.length ? usage.filterNames.join(', ') : t('settings', 'keyMappingsUsageNone'),
+				after: '',
+			},
+			{
+				label: t('settings', 'keyMappingsUsageKanbanLabel'),
+				before: usage?.kanbanPresetNames.length ? usage.kanbanPresetNames.join(', ') : t('settings', 'keyMappingsUsageNone'),
+				after: '',
+			},
+			{
+				label: t('settings', 'keyMappingsUsageSurfacesLabel'),
+				before: this.formatCustomFieldSurfaceNames(usage),
+				after: '',
+			},
+		];
+	}
+
+	private formatCustomFieldUsageNames(
+		names: string[],
+		populatedKey: string,
+		emptyKey: string,
+	): string {
+		if (names.length === 0) return t('settings', emptyKey);
+		return t('settings', populatedKey, {
+			count: String(names.length),
+			names: names.join(', '),
+		});
+	}
+
+	private formatCustomFieldSurfaceNames(usage: CustomFieldUsageSummary | undefined): string {
+		const surfaceNames = (usage?.activeSurfaceKeys ?? []).map(key => {
+			if (key === 'editor') return t('settings', 'keyMappingsUsageSurfaceEditor');
+			if (key === 'creator') return t('settings', 'keyMappingsUsageSurfaceCreator');
+			if (key === 'kanbanSwimlane') return t('settings', 'keyMappingsUsageSurfaceKanbanSwimlane');
+			return t('settings', 'keyMappingsUsageSurfaceChips');
+		});
+		return surfaceNames.length ? surfaceNames.join(', ') : t('settings', 'keyMappingsUsageNone');
+	}
+
+	private async moveCustomKeyMapping(canonicalKey: string, direction: -1 | 1, refresh?: () => void): Promise<void> {
+		this.settings.keyMappings = moveCustomKeyMappingOrder(this.settings.keyMappings, canonicalKey, direction);
+		await this.saveSettings();
+		refresh?.();
 	}
 
 	private async confirmDeletePipeline(pipelineName: string): Promise<boolean> {
@@ -6631,7 +7554,16 @@ export class OperonSettingsTab extends PluginSettingTab {
 	/**
 	 * Render a single key mapping row.
 	 */
-	private renderKeyMappingRow(containerEl: HTMLElement, mapping: KeyMapping, isSystem: boolean, refresh: () => void = () => { }): void {
+	private renderKeyMappingRow(
+		containerEl: HTMLElement,
+		mapping: KeyMapping,
+		options: {
+			refresh?: () => void;
+			usage?: CustomFieldUsageSummary;
+			customIndex?: number;
+			customCount?: number;
+		} = {},
+	): void {
 		const card = containerEl.createDiv('operon-key-mapping-card');
 
 		// ── Row 1: title (left) + Property input (right) ────────────────
@@ -6656,19 +7588,82 @@ export class OperonSettingsTab extends PluginSettingTab {
 		propertyInput.placeholder = mapping.canonicalKey;
 		propertyInput.value = mapping.visiblePropertyName;
 
-		propertyInput.addEventListener('input', settingsAsyncHandler('settings key mapping property change failed', async () => {
+		const validatePropertyInput = (): boolean => {
 			const trimmed = propertyInput.value.trim();
-			if (!trimmed) return;
-			const duplicate = this.settings.keyMappings.find(m => m !== mapping && m.visiblePropertyName === trimmed);
-			propertyInput.toggleClass('is-error', duplicate !== undefined);
-			if (duplicate) return;
+			if (!trimmed) {
+				propertyInput.toggleClass('is-error', true);
+				return false;
+			}
+			const duplicate = hasDuplicateKeyMappingVisiblePropertyName(trimmed, this.settings.keyMappings, mapping);
+			propertyInput.toggleClass('is-error', duplicate);
+			return !duplicate;
+		};
+		const savePropertyInput = settingsAsyncHandler('settings key mapping property change failed', async () => {
+			if (!validatePropertyInput()) return;
+			const trimmed = propertyInput.value.trim();
+			if (trimmed === mapping.visiblePropertyName) return;
 			mapping.visiblePropertyName = trimmed;
 			await this.saveSettings();
-		}));
+		});
+
+		propertyInput.addEventListener('input', validatePropertyInput);
+		propertyInput.addEventListener('change', savePropertyInput);
+		propertyInput.addEventListener('blur', savePropertyInput);
+		propertyInput.addEventListener('keydown', event => {
+			if (event.key !== 'Enter') return;
+			event.preventDefault();
+			propertyInput.blur();
+		});
 
 		if (mapping.canonicalKey === 'operonId') {
 			propertyInput.disabled = true;
 			propertyInput.classList.add('is-disabled');
+		}
+
+		if (mapping.isSystem === false) {
+			const actionsWrap = row1.createDiv('operon-key-mapping-actions');
+			const canMoveUp = typeof options.customIndex === 'number' && options.customIndex > 0;
+			const canMoveDown = typeof options.customIndex === 'number'
+				&& typeof options.customCount === 'number'
+				&& options.customIndex < options.customCount - 1;
+			const upButton = actionsWrap.createEl('button', {
+				cls: 'operon-key-mapping-reorder-button',
+				attr: { type: 'button' },
+			});
+			setIcon(upButton, 'arrow-up');
+			upButton.disabled = !canMoveUp;
+			setAccessibleLabelWithoutTooltip(upButton, t('settings', 'keyMappingsCustomMoveUpAria'));
+			upButton.addEventListener('click', settingsAsyncHandler('settings custom key mapping move up failed', async () => {
+				if (!canMoveUp) return;
+				await this.moveCustomKeyMapping(mapping.canonicalKey, -1, options.refresh);
+			}));
+			const downButton = actionsWrap.createEl('button', {
+				cls: 'operon-key-mapping-reorder-button',
+				attr: { type: 'button' },
+			});
+			setIcon(downButton, 'arrow-down');
+			downButton.disabled = !canMoveDown;
+			setAccessibleLabelWithoutTooltip(downButton, t('settings', 'keyMappingsCustomMoveDownAria'));
+			downButton.addEventListener('click', settingsAsyncHandler('settings custom key mapping move down failed', async () => {
+				if (!canMoveDown) return;
+				await this.moveCustomKeyMapping(mapping.canonicalKey, 1, options.refresh);
+			}));
+
+			const deleteButton = actionsWrap.createEl('button', {
+				cls: 'operon-key-mapping-delete-button',
+				attr: { type: 'button' },
+			});
+			setIcon(deleteButton, 'trash-2');
+			setAccessibleLabelWithoutTooltip(deleteButton, t('settings', 'keyMappingsDeleteCustomFieldAria'));
+			deleteButton.addEventListener('click', settingsAsyncHandler('settings custom key mapping delete failed', async () => {
+				const confirmed = await this.confirmDeleteCustomKeyMapping(mapping, options.usage);
+				if (!confirmed) return;
+				this.settings.keyMappings = this.settings.keyMappings.filter(candidate =>
+					candidate.isSystem !== false || candidate.canonicalKey !== mapping.canonicalKey
+				);
+				await this.saveSettings();
+				options.refresh?.();
+			}));
 		}
 
 		// ── Row 2: icon btn + description (left) + Hide toggle (right) ──
@@ -6714,8 +7709,13 @@ export class OperonSettingsTab extends PluginSettingTab {
 		iconButton.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); openPicker(); });
 		iconButton.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); openPicker(); });
 
-		// Description
-		row2.createDiv({ cls: 'operon-key-mapping-description', text: getKeyMappingDescription(mapping) });
+		// System rows show field help; custom rows show usage stats beside the icon.
+		row2.createDiv({
+			cls: 'operon-key-mapping-description',
+			text: mapping.isSystem === false
+				? this.formatCustomFieldUsageSummary(options.usage)
+				: getKeyMappingDescription(mapping),
+		});
 
 		// Hide toggle (right side, pushed via margin-left: auto in CSS)
 		const hideWrap = row2.createDiv('operon-key-mapping-hide-wrap');
@@ -6733,117 +7733,84 @@ export class OperonSettingsTab extends PluginSettingTab {
 		});
 		setAccessibleLabelWithoutTooltip(hideControlHost, t('settings', 'keyMappingsHideAria'));
 
-		// Delete button — custom keys only, after Hide toggle
-		if (!isSystem) {
-			createWorkflowActionButton({
-				containerEl: hideWrap,
-				icon: 'trash',
-				label: t('settings', 'keyMappingsDeleteCustomKey'),
-				className: 'clickable-icon operon-key-mapping-delete-button',
-				danger: true,
-				errorContext: 'settings key mapping delete failed',
-				onClick: async () => {
-					this.settings.keyMappings = this.settings.keyMappings.filter(m => m !== mapping);
-					await this.saveSettings();
-					refresh();
-				},
-			});
-		}
-	}
-
-	/**
-	 * Add a new custom key via an inline form (replaces broken prompt() calls).
-	 */
-	private addCustomKey(containerEl: HTMLElement, onDone: () => void): void {
-		// If a form is already open, close it
-		const existing = containerEl.querySelector('.operon-add-key-form');
-		if (existing) { existing.remove(); return; }
-
-		const form = containerEl.createDiv('operon-add-key-form');
-
-		const field = (label: string, placeholder: string, defaultVal = '') => {
-			const wrap = form.createDiv();
-			wrap.createEl('label', { text: label, cls: 'setting-item-name operon-add-key-label' });
-			const inp = wrap.createEl('input', { cls: 'operon-add-key-input' });
-			inp.type = 'text';
-			inp.placeholder = placeholder;
-			inp.value = defaultVal;
-			return inp;
-		};
-
-		const canonicalInp = field(
-			t('settings', 'keyMappingsCustomCanonicalLabel'),
-			t('settings', 'keyMappingsCustomCanonicalPlaceholder'),
-		);
-		const visibleInp = field(
-			t('settings', 'keyMappingsCustomVisibleLabel'),
-			t('settings', 'keyMappingsCustomVisiblePlaceholder'),
-		);
-
-		// Type dropdown
-		const typeWrap = form.createDiv();
-		typeWrap.createEl('label', { text: t('settings', 'keyMappingsCustomTypeLabel'), cls: 'setting-item-name operon-add-key-label' });
-		const typeSel = typeWrap.createEl('select', { cls: 'operon-add-key-input' });
-		for (const type of ['text', 'number', 'date', 'datetime', 'list']) {
-			const localizedType = t('settings', `keyMappingsType_${type}`);
-			const opt = typeSel.createEl('option', {
-				text: localizedType === `keyMappingsType_${type}` ? type : localizedType,
-				value: type,
-			});
-			if (type === 'text') opt.selected = true;
-		}
-
-		// Buttons row — spans 2 columns
-		const btnRow = form.createDiv('operon-add-key-button-row');
-
-		const errorEl = btnRow.createSpan('operon-add-key-error');
-
-		createWorkflowActionButton({
-			containerEl: btnRow,
-			text: t('settings', 'keyMappingsAddKey'),
-			label: t('settings', 'keyMappingsAddKey'),
-			className: 'operon-settings-primary-button operon-add-key-save-button',
-			errorContext: 'settings custom key add failed',
-			onClick: async () => {
-				const canonical = canonicalInp.value.trim();
-				const visible = visibleInp.value.trim() || canonical;
-
-				if (!canonical) { errorEl.textContent = t('settings', 'keyMappingsCustomRequiredCanonical'); return; }
-				if (!/^[a-zA-Z][a-zA-Z0-9]*$/.test(canonical)) {
-					errorEl.textContent = t('settings', 'keyMappingsCustomCanonicalFormat'); return;
-				}
-				if (this.settings.keyMappings.some(m => m.canonicalKey === canonical)) {
-					errorEl.textContent = t('settings', 'keyMappingsCustomDuplicateCanonical', { canonical }); return;
-				}
-				if (this.settings.keyMappings.some(m => m.visiblePropertyName === visible)) {
-					errorEl.textContent = t('settings', 'keyMappingsCustomDuplicateVisible', { visible }); return;
-				}
-
-				this.settings.keyMappings.push({
-					canonicalKey: canonical,
-					visiblePropertyName: visible,
-					type: typeSel.value as KeyMapping['type'],
-					sync: 'no',
-					enabled: true,
-					hideInFileTaskView: false,
-					icon: '',
-					isSystem: false,
+		if (mapping.isSystem === false) {
+			const descriptionSetting = new Setting(card)
+				.setName(t('settings', 'keyMappingsCustomFieldDescriptionLabel'))
+				.addTextArea(text => {
+					text.inputEl.addClass('operon-key-mapping-description-input');
+					text.setPlaceholder(t('settings', 'keyMappingsCustomFieldDescriptionPlaceholder'));
+					text.setValue(mapping.description ?? '');
+					text.onChange(settingsAsyncHandler('settings key mapping description change failed', async value => {
+						const trimmed = value.trim();
+						if (trimmed) {
+							mapping.description = trimmed;
+						} else {
+							delete mapping.description;
+						}
+						await this.saveSettings();
+					}));
 				});
-				await this.saveSettings();
-				new Notice(t('settings', 'keyMappingsCustomAdded', { canonical }));
-				form.remove();
-				onDone();
-			},
-		});
+			descriptionSetting.settingEl.addClass('operon-key-mapping-description-setting');
 
-		createWorkflowActionButton({
-			containerEl: btnRow,
-			text: t('buttons', 'cancel'),
-			label: t('buttons', 'cancel'),
-			className: 'operon-add-key-cancel-button',
-			onClick: () => form.remove(),
-		});
-		btnRow.appendChild(errorEl);
+			const surfaceRow = card.createDiv('operon-key-mapping-surface-row');
+			const checkboxUnsupported = mapping.type === 'checkbox';
+			const surfaceControls: Array<{
+				key: 'showInEditor' | 'showInCreator' | 'showInChips' | 'showInKanbanSwimlane';
+				label: string;
+				tooltip: string;
+				value: boolean;
+			}> = [
+				{
+					key: 'showInEditor',
+					label: t('settings', 'keyMappingsShowInEditorLabel'),
+					tooltip: t('settings', 'keyMappingsShowInEditorTooltip'),
+					value: this.isCustomSurfaceMappingVisible(mapping, 'editor'),
+				},
+				{
+					key: 'showInCreator',
+					label: t('settings', 'keyMappingsShowInCreatorLabel'),
+					tooltip: t('settings', 'keyMappingsShowInCreatorTooltip'),
+					value: this.isCustomSurfaceMappingVisible(mapping, 'creator'),
+				},
+				{
+					key: 'showInChips',
+					label: t('settings', 'keyMappingsShowInChipsLabel'),
+					tooltip: t('settings', 'keyMappingsShowInChipsTooltip'),
+					value: this.isCustomSurfaceMappingVisible(mapping, 'chips'),
+				},
+				{
+					key: 'showInKanbanSwimlane',
+					label: t('settings', 'keyMappingsShowInKanbanSwimlaneLabel'),
+					tooltip: t('settings', 'keyMappingsShowInKanbanSwimlaneTooltip'),
+					value: this.isCustomSurfaceMappingVisible(mapping, 'kanbanSwimlane'),
+				},
+			];
+			for (const control of surfaceControls) {
+				const wrap = surfaceRow.createDiv('operon-key-mapping-surface-toggle');
+				applyOperonTooltip(wrap, checkboxUnsupported ? t('settings', 'keyMappingsSurfaceCheckboxUnsupported') : control.tooltip);
+				wrap.createEl('label', {
+					text: control.label,
+					cls: 'operon-key-mapping-control-label',
+				});
+				const host = wrap.createDiv('operon-key-mapping-toggle-host');
+				const toggle = new ToggleComponent(host);
+				toggle.setValue(control.value);
+				toggle.setDisabled(checkboxUnsupported);
+				toggle.onChange(async value => {
+					if (control.key === 'showInEditor') {
+						this.setCustomSurfaceMappingVisible(mapping, 'editor', value);
+					} else if (control.key === 'showInCreator') {
+						this.setCustomSurfaceMappingVisible(mapping, 'creator', value);
+					} else if (control.key === 'showInChips') {
+						this.setCustomSurfaceMappingVisible(mapping, 'chips', value);
+					} else {
+						this.setCustomSurfaceMappingVisible(mapping, 'kanbanSwimlane', value);
+					}
+					await this.saveSettings();
+				});
+				setAccessibleLabelWithoutTooltip(host, control.label);
+			}
+		}
 	}
 
 	/**
@@ -7453,9 +8420,13 @@ export class OperonSettingsTab extends PluginSettingTab {
 			reorderTitle: t('settings', 'filterTaskIconsReorder'),
 			moveUpLabel: t('settings', 'filterTaskIconsMoveUp'),
 			moveDownLabel: t('settings', 'filterTaskIconsMoveDown'),
-			getItems: () => this.settings.filterTaskCompactChips,
+			getItems: () => this.getRenderableSurfaceItems(this.settings.filterTaskCompactChips, 'chips'),
 			setItems: items => {
-				this.settings.filterTaskCompactChips = items;
+				this.settings.filterTaskCompactChips = this.mergeRenderableSurfaceItems(
+					this.settings.filterTaskCompactChips,
+					items,
+					'chips',
+				);
 			},
 			getLabel: key => this.getInlineTaskCompactChipLabel(key),
 			getIcon: key => this.getInlineTaskCompactChipIcon(key),

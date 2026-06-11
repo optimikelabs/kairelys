@@ -4,9 +4,11 @@ import {
 	GroupedFilterSubgroup,
 } from '../core/filter-evaluator';
 import { parseListValue } from '../core/parser';
+import { getManagedCustomFieldMappings, normalizeManagedFieldValue } from '../core/managed-task-fields';
 import { resolveWorkflowStatus, Pipeline } from '../types/pipeline';
 import { matchesTaskSearchQueryText } from './task-search';
 import { IndexedTask } from '../types/fields';
+import { KeyMapping } from '../types/settings';
 
 export interface FilterTreeScopeOptions {
 	getIndexedTask: (id: string) => IndexedTask | undefined;
@@ -47,13 +49,21 @@ export function buildFilterTreeScope(
 	return tasks;
 }
 
-export function applyFilterSearch(tasks: IndexedTask[], query: string): IndexedTask[] {
+export function applyFilterSearch(
+	tasks: IndexedTask[],
+	query: string,
+	keyMappings: readonly KeyMapping[] = [],
+): IndexedTask[] {
 	const normalizedQuery = query.trim().toLocaleLowerCase();
 	if (!normalizedQuery) return tasks;
-	return tasks.filter(task => matchesTaskSearchQueryText(buildDirectTaskSearchText(task), normalizedQuery));
+	return tasks.filter(task => matchesTaskSearchQueryText(buildDirectTaskSearchText(task, keyMappings), normalizedQuery));
 }
 
-export function applyGroupedFilterSearch(grouped: GroupedFilterResults, query: string): GroupedFilterResults {
+export function applyGroupedFilterSearch(
+	grouped: GroupedFilterResults,
+	query: string,
+	keyMappings: readonly KeyMapping[] = [],
+): GroupedFilterResults {
 	const normalizedQuery = query.trim().toLocaleLowerCase();
 	if (!normalizedQuery) return grouped;
 
@@ -62,7 +72,7 @@ export function applyGroupedFilterSearch(grouped: GroupedFilterResults, query: s
 		if (group.subgroups?.length) {
 			const subgroups: GroupedFilterSubgroup[] = group.subgroups
 				.map(subgroup => {
-					const tasks = applyFilterSearch(subgroup.tasks, normalizedQuery);
+					const tasks = applyFilterSearch(subgroup.tasks, normalizedQuery, keyMappings);
 					return {
 						...subgroup,
 						count: tasks.length,
@@ -73,7 +83,7 @@ export function applyGroupedFilterSearch(grouped: GroupedFilterResults, query: s
 
 			if (subgroups.length === 0) continue;
 
-			const tasks = applyFilterSearch(group.tasks, normalizedQuery);
+			const tasks = applyFilterSearch(group.tasks, normalizedQuery, keyMappings);
 			groups.push({
 				...group,
 				count: subgroups.reduce((sum, subgroup) => sum + subgroup.count, 0),
@@ -83,7 +93,7 @@ export function applyGroupedFilterSearch(grouped: GroupedFilterResults, query: s
 			continue;
 		}
 
-		const tasks = applyFilterSearch(group.tasks, normalizedQuery);
+		const tasks = applyFilterSearch(group.tasks, normalizedQuery, keyMappings);
 		if (tasks.length === 0) continue;
 		groups.push({
 			...group,
@@ -98,7 +108,7 @@ export function applyGroupedFilterSearch(grouped: GroupedFilterResults, query: s
 	};
 }
 
-function buildDirectTaskSearchText(task: IndexedTask): string {
+function buildDirectTaskSearchText(task: IndexedTask, keyMappings: readonly KeyMapping[]): string {
 	const values = new Set<string>();
 	const addValue = (value: string | null | undefined): void => {
 		const normalized = (value ?? '').trim();
@@ -119,6 +129,15 @@ function buildDirectTaskSearchText(task: IndexedTask): string {
 	addValues(parseListValue(task.fieldValues['assignees'] ?? ''));
 	for (const fieldKey of ['dateDue', 'dateScheduled', 'dateStarted', 'dateCompleted', 'dateCancelled'] as const) {
 		addValue(task.fieldValues[fieldKey]);
+	}
+	for (const mapping of getManagedCustomFieldMappings(keyMappings)) {
+		const rawValue = normalizeManagedFieldValue((task.fieldValues as Record<string, unknown>)[mapping.canonicalKey]);
+		if (!rawValue) continue;
+		if (mapping.type === 'list') {
+			addValues(parseListValue(rawValue));
+			continue;
+		}
+		addValue(rawValue);
 	}
 
 	return Array.from(values).join('\n');
