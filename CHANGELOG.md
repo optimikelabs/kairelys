@@ -30,7 +30,7 @@ It also tightens the everyday interface surfaces where repeated task work happen
 - Fixed **Task Editor file body** layout issues so file-body panels no longer start clipped or shifted when opened from file tasks or inline tasks.
 
 ### Validation
-- Local validation passed `npm run check:local`, including strict linting, production build, release guard, and 926/926 Phase 5 regression checks.
+- Local validation passed `npm ci`, `npm run check:local`, and `npm audit`, including strict linting, production build, release guard, 926/926 Phase 5 regression checks, and 0 reported vulnerabilities.
 
 ## [1.3.0] - 2026-06-11
 
