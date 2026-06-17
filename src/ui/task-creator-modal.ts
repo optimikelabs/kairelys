@@ -1,6 +1,6 @@
 import { App, KeymapEventHandler, Modal, Notice, Platform, getIcon, setIcon } from 'obsidian';
 import { getConfiguredKeyMappingIcon } from '../core/key-mapping-icons';
-import { resolveSubtaskInitialFieldsFromParentValues } from '../core/subtask-inheritance';
+import { getSubtaskInheritedFieldKeys, resolveSubtaskInitialFieldsFromParentValues } from '../core/subtask-inheritance';
 import { applyTaskFieldPatchToState, splitTaskListValue } from '../core/task-field-patch';
 import { t } from '../core/i18n';
 import { resolveReverseWorkflowFromTerminalDate } from '../types/pipeline';
@@ -42,7 +42,6 @@ import {
 	normalizeInlineCompletionMode,
 } from '../storage/repeat-series-store';
 
-const TASK_CREATOR_INHERITED_FIELD_KEYS = ['status', 'priority', 'taskIcon', 'taskColor'] as const;
 const TASK_CREATOR_NON_FIELD_SUBMIT_KEYS = new Set(['note', 'pinned', 'subtasks', 'tags']);
 const TASK_CREATOR_DAY_PICKER_DATE_KEYS = new Set<string>([
 	'dateStarted',
@@ -84,6 +83,7 @@ export interface TaskCreatorModalOptions {
 	allTasks: IndexedTask[];
 	initialDraft?: TaskCreatorDraft | null;
 	submitMode?: TaskCreatorSubmitMode;
+	initialCreateType?: TaskCreatorCreateType;
 	fileTaskTemplateOptions?: FileTaskTemplateOption[];
 	onFileTemplateSelected?: (template: FileTaskTemplateOption) => void | Promise<void>;
 	getAllRepeatSeriesIds?: () => Set<string>;
@@ -139,8 +139,25 @@ export function normalizeTaskCreatorSubmitMode(mode: TaskCreatorSubmitMode | nul
 	return mode ?? 'both';
 }
 
-export function getInitialTaskCreatorCreateType(mode: TaskCreatorSubmitMode): TaskCreatorCreateType {
-	return mode === 'file-only' ? 'file' : 'inline';
+function isTaskCreatorCreateTypeAllowed(
+	mode: TaskCreatorSubmitMode,
+	createType: TaskCreatorCreateType,
+): boolean {
+	if (mode === 'inline-only') return createType === 'inline';
+	if (mode === 'file-only') return createType === 'file';
+	return true;
+}
+
+export function getInitialTaskCreatorCreateType(
+	mode: TaskCreatorSubmitMode,
+	requestedCreateType?: TaskCreatorCreateType | null,
+	hasFileTemplate = false,
+): TaskCreatorCreateType {
+	if (requestedCreateType && isTaskCreatorCreateTypeAllowed(mode, requestedCreateType)) {
+		return requestedCreateType;
+	}
+	if (mode === 'file-only') return 'file';
+	return mode === 'both' && hasFileTemplate ? 'file' : 'inline';
 }
 
 export function isTaskCreatorTemplateControlEnabled(
@@ -249,7 +266,11 @@ export function reconcileTaskCreatorParentInheritanceForDraft(
 		settings,
 	);
 
-	for (const key of TASK_CREATOR_INHERITED_FIELD_KEYS) {
+	const candidateKeys = new Set([
+		...inheritedApplied,
+		...getSubtaskInheritedFieldKeys(inherited),
+	]);
+	for (const key of candidateKeys) {
 		if (explicit.has(key)) continue;
 		const inheritedValue = (inherited[key] ?? '').trim();
 		if (inheritedValue) {
@@ -314,7 +335,7 @@ export function buildSubtaskTaskCreatorDraft(
 	if (inherited.parentTask) {
 		draft.fieldValues['parentTask'] = inherited.parentTask;
 	}
-	for (const key of TASK_CREATOR_INHERITED_FIELD_KEYS) {
+	for (const key of getSubtaskInheritedFieldKeys(inherited)) {
 		const value = (inherited[key] ?? '').trim();
 		if (!value) continue;
 		draft.fieldValues[key] = value;
@@ -437,9 +458,11 @@ export class TaskCreatorModal extends Modal {
 		this.options = options;
 		this.draft = cloneTaskCreatorDraft(options.initialDraft);
 		this.submitMode = normalizeTaskCreatorSubmitMode(options.submitMode);
-		this.activeCreateType = this.submitMode === 'both' && this.draft.fileTemplateId
-			? 'file'
-			: getInitialTaskCreatorCreateType(this.submitMode);
+		this.activeCreateType = getInitialTaskCreatorCreateType(
+			this.submitMode,
+			options.initialCreateType,
+			!!this.draft.fileTemplateId,
+		);
 	}
 
 	onOpen(): void {

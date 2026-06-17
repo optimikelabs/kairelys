@@ -14,6 +14,7 @@
 import { App, MarkdownPostProcessorContext, Notice, setIcon } from 'obsidian';
 import { OperonIndexer } from '../indexer/indexer';
 import type { IndexedTask } from '../types/fields';
+import type { ProjectSerialDisplay } from '../core/project-serials';
 import { cloneFilterSet, FilterSet, FilterSortSpec, OperonSettings } from '../types/settings';
 import { Pipeline, resolveWorkflowStatus } from '../types/pipeline';
 import { PriorityDefinition } from '../types/priority';
@@ -31,7 +32,7 @@ import { buildFilterTaskRowElement, FilterTaskRowCallbacks } from './filter-task
 import { shouldResolveLocationCompactChips } from './compact-task-layout';
 import { FilterSetModal, type FilterSetModalQuickActions } from './filter-set-modal';
 import { ConfirmActionModal } from './confirm-action-modal';
-import type { ContextualMenuActionId } from '../core/contextual-menu-engine';
+import type { ContextualMenuActionHandler } from '../core/contextual-menu-engine';
 import { bindOperonHoverTooltip } from './operon-hover-tooltip';
 import { applyFilterSearch, buildFilterTreeScope, isFilterSearchActive } from '../systems/filter-search';
 import {
@@ -45,7 +46,7 @@ import { closeFloatingPanelsForRoot } from './field-pickers/common';
 import { closeIconOnlyChipPreviewsForRoot } from './icon-only-chip-preview';
 import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
 import { buildTaskWikilinkOverlaySettingsSignature } from './task-file-overlay-chips';
-import { isDynamicFileTaskFilterSet } from '../core/dynamic-file-task-filter';
+import { isSpecialDynamicFilterSet } from '../core/dynamic-file-task-filter';
 import { getLocationPlaceIndex } from '../core/location-source-resolver';
 
 function generateFilterSetId(): string {
@@ -70,11 +71,13 @@ export interface EmbedFilterDeps {
     updateSubtasks?: (operonId: string, subtaskIds: string[]) => void;
     updateDependencyField?: (operonId: string, field: 'blocking' | 'blockedBy', value: string) => void;
     requestSubtask?: (operonId: string) => void | Promise<void>;
-    onContextualAction?: (taskId: string, actionId: ContextualMenuActionId) => void | Promise<void>;
+    onContextualAction?: ContextualMenuActionHandler;
     pinnedCache?: PinnedCache;
     isTaskTracking?: (taskId: string) => boolean;
     toggleTimer?: (taskId: string) => void | Promise<void>;
     getTrackingSignature?: () => string;
+    getProjectSerialDisplay?: (operonId: string) => ProjectSerialDisplay | null;
+    getProjectSerialSignature?: () => string;
     saveFilterSet?: (filterSet: FilterSet) => Promise<void>;
     openDailyNote?: (dateKey: string) => void | Promise<void>;
     duplicateFilterSet?: (filterSet: FilterSet) => Promise<void>;
@@ -162,12 +165,12 @@ function resolveFilterSet(
 ): FilterSet | null {
     if (ref.filterId) {
         const byId = settings.filterSets.find(fs => fs.id === ref.filterId);
-        if (byId && !isDynamicFileTaskFilterSet(byId)) return byId;
+        if (byId && !isSpecialDynamicFilterSet(byId)) return byId;
     }
 
     if (ref.filterName) {
         return settings.filterSets.find(
-            fs => !isDynamicFileTaskFilterSet(fs) && fs.name.toLowerCase() === ref.filterName!.toLowerCase(),
+            fs => !isSpecialDynamicFilterSet(fs) && fs.name.toLowerCase() === ref.filterName!.toLowerCase(),
         ) ?? null;
     }
 
@@ -271,6 +274,7 @@ export function renderFilterSurface(
         deps.indexer.getGeneration(),
         deps.pinnedCache?.getGeneration() ?? 0,
         deps.getTrackingSignature?.() ?? '',
+        deps.getProjectSerialSignature?.() ?? '',
         filterSet.id,
         instance.searchQuery.trim().toLocaleLowerCase(),
         JSON.stringify(filterSet),
@@ -326,6 +330,7 @@ export function renderFilterSurface(
         isTaskPinned: deps.pinnedCache ? (taskId) => deps.pinnedCache?.isPinned(taskId) === true : undefined,
         isTaskTracking: deps.isTaskTracking,
         toggleTimer: deps.toggleTimer,
+        getProjectSerialDisplay: deps.getProjectSerialDisplay,
     };
     const embedSettings = deps.getSettings();
     const embedShowSubtasks = options.showSubtasks ?? embedSettings.filterShowSubtasks === true;

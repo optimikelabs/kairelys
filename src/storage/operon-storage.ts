@@ -24,6 +24,7 @@ import { TaskUiPreferenceStore, TaskUiPreferenceStoreSettings } from './task-ui-
 import { TaskCreationProfileStore, TaskCreationProfileStoreSettings } from './task-creation-profile-store';
 import { TaskAutomationPolicyStore, TaskAutomationPolicyStoreSettings } from './task-automation-policy-store';
 import { ActiveTrackerStore } from './active-tracker-store';
+import { ProjectSerialStore } from './project-serial-store';
 import { enginePerfNow, WriteJsonMetrics } from '../core/engine-perf';
 import { writeTextSafely, type RecoveredStoreWriteOptions } from './storage-file-ops';
 import {
@@ -174,6 +175,8 @@ function pickTaskCreationProfileStoreSettings(settings: OperonSettings): TaskCre
 		calendarInlineTaskHeading: settings.calendarInlineTaskHeading,
 		autoParentFileTask: settings.autoParentFileTask,
 		autoParentLinkedFileSubtasks: settings.autoParentLinkedFileSubtasks,
+		childTaskInheritanceFields: settings.childTaskInheritanceFields,
+		childTaskInheritanceStatusPipelineSource: settings.childTaskInheritanceStatusPipelineSource,
 		fileTaskTemplateFolder: settings.fileTaskTemplateFolder,
 		createDailyNotesAsOperonTask: settings.createDailyNotesAsOperonTask,
 		defaultEstimateMinutes: settings.defaultEstimateMinutes,
@@ -218,6 +221,7 @@ export class OperonStorage {
 	private taskCreationProfileStore: TaskCreationProfileStore;
 	private taskAutomationPolicyStore: TaskAutomationPolicyStore;
 	private activeTrackerStore: ActiveTrackerStore;
+	private projectSerialStore: ProjectSerialStore;
 	private legacyStorageRetired = false;
 	private latestLegacyStorageCleanupStatus: OperonLegacyStorageCleanupStatus | null = null;
 
@@ -320,6 +324,11 @@ export class OperonStorage {
 			this.storagePaths.state.activeTrackersPath,
 			this.storagePaths.legacy.activeTrackersPath,
 		);
+		this.projectSerialStore = new ProjectSerialStore(
+			app,
+			this.writeQueue,
+			this.storagePaths.state.projectSerialsPath,
+		);
 		this.filterStore.setPackagePersistence(async () => {
 			this.settings.filterSets = this.filterStore.getAll();
 			await this.saveSettings();
@@ -384,6 +393,7 @@ export class OperonStorage {
 		await this.saveSettings({ forceRecoveredWrite: false });
 		await this.activeTrackerStore.load();
 		await this.repeatSeriesStore.load();
+		await this.projectSerialStore.load();
 		await this.externalCalendarCache.load();
 		await this.getLegacyStorageCleanupStatus();
 	}
@@ -731,6 +741,7 @@ export class OperonStorage {
 	get pinned(): PinnedCache { return this.pinnedCache; }
 	get activeTrackers(): ActiveTrackerStore { return this.activeTrackerStore; }
 	get repeatSeries(): RepeatSeriesStore { return this.repeatSeriesStore; }
+	get projectSerials(): ProjectSerialStore { return this.projectSerialStore; }
 	get externalCalendars(): ExternalCalendarCacheStore { return this.externalCalendarCache; }
 	get externalCalendarSources(): ExternalCalendarSourceStore { return this.externalCalendarSourceStore; }
 	get filters(): FilterStore { return this.filterStore; }
@@ -747,6 +758,7 @@ export class OperonStorage {
 			this.pinnedCache.drain(),
 			this.activeTrackerStore.drain(),
 			this.repeatSeriesStore.drain(),
+			this.projectSerialStore.drain(),
 			this.externalCalendarCache.drain(),
 		]);
 		await this.writeQueue.drain();

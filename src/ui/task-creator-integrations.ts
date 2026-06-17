@@ -4,10 +4,8 @@ import { createEmptyTaskCreatorDraft, TaskCreatorDraft } from './task-creator-mo
 import type { CalendarSlotSelection } from '../types/calendar';
 import type { OperonSettings } from '../types/settings';
 import { buildCalendarWritebackPlan } from '../systems/calendar-writeback';
-import { resolveSubtaskInitialFieldsFromParentValues } from '../core/subtask-inheritance';
+import { getSubtaskInheritedFieldKeys, resolveSubtaskInitialFieldsFromParentValues } from '../core/subtask-inheritance';
 import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
-
-const TASK_CREATOR_PARENT_INHERITED_FIELD_KEYS = ['status', 'priority', 'taskIcon', 'taskColor'] as const;
 
 export interface QuickInlineTaskCreationResult {
 	operonId: string;
@@ -98,7 +96,11 @@ export function applyTaskCreatorParentSeedToDraft(
 	);
 
 	draft.fieldValues['parentTask'] = parentTaskId;
-	for (const key of TASK_CREATOR_PARENT_INHERITED_FIELD_KEYS) {
+	const candidateKeys = new Set([
+		...inheritedFieldKeys,
+		...getSubtaskInheritedFieldKeys(inherited),
+	]);
+	for (const key of candidateKeys) {
 		if (explicitFieldKeys.has(key)) continue;
 		const value = (inherited[key] ?? '').trim();
 		if (value) {

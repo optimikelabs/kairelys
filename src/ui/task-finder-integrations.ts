@@ -2,6 +2,7 @@ import { App, Editor, MarkdownView, Notice, TFile } from 'obsidian';
 import { t } from '../core/i18n';
 import { OperonIndexer } from '../indexer/indexer';
 import { IndexedTask } from '../types/fields';
+import type { ProjectSerialDisplay } from '../core/project-serials';
 import { OperonSettings } from '../types/settings';
 import { TaskFinderModal, TaskFinderModalOptions } from './task-finder-modal';
 
@@ -20,6 +21,7 @@ export interface MoveInlineTaskHereDependencies {
 	parseInlineTaskLine: InlineTaskLineParser;
 	withDuplicateConflictAutoOpenSuppressed: <T>(operation: () => Promise<T>) => Promise<T>;
 	refreshViews: () => void;
+	getProjectSerialDisplay?: (operonId: string) => ProjectSerialDisplay | null;
 }
 
 type InlineTaskLineMatch = {
@@ -91,6 +93,7 @@ export async function promptTaskFinderSelection(
 	indexer: OperonIndexer,
 	getSettings: TaskFinderSettingsGetter,
 	initialScope: TaskFinderModalOptions['initialScope'],
+	options: Omit<TaskFinderModalOptions, 'initialScope' | 'onCancel'> = {},
 ): Promise<IndexedTask | null> {
 	return await new Promise(resolve => {
 		openTaskFinder(
@@ -99,6 +102,7 @@ export async function promptTaskFinderSelection(
 			getSettings,
 			(_operonId, task) => resolve(task),
 			{
+				...options,
 				initialScope,
 				onCancel: () => resolve(null),
 			},
@@ -131,6 +135,7 @@ export function openMoveInlineTaskHereFinder(
 		},
 		{
 			initialScope: TASK_FINDER_SCOPE_MOVE_INLINE_TASK,
+			getProjectSerialDisplay: deps.getProjectSerialDisplay,
 		},
 	);
 }

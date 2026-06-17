@@ -34,7 +34,7 @@ import { t } from '../core/i18n';
 import { localToday } from '../core/local-time';
 import { showDatePicker as showSharedDatePicker } from './field-pickers/date-picker';
 import { bindTaskContextualHoverMenu } from './contextual-hover-menu';
-import type { ContextualMenuActionId } from '../core/contextual-menu-engine';
+import type { ContextualMenuActionHandler } from '../core/contextual-menu-engine';
 import { bindOperonHoverTooltip } from './operon-hover-tooltip';
 import { createOwnerElement, getOwnerBody, getOwnerDocument, getOwnerWindow } from '../core/dom-compat';
 
@@ -53,7 +53,7 @@ export interface TaskBarCallbacks {
 	navigateToTask: (task: IndexedTask) => void;
 	getSettings: () => OperonSettings;
 	updateField: (operonId: string, key: string, value: string) => void;
-	onContextualAction?: (taskId: string, actionId: ContextualMenuActionId) => void | Promise<void>;
+	onContextualAction?: ContextualMenuActionHandler;
 	isTaskPinned?: (taskId: string) => boolean;
 }
 
@@ -218,6 +218,7 @@ function renderIconButtonFromIndex(container: HTMLElement, task: IndexedTask, cb
 			getSettings: cbs.getSettings,
 			onAction: cbs.onContextualAction,
 			isPinned: cbs.isTaskPinned ? () => cbs.isTaskPinned?.(task.operonId) === true : undefined,
+			hasSubtasks: () => cbs.getChildIds(task.operonId).length > 0,
 		});
 	}
 	container.appendChild(cb);

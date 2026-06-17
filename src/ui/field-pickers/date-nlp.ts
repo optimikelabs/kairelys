@@ -4,7 +4,7 @@ import { getCommunityPlugin } from '../../core/obsidian-app';
 import { isRecord, isUnknownFunction } from '../../core/unknown-value';
 import { getDatePickerStrings, getQuickDateCandidates, parseFallbackDateCandidates } from './date-nlp-fallback';
 
-export type DatePickerLang = 'en' | 'tr' | 'de' | 'fr';
+export type DatePickerLang = 'en' | 'tr' | 'de' | 'fr' | 'es';
 
 export interface DateParseContext {
 	fieldKey: string;
@@ -41,13 +41,15 @@ export function resolveDatePickerLanguage(language?: string): DatePickerLang {
 	if (language === 'tr') return 'tr';
 	if (language === 'de') return 'de';
 	if (language === 'fr') return 'fr';
+	if (language === 'es') return 'es';
 	if (language === 'en') return 'en';
-	// Date-picker natural-language parsing supports en/tr/de/fr.
+	// Date-picker natural-language parsing supports en/tr/de/fr/es.
 	// Other UI locales fall back to English date phrases.
 	const current = getCurrentLang();
 	if (current === 'tr') return 'tr';
 	if (current === 'de') return 'de';
 	if (current === 'fr') return 'fr';
+	if (current === 'es') return 'es';
 	return 'en';
 }
 
@@ -181,5 +183,6 @@ function datePickerLocale(language: DatePickerLang): string {
 	if (language === 'tr') return 'tr-TR';
 	if (language === 'de') return 'de-DE';
 	if (language === 'fr') return 'fr-FR';
+	if (language === 'es') return 'es-ES';
 	return 'en-US';
 }

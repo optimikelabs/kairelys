@@ -5,6 +5,9 @@ export type ContextualMenuActionId =
 	| 'taskStatus'
 	| 'pinToggle'
 	| 'openEditor'
+	| 'subtasks'
+	| 'createSubtask'
+	| 'checkboxes'
 	| 'startTimer'
 	| 'markDone'
 	| 'cancelTask'
@@ -174,6 +177,7 @@ export interface ContextualMenuContext {
 	task: ContextualTaskActionSource | null;
 	now: string;
 	isPinned?: boolean;
+	hasSubtasks?: boolean;
 	calendarItem?: ContextualMenuCalendarItemSource | null;
 	projectedRef?: ContextualMenuProjectedRef | null;
 }
@@ -182,12 +186,25 @@ export type ContextualMenuActionHandler = (
 	taskId: string,
 	actionId: ContextualMenuActionId,
 	context?: ContextualMenuContext,
+	invocation?: ContextualMenuActionInvocation,
 ) => void | Promise<void>;
+
+export interface ContextualMenuActionInvocation {
+	actionAnchor?: HTMLElement | null;
+	actionAnchorRect?: DOMRect | null;
+}
 
 export interface ContextualMenuExecutionDeps {
 	cycleStatus: (taskId: string) => void | Promise<void>;
 	togglePin: (taskId: string) => void | Promise<void>;
 	openEditor: (taskId: string) => void | Promise<void>;
+	openSubtasks: (taskId: string) => void | Promise<void>;
+	createSubtask: (taskId: string) => void | Promise<void>;
+	openCheckboxes: (
+		taskId: string,
+		actionAnchor?: HTMLElement | null,
+		actionAnchorRect?: DOMRect | null,
+	) => void | Promise<void>;
 	startTimer: (taskId: string) => void | Promise<void>;
 	markDone: (taskId: string) => void | Promise<void>;
 	cancelTask: (taskId: string) => void | Promise<void>;
@@ -220,6 +237,27 @@ export const CONTEXTUAL_MENU_ACTIONS: ContextualMenuActionDefinition[] = [
 		compactLabel: 'Ed',
 		descriptionKey: 'contextualMenuActionOpenEditorDesc',
 		icon: 'square-pen',
+	},
+	{
+		id: 'subtasks',
+		labelKey: 'contextualMenuActionSubtasks',
+		compactLabel: 'Sub',
+		descriptionKey: 'contextualMenuActionSubtasksDesc',
+		icon: 'list-tree',
+	},
+	{
+		id: 'createSubtask',
+		labelKey: 'contextualMenuActionCreateSubtask',
+		compactLabel: 'Sb',
+		descriptionKey: 'contextualMenuActionCreateSubtaskDesc',
+		icon: 'list-plus',
+	},
+	{
+		id: 'checkboxes',
+		labelKey: 'contextualMenuActionCheckboxes',
+		compactLabel: 'Cb',
+		descriptionKey: 'contextualMenuActionCheckboxesDesc',
+		icon: 'layout-list',
 	},
 	{
 		id: 'startTimer',
@@ -286,6 +324,9 @@ const DUE_MARKER_ALLOWED_ACTIONS = new Set<ContextualMenuActionId>([
 	'taskStatus',
 	'pinToggle',
 	'openEditor',
+	'subtasks',
+	'createSubtask',
+	'checkboxes',
 	'startTimer',
 	'markDone',
 	'cancelTask',
@@ -344,6 +385,7 @@ export async function executeContextualMenuAction(
 	context: ContextualMenuContext,
 	actionId: ContextualMenuActionId,
 	deps: ContextualMenuExecutionDeps,
+	invocation?: ContextualMenuActionInvocation,
 ): Promise<void> {
 	if (actionId === 'skipThisOccurrence') {
 		if (context.projectedRef) {
@@ -366,6 +408,18 @@ export async function executeContextualMenuAction(
 			return;
 		case 'openEditor':
 			await deps.openEditor(context.taskId);
+			return;
+		case 'subtasks':
+			if (context.task?.checkbox !== 'open' || context.hasSubtasks !== true) return;
+			await deps.openSubtasks(context.taskId);
+			return;
+		case 'createSubtask':
+			if (context.task?.checkbox !== 'open') return;
+			await deps.createSubtask(context.taskId);
+			return;
+		case 'checkboxes':
+			if (context.task?.checkbox !== 'open') return;
+			await deps.openCheckboxes(context.taskId, invocation?.actionAnchor, invocation?.actionAnchorRect);
 			return;
 		case 'startTimer':
 			if (context.task?.checkbox !== 'open') return;
@@ -463,8 +517,18 @@ function isContextualMenuActionAvailable(
 ): boolean {
 	const task = context.task;
 
-	if ((actionId === 'markDone' || actionId === 'startTimer' || actionId === 'cancelTask') && task?.checkbox !== 'open') {
+	if (
+		(actionId === 'markDone'
+			|| actionId === 'startTimer'
+			|| actionId === 'cancelTask'
+			|| actionId === 'createSubtask'
+			|| actionId === 'checkboxes')
+		&& task?.checkbox !== 'open'
+	) {
 		return false;
+	}
+	if (actionId === 'subtasks') {
+		return task?.checkbox === 'open' && context.hasSubtasks === true;
 	}
 	if (actionId === 'unschedule') {
 		return hasSchedule(context);

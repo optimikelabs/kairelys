@@ -18,13 +18,15 @@ import {
 import { bindOperonHoverTooltip, createOperonHoverIndicator, wrapWithOperonHoverTooltip } from './operon-hover-tooltip';
 import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
 import { bindTaskContextualHoverMenu } from './contextual-hover-menu';
-import type { ContextualMenuActionId } from '../core/contextual-menu-engine';
+import type { ContextualMenuActionHandler } from '../core/contextual-menu-engine';
 import { getConfiguredKeyMappingIcon } from '../core/key-mapping-icons';
 import { getLocationPlaceIndex } from '../core/location-source-resolver';
 import { openObsidianTagSearch } from './tag-search';
 import { bindCompactChipLinkPreview } from './compact-chip-link-preview';
 import { bindExternalLinkContextMenu, openExternalUrl } from './external-link-actions';
 import { showLocationMapPreview } from './location-map-preview';
+import type { ProjectSerialDisplay } from '../core/project-serials';
+import { createProjectSerialChipElement } from './project-serial-chip';
 import {
 	bindAdaptiveIconOnlyExpansion,
 	bindIconOnlyChipPreview,
@@ -54,7 +56,7 @@ export interface ReadingTaskRowCallbacks {
 	cycleStatus: (operonId: string) => void | Promise<void>;
 	navigateToTask: (task: IndexedTask) => void;
 	updateField: (operonId: string, key: string, value: string) => void | Promise<void>;
-	onContextualAction?: (taskId: string, actionId: ContextualMenuActionId) => void | Promise<void>;
+	onContextualAction?: ContextualMenuActionHandler;
 	isTaskPinned?: (taskId: string) => boolean;
 	isTaskTracking?: (taskId: string) => boolean;
 	toggleTimer?: (taskId: string) => void | Promise<void>;
@@ -64,6 +66,7 @@ export interface ReadingTaskRowCallbacks {
 	updateDependencyField?: (operonId: string, field: 'blocking' | 'blockedBy', value: string) => void;
 	getRepeatSeriesInlineCompletionMode?: (repeatSeriesId: string) => InlineRepeatCompletionMode;
 	updateRepeatSeriesInlineCompletionMode?: (operonId: string, mode: InlineRepeatCompletionMode) => void | Promise<void>;
+	getProjectSerialDisplay?: (operonId: string) => ProjectSerialDisplay | null;
 }
 
 const READING_DIRECT_CHIP_DAY_PICKER_DATE_KEYS = new Set<string>([
@@ -97,6 +100,7 @@ function getMobileStableLocationPreviewAnchor(anchor: HTMLElement): HTMLElement 
 export interface ReadingTaskRowOptions {
 	owner?: Node | null;
 	chipItems?: InlineTaskCompactChipItem[];
+	projectSerialPlacement?: 'head' | 'tail';
 	showPlayAction?: boolean;
 	showPinAction?: boolean;
 	showSubtaskAction?: boolean;
@@ -155,9 +159,19 @@ export function buildReadingTaskRowElement(
 			getSettings: callbacks.getSettings,
 			onAction: callbacks.onContextualAction,
 			isPinned: callbacks.isTaskPinned ? () => callbacks.isTaskPinned?.(task.operonId) === true : undefined,
+			hasSubtasks: callbacks.getDescendantTaskSummary
+				? () => callbacks.getDescendantTaskSummary?.(task.operonId).hasDescendants === true
+				: undefined,
 		});
 	}
 	head.appendChild(iconButton);
+	const projectSerialDisplay = callbacks.getProjectSerialDisplay?.(task.operonId) ?? null;
+	const projectSerialPlacement = options?.projectSerialPlacement ?? 'head';
+	if (projectSerialDisplay && projectSerialPlacement === 'head') {
+		head.appendChild(createProjectSerialChipElement(projectSerialDisplay, 'operon-reading-task-chip operon-task-chip', {
+			keyMappings: callbacks.getSettings().keyMappings,
+		}));
+	}
 
 	const description = el('div', 'operon-reading-task-description operon-task-description', row);
 	description.setAttribute('role', 'button');
@@ -196,6 +210,12 @@ export function buildReadingTaskRowElement(
 		taskColor,
 		isTerminal,
 	});
+
+	if (projectSerialDisplay && projectSerialPlacement === 'tail') {
+		tail.appendChild(createProjectSerialChipElement(projectSerialDisplay, 'operon-reading-task-chip operon-task-chip', {
+			keyMappings: callbacks.getSettings().keyMappings,
+		}));
+	}
 
 	const settings = callbacks.getSettings();
 	const locationResolver = shouldResolveLocationCompactChips(settings, options?.chipItems)

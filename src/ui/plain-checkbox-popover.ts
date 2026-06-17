@@ -1,6 +1,6 @@
 import { App, Notice, Platform, setIcon, setTooltip, TFile } from 'obsidian';
 import { asyncHandler, runAsyncAction } from '../core/async-action';
-import { getOwnerWindow } from '../core/dom-compat';
+import { asHTMLElement, getActiveDocument, getOwnerWindow } from '../core/dom-compat';
 import { t } from '../core/i18n';
 import {
 	applyPlainCheckboxDraftContent,
@@ -28,6 +28,8 @@ export interface PlainCheckboxPopoverOptions {
 	keyMappings: KeyMapping[];
 	taskColor?: string | null;
 	seedEmptyDraft?: boolean;
+	centerOnDesktop?: boolean;
+	onDispose?: () => void;
 }
 
 interface PlainCheckboxDragState {
@@ -100,11 +102,12 @@ export function bindPlainCheckboxPopoverTrigger(
 }
 
 export async function showPlainCheckboxPopover(
-	anchor: HTMLElement,
+	anchor: HTMLElement | DOMRect,
 	options: PlainCheckboxPopoverOptions,
 ): Promise<void> {
 	const file = resolveTaskFile(options.app, options.task);
 	if (!file) {
+		options.onDispose?.();
 		new Notice(t('notifications', 'plainCheckboxEditorFileMissing'));
 		return;
 	}
@@ -112,9 +115,12 @@ export async function showPlainCheckboxPopover(
 	const scope = resolvePlainCheckboxScope(options.task);
 	const sessionKey = resolvePlainCheckboxPopoverSessionKey(file, scope);
 	const existingSession = activePlainCheckboxPopovers.get(sessionKey);
+	const anchorEl = asHTMLElement(anchor);
+	const anchorDocument = anchorEl?.ownerDocument ?? getActiveDocument();
 	if (existingSession) {
-		if (isPlainCheckboxPopoverSessionConnected(existingSession, anchor.ownerDocument)) {
+		if (isPlainCheckboxPopoverSessionConnected(existingSession, anchorDocument)) {
 			existingSession.bringToFront();
+			options.onDispose?.();
 			return;
 		}
 		activePlainCheckboxPopovers.delete(sessionKey);
@@ -124,6 +130,7 @@ export async function showPlainCheckboxPopover(
 	try {
 		initialDraftState = await createPlainCheckboxDraftState(options, file, scope);
 	} catch {
+		options.onDispose?.();
 		new Notice(t('notifications', 'plainCheckboxEditorLoadFailed'));
 		return;
 	}
@@ -143,11 +150,12 @@ export async function showPlainCheckboxPopover(
 		requestClose();
 		return false;
 	};
-	const anchorRect = anchor.getBoundingClientRect();
+	const anchorRect: DOMRect = anchorEl?.getBoundingClientRect() ?? anchor as DOMRect;
 	const { panel, close } = createFloatingPanel(
 		anchorRect,
 		`operon-floating-panel ${PLAIN_CHECKBOX_POPOVER_PANEL_CLASS}`,
 		() => {
+			options.onDispose?.();
 			editorSurface?.destroy();
 			editorSurface = null;
 			const activeSession = activePlainCheckboxPopovers.get(sessionKey);
@@ -281,7 +289,7 @@ export async function showPlainCheckboxPopover(
 		&& initialDraftState.items[0]?.sourceLineNumber === null
 		&& initialDraftState.items[0]?.text === '';
 	renderDraft();
-	schedulePlainCheckboxPhoneInitialPlacement(panel);
+	schedulePlainCheckboxInitialPlacement(panel, anchorRect, Boolean(options.centerOnDesktop));
 	if (shouldFocusInitialDraft) {
 		getOwnerWindow(panel).requestAnimationFrame(() => editorSurface?.focusEnd());
 	}
@@ -942,17 +950,47 @@ interface PlainCheckboxPopoverViewport {
 	marginY: number;
 }
 
-function schedulePlainCheckboxPhoneInitialPlacement(panel: HTMLElement): void {
-	if (!isPhonePlainCheckboxPopover(panel)) return;
+function schedulePlainCheckboxInitialPlacement(panel: HTMLElement, anchorRect: DOMRect, centerOnDesktop: boolean): void {
 	const ownerWindow = getOwnerWindow(panel);
-	ownerWindow.requestAnimationFrame(() => {
+	const position = (): void => {
 		if (!panel.isConnected) return;
-		positionPlainCheckboxPhoneInitialPanel(panel);
-		ownerWindow.requestAnimationFrame(() => {
-			if (!panel.isConnected) return;
+		if (isPhonePlainCheckboxPopover(panel)) {
 			positionPlainCheckboxPhoneInitialPanel(panel);
+			return;
+		}
+		positionPlainCheckboxAnchoredPanel(panel, anchorRect, centerOnDesktop);
+	};
+	ownerWindow.requestAnimationFrame(() => {
+		position();
+		ownerWindow.requestAnimationFrame(() => {
+			position();
 		});
 	});
+}
+
+function positionPlainCheckboxAnchoredPanel(panel: HTMLElement, anchorRect: DOMRect, centerOnDesktop: boolean): void {
+	const viewport = getPlainCheckboxPopoverViewport(panel);
+	const rect = panel.getBoundingClientRect();
+	const width = rect.width || Math.min(520, viewport.width * 0.92);
+	const height = rect.height || Math.min(430, viewport.height * 0.82);
+	const hasUsableAnchor = Number.isFinite(anchorRect.left)
+		&& Number.isFinite(anchorRect.top)
+		&& Number.isFinite(anchorRect.bottom)
+		&& (anchorRect.width > 0 || anchorRect.height > 0)
+		&& (anchorRect.left !== 0 || anchorRect.top !== 0 || anchorRect.bottom !== 0);
+
+	let targetLeft = viewport.left + (viewport.width - width) / 2;
+	let targetTop = viewport.top + (viewport.height - height) / 2;
+	if (!centerOnDesktop && hasUsableAnchor) {
+		targetLeft = anchorRect.left;
+		targetTop = anchorRect.bottom + 6;
+		const maxTop = viewport.top + viewport.height - viewport.marginY - height;
+		if (targetTop > maxTop && anchorRect.top - height - 6 >= viewport.top + viewport.marginY) {
+			targetTop = anchorRect.top - height - 6;
+		}
+	}
+
+	setPlainCheckboxPopoverPosition(panel, width, height, targetLeft, targetTop, viewport);
 }
 
 function positionPlainCheckboxPhoneInitialPanel(panel: HTMLElement): void {

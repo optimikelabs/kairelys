@@ -1,5 +1,9 @@
 import { App } from 'obsidian';
-import { normalizeInlineTaskParentFileHeadingKeyword, type OperonSettings } from '../types/settings';
+import {
+	normalizeChildTaskInheritanceStatusPipelineSource,
+	normalizeInlineTaskParentFileHeadingKeyword,
+	type OperonSettings,
+} from '../types/settings';
 import { WriteQueue } from './write-queue';
 import { preserveInvalidJsonFile, shouldSkipStoreWrite, writeJsonSafely, type RecoveredStoreWriteOptions } from './storage-file-ops';
 
@@ -26,6 +30,8 @@ export type TaskCreationProfileStoreSettings = Pick<
 	| 'calendarInlineTaskHeading'
 	| 'autoParentFileTask'
 	| 'autoParentLinkedFileSubtasks'
+	| 'childTaskInheritanceFields'
+	| 'childTaskInheritanceStatusPipelineSource'
 	| 'fileTaskTemplateFolder'
 	| 'createDailyNotesAsOperonTask'
 	| 'defaultEstimateMinutes'
@@ -36,7 +42,10 @@ interface TaskCreationProfileStoreData extends TaskCreationProfileStoreSettings 
 }
 
 function cloneSettings(settings: TaskCreationProfileStoreSettings): TaskCreationProfileStoreSettings {
-	return { ...settings };
+	return {
+		...settings,
+		childTaskInheritanceFields: [...settings.childTaskInheritanceFields],
+	};
 }
 
 function readBoolean(value: unknown, fallback: boolean): boolean {
@@ -45,6 +54,20 @@ function readBoolean(value: unknown, fallback: boolean): boolean {
 
 function readString(value: unknown, fallback: string): string {
 	return typeof value === 'string' ? value : fallback;
+}
+
+function readStringArray(value: unknown, fallback: string[]): string[] {
+	if (!Array.isArray(value)) return [...fallback];
+	const seen = new Set<string>();
+	const values: string[] = [];
+	for (const item of value) {
+		if (typeof item !== 'string') continue;
+		const normalized = item.trim();
+		if (!normalized || seen.has(normalized)) continue;
+		seen.add(normalized);
+		values.push(normalized);
+	}
+	return values;
 }
 
 function readNumber(value: unknown, fallback: number): number {
@@ -132,6 +155,14 @@ function readStoreData(
 		calendarInlineTaskHeading: readString(raw.calendarInlineTaskHeading, fallback.calendarInlineTaskHeading),
 		autoParentFileTask: readBoolean(raw.autoParentFileTask, fallback.autoParentFileTask),
 		autoParentLinkedFileSubtasks: readBoolean(raw.autoParentLinkedFileSubtasks, fallback.autoParentLinkedFileSubtasks),
+		childTaskInheritanceFields: readStringArray(
+			raw.childTaskInheritanceFields,
+			fallback.childTaskInheritanceFields,
+		),
+		childTaskInheritanceStatusPipelineSource: normalizeChildTaskInheritanceStatusPipelineSource(
+			raw.childTaskInheritanceStatusPipelineSource,
+			fallback.childTaskInheritanceStatusPipelineSource,
+		),
 		fileTaskTemplateFolder: readString(raw.fileTaskTemplateFolder, fallback.fileTaskTemplateFolder),
 		createDailyNotesAsOperonTask: readBoolean(raw.createDailyNotesAsOperonTask, fallback.createDailyNotesAsOperonTask),
 		defaultEstimateMinutes: readNumber(raw.defaultEstimateMinutes, fallback.defaultEstimateMinutes),

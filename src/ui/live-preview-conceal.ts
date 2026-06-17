@@ -30,13 +30,15 @@ import {
 import { bindOperonHoverTooltip, createOperonHoverIndicator, wrapWithOperonHoverTooltip } from './operon-hover-tooltip';
 import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
 import { bindTaskContextualHoverMenu } from './contextual-hover-menu';
-import type { ContextualMenuActionId } from '../core/contextual-menu-engine';
+import type { ContextualMenuActionHandler } from '../core/contextual-menu-engine';
+import type { ProjectSerialDisplay } from '../core/project-serials';
 import { getConfiguredKeyMappingIcon } from '../core/key-mapping-icons';
 import { getLocationPlaceIndex } from '../core/location-source-resolver';
 import { openObsidianTagSearch } from './tag-search';
 import { bindCompactChipLinkPreview } from './compact-chip-link-preview';
 import { bindExternalLinkContextMenu, openExternalUrl } from './external-link-actions';
 import { showLocationMapPreview } from './location-map-preview';
+import { createProjectSerialChipElement } from './project-serial-chip';
 import {
 	bindAdaptiveIconOnlyExpansion,
 	bindIconOnlyChipPreview,
@@ -65,8 +67,9 @@ export interface LivePreviewCallbacks {
 	getPriorities: () => PriorityDefinition[];
 	getSettings: () => OperonSettings;
 	updateField: (operonId: string, key: string, value: string, restoreCursor?: LivePreviewCursorRestoreRequest) => void | Promise<void>;
-	onContextualAction?: (taskId: string, actionId: ContextualMenuActionId) => void | Promise<void>;
+	onContextualAction?: ContextualMenuActionHandler;
 	isTaskPinned?: (taskId: string) => boolean;
+	hasSubtasks?: (taskId: string) => boolean;
 	isTaskTracking?: (taskId: string) => boolean;
 	toggleTimer?: (taskId: string) => void | Promise<void>;
 	requestSubtask?: (operonId: string) => void | Promise<void>;
@@ -75,6 +78,7 @@ export interface LivePreviewCallbacks {
 	updateDependencyField?: (operonId: string, field: 'blocking' | 'blockedBy', value: string) => void;
 	getRepeatSeriesInlineCompletionMode?: (repeatSeriesId: string) => InlineRepeatCompletionMode;
 	updateRepeatSeriesInlineCompletionMode?: (operonId: string, mode: InlineRepeatCompletionMode) => void | Promise<void>;
+	getProjectSerialDisplay?: (operonId: string) => ProjectSerialDisplay | null;
 }
 
 export interface LivePreviewCursorRestoreRequest {
@@ -201,6 +205,7 @@ class TaskIconWidget extends WidgetType {
 				getSettings: this.callbacks.getSettings,
 				onAction: this.callbacks.onContextualAction,
 				isPinned: this.callbacks.isTaskPinned ? () => this.callbacks.isTaskPinned?.(this.task.operonId!) === true : undefined,
+				hasSubtasks: this.callbacks.hasSubtasks ? () => this.callbacks.hasSubtasks?.(this.task.operonId!) === true : undefined,
 			});
 		}
 
@@ -292,6 +297,13 @@ class MetadataTailWidget extends WidgetType {
 		}
 
 		const settings = this.callbacks.getSettings();
+		const projectSerialDisplay = operonId ? this.callbacks.getProjectSerialDisplay?.(operonId) ?? null : null;
+		if (projectSerialDisplay) {
+			row.appendChild(createProjectSerialChipElement(projectSerialDisplay, 'operon-task-chip', {
+				keyMappings: settings.keyMappings,
+				owner: row,
+			}));
+		}
 		const locationResolver = shouldResolveLocationCompactChips(settings)
 			? getLocationPlaceIndex(this.callbacks.app, settings).resolve
 			: undefined;
@@ -747,6 +759,7 @@ export function buildMetadataTailRenderSignature(
 	const tags = indexedTask?.tags ?? task.tags;
 	const settings = callbacks.getSettings();
 	const tasks = callbacks.getAllTasks();
+	const projectSerialDisplay = task.operonId ? callbacks.getProjectSerialDisplay?.(task.operonId) ?? null : null;
 	const locationIndex = shouldResolveLocationCompactChips(settings)
 		? getLocationPlaceIndex(callbacks.app, settings)
 		: null;
@@ -776,6 +789,11 @@ export function buildMetadataTailRenderSignature(
 		fieldValues,
 		tags,
 		entries,
+		projectSerial: projectSerialDisplay ? {
+			scopeId: projectSerialDisplay.scopeId,
+			label: projectSerialDisplay.label,
+			number: projectSerialDisplay.number,
+		} : null,
 		hiddenCount: getInlineTaskCompactHiddenCount(fieldValues, tags, settings, tasks),
 		locationIndexSignature: locationIndex?.getSignature() ?? '',
 		pinnedSnapshot,

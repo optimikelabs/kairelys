@@ -10,6 +10,7 @@ import { OperonIndexer } from '../indexer/indexer';
 import { PinnedCache } from '../storage/pinned-cache';
 
 import { IndexedTask, ParsedTask, OperonField } from '../types/fields';
+import type { ProjectSerialDisplay } from '../core/project-serials';
 import { CANONICAL_KEY_MAP } from '../types/keys';
 import { OperonSettings } from '../types/settings';
 import { generateOperonId, generateRepeatSeriesId } from '../core/id-generator';
@@ -82,6 +83,7 @@ import { getConfiguredKeyMappingIcon } from '../core/key-mapping-icons';
 import { resolveTaskEditorProgressFromStats } from '../core/task-stats-read-model';
 import { resolveSubtaskActionIconForKind, resolveSubtaskActionLabelKeyForKind } from '../core/subtask-action';
 import { createInlineTaskCompactChipElement, InlineTaskCompactChipEntry } from './compact-task-layout';
+import { createProjectSerialChipElement } from './project-serial-chip';
 import { INLINE_TASK_COMPACT_FALLBACK_ICONS, InlineTaskCompactChipKey, KeyMapping, TASK_CREATOR_FALLBACK_FIELD_ICONS, TaskEditorWorkflowPickerItem } from '../types/settings';
 import { openTaskFieldPicker } from './task-field-picker-dispatch';
 import { showPlainCheckboxPopover } from './plain-checkbox-popover';
@@ -145,6 +147,7 @@ export interface TaskEditorContentOptions {
 	onApplyEstimateReallocation?: (request: TaskEditorEstimateReallocationRequest) => Promise<boolean>;
 	pinnedCache?: PinnedCache;
 	fileBody?: TaskEditorFileBodyContext | null;
+	getProjectSerialDisplay?: (operonId: string) => ProjectSerialDisplay | null;
 }
 
 export interface TaskEditorFileBodyContext {
@@ -297,6 +300,7 @@ export class TaskEditorContent {
 	private onUpdateRepeatSkips: ((request: TaskEditorRepeatSkipUpdateRequest) => Promise<TaskEditorRepeatSkipUpdateResult> | TaskEditorRepeatSkipUpdateResult) | null = null;
 	private onApplyEstimateReallocation: ((request: TaskEditorEstimateReallocationRequest) => Promise<boolean>) | null = null;
 	private pinnedCache: PinnedCache | null = null;
+	private getProjectSerialDisplay: ((operonId: string) => ProjectSerialDisplay | null) | null = null;
 	private taskOperonId: string | null = null;
 	private pinnedCacheUnsubscribe: (() => void) | null = null;
 	private trackerUnsubscribe: (() => void) | null = null;
@@ -395,6 +399,7 @@ export class TaskEditorContent {
 		this.onUpdateRepeatSkips = options.onUpdateRepeatSkips ?? null;
 		this.onApplyEstimateReallocation = options.onApplyEstimateReallocation ?? null;
 		this.pinnedCache = options.pinnedCache ?? null;
+		this.getProjectSerialDisplay = options.getProjectSerialDisplay ?? null;
 		this.fileBodyContext = options.fileBody ?? null;
 		this.fileBodyDraft = options.fileBody?.initialContent ?? '';
 		this.persistedFileBodyDraft = this.fileBodyDraft;
@@ -840,6 +845,7 @@ export class TaskEditorContent {
 			cls: 'operon-task-editor-title',
 		});
 		const titleRight = titleRow.createDiv('operon-task-editor-title-side is-right');
+		this.renderProjectSerialTitleChip(titleRight);
 		this.renderCopyOperonIdButton(titleRight);
 
 		this.renderTopContextSection(container);
@@ -857,6 +863,18 @@ export class TaskEditorContent {
 
 		// Actions bar
 		this.renderActions(container);
+	}
+
+	private renderProjectSerialTitleChip(container: HTMLElement): void {
+		const operonId = this.taskOperonId?.trim();
+		if (!operonId) return;
+		const display = this.getProjectSerialDisplay?.(operonId) ?? null;
+		if (!display) return;
+		container.appendChild(createProjectSerialChipElement(
+			display,
+			'operon-task-editor-project-serial-chip operon-task-chip',
+			{ keyMappings: this.settings.keyMappings, owner: container },
+		));
 	}
 
 	private renderMobileTaskEditorBody(container: HTMLElement): void {

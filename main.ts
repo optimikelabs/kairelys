@@ -10,6 +10,7 @@ import { Editor, EditorPosition, EditorSelection, MarkdownRenderer, MarkdownRend
 import { EditorView } from '@codemirror/view';
 import { OperonStorage } from './src/storage/operon-storage';
 import { OperonIndexer, type IndexedTaskDelta } from './src/indexer/indexer';
+import type { ProjectSerialDisplay } from './src/core/project-serials';
 import { scanFileWithMappings } from './src/indexer/file-scanner';
 import { TaskWriter } from './src/core/task-writer';
 import { registerObsidianIconFallbacks } from './src/core/obsidian-icon-fallbacks';
@@ -60,6 +61,7 @@ import {
 	buildTaskCreatorSubmitFieldSeed,
 	cloneTaskCreatorDraft,
 	isTaskCreatorFieldExplicitlyCleared,
+	type TaskCreatorCreateType,
 } from './src/ui/task-creator-modal';
 import {
 	applyTaskCreatorParentSeedToDraft,
@@ -122,6 +124,7 @@ import {
 	getOwnerWindow,
 	setWindowTimeout,
 } from './src/core/dom-compat';
+import { resolveTaskColorSourceForTask } from './src/core/task-color-source';
 import { asyncHandler, runAsyncAction } from './src/core/async-action';
 import { getAppLocale, getCommunityPlugin, isDailyNotesCoreAvailable } from './src/core/obsidian-app';
 import { InlineTaskSaveMode, resolveEffectiveInlineTaskSaveMode } from './src/core/inline-task-save-mode';
@@ -142,6 +145,7 @@ import {
 } from './src/ui/live-preview-ephemeral-session';
 import { invalidateCustomFieldValueCandidateCache } from './src/ui/custom-field-surfaces';
 import { openTaskFieldPicker } from './src/ui/task-field-picker-dispatch';
+import { showPlainCheckboxPopover } from './src/ui/plain-checkbox-popover';
 import type { ManualDatePickerOptions } from './src/ui/field-pickers/date-picker';
 import { applyFileTaskPropertyVisibility } from './src/ui/file-task-property-visibility';
 import { PinnedTasksDock } from './src/ui/pinned-tasks-dock';
@@ -162,6 +166,7 @@ import {
 	operonDynamicFileTaskFilterLivePreviewExtension,
 	renderDynamicFileTaskFilterSurface,
 } from './src/ui/dynamic-file-task-filter';
+import { SubtasksFilterModal } from './src/ui/subtasks-filter-modal';
 import { FilterSetModal, refreshFilterPreviewModals, refreshFilterSetModals, type FilterModalEvalDeps } from './src/ui/filter-set-modal';
 import { OperonReleaseNotesModal } from './src/ui/release-notes-modal';
 import { OperonSettingsTab } from './src/ui/settings-tab';
@@ -189,7 +194,14 @@ import {
 import { generateOperonId, generateRepeatSeriesId, setExistingIdsProvider } from './src/core/id-generator';
 import { resolveFileTaskDefaults } from './src/core/file-task-defaults';
 import { resolveOperonIdPlaceholders, resolveOperonIdPlaceholdersInTaskBlock } from './src/core/operon-id-placeholders';
-import { getNormalFilterSets, isDynamicFileTaskFilterSet, normalizeDynamicFileTaskFilterSet } from './src/core/dynamic-file-task-filter';
+import {
+	getNormalFilterSets,
+	isDynamicFileTaskFilterSet,
+	isDynamicSubtasksFilterSet,
+	isSpecialDynamicFilterSet,
+	normalizeDynamicFileTaskFilterSet,
+	normalizeDynamicSubtasksFilterSet,
+} from './src/core/dynamic-file-task-filter';
 import { getReleaseNotesForUpdate } from './src/core/release-notes';
 import { isOperonExcludedPath } from './src/core/operon-path-exclusions';
 import { normalizeRepeatIdentityPayload } from './src/core/repeat-identity';
@@ -223,9 +235,15 @@ import { formatUiTime } from './src/core/ui-time-format';
 import {
 	executeContextualMenuAction,
 	type ContextualMenuActionId,
+	type ContextualMenuActionInvocation,
 	type ContextualMenuContext,
 } from './src/core/contextual-menu-engine';
-import { resolveSubtaskInitialFields, resolveSubtaskInitialFieldsFromParentValues, SubtaskInitialFields } from './src/core/subtask-inheritance';
+import {
+	getSubtaskInitialFieldKeys,
+	resolveSubtaskInitialFields,
+	resolveSubtaskInitialFieldsFromParentValues,
+	SubtaskInitialFields,
+} from './src/core/subtask-inheritance';
 import { dispatchSubtaskActionByParentKind, resolveSubtaskActionKind } from './src/core/subtask-action';
 import {
 	applyLinkedFileTaskAutoParentSeed,
@@ -328,7 +346,7 @@ import {
 	queryKanbanBoard,
 	resolveTaskStatusDefinition,
 } from './src/systems/kanban-query';
-import { getManagedCustomFieldOptionMapping } from './src/core/managed-task-fields';
+import { getManagedCustomFieldOptionMapping, getManagedTaskFieldType } from './src/core/managed-task-fields';
 import {
 	enginePerfLog,
 	enginePerfNow,
@@ -389,6 +407,7 @@ interface CreateFileTaskOptions {
 
 interface OpenTaskCreatorOptions {
 	submitMode?: TaskCreatorSubmitMode;
+	initialCreateType?: TaskCreatorCreateType;
 	onSubmitInline?: (draft: TaskCreatorDraft) => Promise<boolean> | boolean;
 	onSubmitFile?: (draft: TaskCreatorDraft) => Promise<boolean> | boolean;
 	initialOutsidePointerGraceMs?: number;
@@ -436,14 +455,6 @@ interface CursorEditor {
 	setCursor(position: EditorPosition): void;
 	scrollIntoView?(range: EditorScrollRange, center?: boolean): void;
 }
-
-const SUBTASK_INITIAL_FIELD_KEYS = [
-	'parentTask',
-	'status',
-	'priority',
-	'taskIcon',
-	'taskColor',
-] as const satisfies readonly (keyof SubtaskInitialFields)[];
 
 function hasUnknownMethod(value: unknown, methodName: string): boolean {
 	return isRecord(value) && isUnknownFunction(value[methodName]);
@@ -617,6 +628,8 @@ export default class OperonPlugin extends Plugin {
 	private indexSideEffectTimer: WindowTimeoutHandle | null = null;
 	private indexSideEffectRunning = false;
 	private indexSideEffectFollowupRequested = false;
+	private projectSerialIndexReconcileRunning = false;
+	private projectSerialIndexReconcileFollowupRequested = false;
 	private fileTaskArchiver: FileTaskArchiver | null = null;
 	private livePreviewEphemeralSession = new LivePreviewEphemeralSessionController();
 	private activeLivePreviewPickerClose: (() => void) | null = null;
@@ -628,6 +641,7 @@ export default class OperonPlugin extends Plugin {
 	private pinnedDock: PinnedTasksDock | null = null;
 	private mobileGlobalTaskFab: MobileGlobalTaskFab | null = null;
 	private taskCreatorModal: TaskCreatorModal | null = null;
+	private subtasksFilterModal: SubtasksFilterModal | null = null;
 	private pinnedCache: PinnedCache | null = null;
 	private externalCalendarService: ExternalCalendarService | null = null;
 	private duplicateOperonIdModal: DuplicateOperonIdModal | null = null;
@@ -710,7 +724,7 @@ export default class OperonPlugin extends Plugin {
 	}
 
 	private async duplicateFilterSetAndRefresh(filterSet: FilterSet): Promise<void> {
-		if (isDynamicFileTaskFilterSet(filterSet)) return;
+		if (isSpecialDynamicFilterSet(filterSet)) return;
 		const copy = cloneFilterSet(filterSet);
 		copy.id = this.generateFilterSetId();
 		copy.name = `${filterSet.name} Copy`;
@@ -746,6 +760,21 @@ export default class OperonPlugin extends Plugin {
 		}), undefined, {
 			title: t('filterSets', 'dynamicFileTaskFilterTitle'),
 			lockConditions: 'dynamicFileTask',
+			hideUsageInfo: true,
+			showCountBadge: false,
+			getSettings: () => this.settings,
+		}).open();
+	}
+
+	private openDynamicSubtasksFilterSettings(template?: FilterSet): void {
+		const filterSet = normalizeDynamicSubtasksFilterSet(
+			template ?? this.settings.filterSets.find(entry => isDynamicSubtasksFilterSet(entry)) ?? null,
+		);
+		new FilterSetModal(this.app, filterSet, this.settings.keyMappings, asyncHandler('dynamic subtasks filter settings save failed', async (saved) => {
+			await this.saveFilterSetAndRefresh(normalizeDynamicSubtasksFilterSet(saved));
+		}), undefined, {
+			title: t('filterSets', 'dynamicSubtasksFilterTitle'),
+			lockConditions: 'dynamicSubtasks',
 			hideUsageInfo: true,
 			showCountBadge: false,
 			getSettings: () => this.settings,
@@ -825,12 +854,40 @@ export default class OperonPlugin extends Plugin {
 		}
 		void this.externalCalendarService?.applySettings(this.settings.externalCalendars);
 		initI18n(getAppLocale(this.app), this.settings.language);
+		void this.reconcileProjectSerials({ notifyCapacity: true });
 		this.applyWorkspaceTweaks();
 		this.scheduleWorkspacePropertiesCollapseForAllViews();
 		this.trackerStatusBar?.render();
 		this.refreshDuplicateAlertStatusBar();
 		this.mobileGlobalTaskFab?.refresh();
 		this.refreshViews();
+	}
+
+	private getProjectSerialDisplayForTask(operonId: string): ProjectSerialDisplay | null {
+		return this.storage.projectSerials.getDisplayForTask(operonId);
+	}
+
+	private getProjectSerialSignature(): string {
+		return this.storage.projectSerials.getSignature();
+	}
+
+	private async reconcileProjectSerials(options: { notifyCapacity?: boolean } = {}): Promise<void> {
+		const result = await this.storage.projectSerials.reconcile(
+			this.settings.projectSerialScopes,
+			this.indexer.getAllTasks(),
+			localNow(),
+		);
+		if (options.notifyCapacity === true && result.capacityBlockedScopeIds.length > 0) {
+			new Notice(t('notifications', 'projectSerialCapacityReached'));
+		}
+	}
+
+	private async reconcileProjectSerialsForIndexMutation(): Promise<void> {
+		try {
+			await this.reconcileProjectSerials();
+		} catch (error) {
+			console.warn('Operon: failed to reconcile project serials after index mutation', error);
+		}
 	}
 
 	private registerCanonicalSettingsReloadWatchers(): void {
@@ -1080,7 +1137,7 @@ export default class OperonPlugin extends Plugin {
 		const filterSet = filterSetId
 			? this.settings.filterSets.find(filterSet => filterSet.id === filterSetId) ?? null
 			: null;
-		return filterSet && !isDynamicFileTaskFilterSet(filterSet) ? filterSet : null;
+		return filterSet && !isSpecialDynamicFilterSet(filterSet) ? filterSet : null;
 	}
 
 	private getKanbanLeafPresetId(leaf: import('obsidian').WorkspaceLeaf): string | null {
@@ -1272,6 +1329,7 @@ export default class OperonPlugin extends Plugin {
 			() => this.settings,
 			(operonId) => this.openEditorForId(operonId),
 			{
+				getProjectSerialDisplay: (operonId: string) => this.getProjectSerialDisplayForTask(operonId),
 				onPersistDefaultScope: async (scope, selectedProjectId) => {
 					this.settings.taskFinderDefaultScope = scope;
 					this.settings.taskFinderSelectedProjectId = selectedProjectId;
@@ -1444,7 +1502,7 @@ export default class OperonPlugin extends Plugin {
 				(operonId) => { void this.cycleTaskStatusById(operonId); },
 				(task) => { this.navigateToTask(task); },
 				(operonId, key, value) => { void this.updateTaskFieldAndRefresh(operonId, key, value); },
-				(taskId, actionId) => this.handleContextualMenuAction(taskId, actionId),
+				(taskId, actionId, context, invocation) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
 				(taskId) => this.timeTracker.isTimerRunning(taskId),
 				async (taskId) => {
 					await this.toggleTimerForTask(taskId, 'command');
@@ -1525,6 +1583,7 @@ export default class OperonPlugin extends Plugin {
 
 					await this.recurrenceService.reconcileStoredSeries();
 					await this.dependencyManager.reconcileAdditiveInverseLinks();
+					await this.reconcileProjectSerials({ notifyCapacity: true });
 
 					// Mark startup complete — one authoritative render + resumeFromIndex
 				this.startupReady = true;
@@ -1592,6 +1651,8 @@ export default class OperonPlugin extends Plugin {
 		this.duplicateOperonIdModal = null;
 		this.taskCreatorModal?.close();
 		this.taskCreatorModal = null;
+		this.subtasksFilterModal?.close();
+		this.subtasksFilterModal = null;
 		this.fileTaskArchiver?.destroy();
 		this.fileTaskArchiver = null;
 		this.pinnedDock = null;
@@ -1630,7 +1691,8 @@ export default class OperonPlugin extends Plugin {
 						cycleStatus: (operonId) => {
 							runAsyncAction('pinned dock status cycle failed', () => this.cycleTaskStatusById(operonId));
 						},
-						onContextualAction: (taskId, actionId) => this.handleContextualMenuAction(taskId, actionId),
+						onContextualAction: (taskId, actionId, context, invocation) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
+						hasSubtasks: (taskId) => this.indexer.secondary.getChildIds(taskId).size > 0,
 						toggleTimer: (taskId) => this.toggleTimerForTask(taskId, 'command'),
 						saveSettings: () => {
 							runAsyncAction('pinned dock settings save failed', () => this.storage.saveSettings());
@@ -1650,7 +1712,8 @@ export default class OperonPlugin extends Plugin {
 					{
 						openTaskEditor: openEditorForId,
 						cycleStatus: (operonId) => this.cycleTaskStatusById(operonId),
-						onContextualAction: (taskId, actionId) => this.handleContextualMenuAction(taskId, actionId),
+						onContextualAction: (taskId, actionId, context, invocation) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
+						hasSubtasks: (taskId) => this.indexer.secondary.getChildIds(taskId).size > 0,
 						toggleTimer: (taskId) => this.toggleTimerForTask(taskId, 'command'),
 					},
 					this.storage.pinned,
@@ -1710,13 +1773,15 @@ export default class OperonPlugin extends Plugin {
 				(operonId) => {
 					void this.requestSubtaskForParentId(operonId);
 				},
-				(taskId, actionId) => this.handleContextualMenuAction(taskId, actionId),
+				(taskId, actionId, context, invocation) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
 					this.storage.pinned,
 					(taskId) => this.timeTracker.isTimerRunning(taskId),
 					async (taskId) => {
 						await this.toggleTimerForTask(taskId, 'command');
 					},
 				() => this.timeTracker.getActiveOperonId() ?? '',
+				(operonId) => this.getProjectSerialDisplayForTask(operonId),
+				() => this.getProjectSerialSignature(),
 				(filterSet) => this.saveFilterSetAndRefresh(filterSet),
 				(dateKey) => this.openDailyNoteFromDateKey(dateKey),
 				(filterSet) => this.duplicateFilterSetAndRefresh(filterSet),
@@ -1739,8 +1804,14 @@ export default class OperonPlugin extends Plugin {
 					getPipelines: () => this.settings.pipelines,
 					getSettings: () => this.settings,
 					startTimerForTask: (operonId, source) => this.startTimerForTask(operonId, source),
-					onContextualAction: (taskId, actionId) => this.handleContextualMenuAction(taskId, actionId),
+					onContextualAction: (
+						taskId: string,
+						actionId: ContextualMenuActionId,
+						context?: ContextualMenuContext,
+						invocation?: ContextualMenuActionInvocation,
+					) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
 					isTaskPinned: (taskId) => this.pinnedCache?.isPinned(taskId) === true,
+					hasSubtasks: (taskId) => this.indexer.secondary.getChildIds(taskId).size > 0,
 				},
 			)
 		);
@@ -1761,8 +1832,14 @@ export default class OperonPlugin extends Plugin {
 					startTimerForTask: (operonId, source, startOverride) => this.startTimerForTask(operonId, source, startOverride),
 					startUnassignedTimer: (source) => this.startUnassignedTimer(source),
 					stopActiveTimer: (reason) => this.stopActiveTimer(reason),
-					onContextualAction: (taskId, actionId) => this.handleContextualMenuAction(taskId, actionId),
+					onContextualAction: (
+						taskId: string,
+						actionId: ContextualMenuActionId,
+						context?: ContextualMenuContext,
+						invocation?: ContextualMenuActionInvocation,
+					) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
 					isTaskPinned: (taskId) => this.pinnedCache?.isPinned(taskId) === true,
+					hasSubtasks: (taskId) => this.indexer.secondary.getChildIds(taskId).size > 0,
 				},
 			)
 		);
@@ -1786,7 +1863,7 @@ export default class OperonPlugin extends Plugin {
 					onAllDayScheduledMove: (taskId, selection) => this.handleCalendarScheduledMove(taskId, selection),
 					onAllDayScheduledResizeRight: (taskId, selection) => this.handleCalendarScheduledResizeRight(taskId, selection),
 					onAllDayItemDropToTimed: (taskId, selection) => this.handleCalendarAllDayDropToTimed(taskId, selection),
-					onItemAction: (taskId, actionId, context) => this.handleContextualMenuAction(taskId, actionId, context),
+					onItemAction: (taskId, actionId, context, invocation) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
 					onStatusIconClick: (taskId) => this.handleCalendarStatusIconClick(taskId),
 					onSidebarTaskDropToTimed: (taskId, selection) => this.handleCalendarSidebarTaskDrop(leaf, taskId, selection),
 					onSidebarTaskDropToAllDay: (taskId, selection) => this.handleCalendarSidebarTaskDrop(leaf, taskId, selection),
@@ -1868,7 +1945,7 @@ export default class OperonPlugin extends Plugin {
 					getManualOrder: (presetId) => this.storage.kanbanOrder.getBoard(presetId),
 					onCardDrop: (context) => this.handleKanbanCardDrop(leaf, context),
 					onCellAction: (context) => this.handleKanbanCellAction(leaf, context),
-					onItemAction: (taskId, actionId) => this.handleContextualMenuAction(taskId, actionId),
+					onItemAction: (taskId, actionId, context, invocation) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
 					onStatusIconClick: (taskId) => this.handleCalendarStatusIconClick(taskId),
 					onOpenPresetSettings: (presetId) => {
 						const preset = this.settings.kanbanPresets.find(entry => entry.id === presetId) ?? null;
@@ -2490,6 +2567,7 @@ export default class OperonPlugin extends Plugin {
 		taskId: string,
 		actionId: ContextualMenuActionId,
 		sourceContext?: ContextualMenuContext,
+		invocation?: ContextualMenuActionInvocation,
 	): Promise<void> {
 		const context = sourceContext ?? this.buildFallbackContextualMenuContext(taskId);
 
@@ -2502,12 +2580,21 @@ export default class OperonPlugin extends Plugin {
 				await this.pinnedCache.toggle(id);
 				this.refreshViews();
 			},
-				openEditor: async (id) => {
-					this.openEditorForId(id);
-				},
-				startTimer: async (id) => {
-					await this.startTimerForTask(id, 'command');
-				},
+			openEditor: async (id) => {
+				this.openEditorForId(id);
+			},
+			openSubtasks: (id) => {
+				this.openSubtasksForTaskId(id);
+			},
+			createSubtask: async (id) => {
+				await this.requestSubtaskForParentId(id);
+			},
+			openCheckboxes: async (id, actionAnchor, actionAnchorRect) => {
+				await this.openCheckboxesForTaskId(id, actionAnchor, actionAnchorRect);
+			},
+			startTimer: async (id) => {
+				await this.startTimerForTask(id, 'command');
+			},
 			markDone: async (id) => {
 				await this.markTaskDoneById(id);
 			},
@@ -2529,11 +2616,11 @@ export default class OperonPlugin extends Plugin {
 					return;
 				}
 				this.refreshTimeSessionHistoryLeaves(true);
-					this.refreshViews();
-					new Notice(t('notifications', 'trackedTimeRange', {
-						range: `${formatUiTime(this.app, this.settings, start)}-${formatUiTime(this.app, this.settings, end)}`,
-					}));
-				},
+				this.refreshViews();
+				new Notice(t('notifications', 'trackedTimeRange', {
+					range: `${formatUiTime(this.app, this.settings, start)}-${formatUiTime(this.app, this.settings, end)}`,
+				}));
+			},
 			clearDueDate: async (id) => {
 				const indexedTask = this.indexer.getTask(id);
 				if (!indexedTask || !(indexedTask.fieldValues['dateDue'] ?? '').trim()) return;
@@ -2552,7 +2639,96 @@ export default class OperonPlugin extends Plugin {
 				this.refreshViews();
 				new Notice(t('notifications', 'skippedThisOccurrence'));
 			},
+		}, invocation);
+	}
+
+	private async openCheckboxesForTaskId(
+		taskId: string,
+		actionAnchor?: HTMLElement | null,
+		actionAnchorRect?: DOMRect | null,
+	): Promise<void> {
+		const indexedTask = this.indexer.getTask(taskId);
+		if (!indexedTask) {
+			new Notice(t('notifications', 'taskNotInIndex'));
+			return;
+		}
+		if (indexedTask.checkbox !== 'open') return;
+
+		const { anchor, cleanup } = this.resolveContextualActionAnchor(actionAnchor, actionAnchorRect);
+		await showPlainCheckboxPopover(anchor, {
+			app: this.app,
+			task: indexedTask,
+			keyMappings: this.settings.keyMappings,
+			taskColor: this.resolveCheckboxPopoverTaskColor(indexedTask),
+			seedEmptyDraft: (indexedTask.plainCheckboxProgress?.total ?? 0) <= 0,
+			centerOnDesktop: true,
+			onDispose: cleanup,
 		});
+	}
+
+	private openSubtasksForTaskId(taskId: string): void {
+		const indexedTask = this.indexer.getTask(taskId);
+		if (!indexedTask) {
+			new Notice(t('notifications', 'taskNotInIndex'));
+			return;
+		}
+		if (indexedTask.checkbox !== 'open') return;
+		if (this.indexer.secondary.getChildIds(indexedTask.operonId).size <= 0) return;
+
+		this.subtasksFilterModal?.close();
+		let modal: SubtasksFilterModal | null = null;
+		modal = new SubtasksFilterModal(this.app, {
+			parentTaskId: indexedTask.operonId,
+			deps: this.buildFilterSurfaceDeps(),
+			onEditFilter: (template) => this.openDynamicSubtasksFilterSettings(template),
+			onClose: () => {
+				if (this.subtasksFilterModal === modal) {
+					this.subtasksFilterModal = null;
+				}
+			},
+		});
+		this.subtasksFilterModal = modal;
+		modal.open();
+	}
+
+	private resolveContextualActionAnchor(
+		actionAnchor?: HTMLElement | null,
+		actionAnchorRect?: DOMRect | null,
+	): {
+		anchor: HTMLElement;
+		cleanup: () => void;
+	} {
+		if (!actionAnchorRect && actionAnchor?.isConnected) {
+			return { anchor: actionAnchor, cleanup: () => undefined };
+		}
+		const document = actionAnchor?.ownerDocument ?? getActiveDocument();
+		const anchor = document.createElement('span');
+		const left = actionAnchorRect?.left ?? 0;
+		const top = actionAnchorRect?.top ?? 0;
+		const width = Math.max(1, actionAnchorRect?.width ?? 1);
+		const height = Math.max(1, actionAnchorRect?.height ?? 1);
+		anchor.setAttribute('aria-hidden', 'true');
+		anchor.setCssProps({
+			display: 'block',
+			position: 'fixed',
+			left: `${Math.round(left)}px`,
+			top: `${Math.round(top)}px`,
+			width: `${Math.round(width)}px`,
+			height: `${Math.round(height)}px`,
+			opacity: '0',
+			pointerEvents: 'none',
+		});
+		document.body.appendChild(anchor);
+		return {
+			anchor,
+			cleanup: () => anchor.remove(),
+		};
+	}
+
+	private resolveCheckboxPopoverTaskColor(task: IndexedTask): string | null {
+		return resolveTaskColorSourceForTask(task, 'taskColor', this.settings)
+			?? resolveTaskColorSourceForTask(task, 'statusColor', this.settings)
+			?? resolveTaskColorSourceForTask(task, 'priorityColor', this.settings);
 	}
 
 	private buildFallbackContextualMenuContext(taskId: string): ContextualMenuContext {
@@ -2563,6 +2739,7 @@ export default class OperonPlugin extends Plugin {
 			taskId,
 			task: task ?? null,
 			now: localNow(),
+			hasSubtasks: task ? this.indexer.secondary.getChildIds(task.operonId).size > 0 : false,
 			projectedRef: projected
 				? { seriesId: projected.seriesId, occurrenceDate: projected.occurrenceDate }
 				: null,
@@ -2854,7 +3031,7 @@ export default class OperonPlugin extends Plugin {
 		const filterSet = preset.filterSetId
 			? this.settings.filterSets.find(entry => entry.id === preset.filterSetId) ?? null
 			: null;
-		if (filterSet && isDynamicFileTaskFilterSet(filterSet)) return null;
+		if (filterSet && isSpecialDynamicFilterSet(filterSet)) return null;
 		return queryKanbanBoard({
 			preset,
 			pipeline,
@@ -3141,6 +3318,9 @@ export default class OperonPlugin extends Plugin {
 			this.indexer,
 			() => this.settings,
 			TASK_FINDER_SCOPE_CALENDAR_SCHEDULE,
+			{
+				getProjectSerialDisplay: (operonId: string) => this.getProjectSerialDisplayForTask(operonId),
+			},
 		);
 	}
 
@@ -3150,6 +3330,9 @@ export default class OperonPlugin extends Plugin {
 			this.indexer,
 			() => this.settings,
 			TASK_FINDER_SCOPE_CALENDAR_TRACKED_SESSION,
+			{
+				getProjectSerialDisplay: (operonId: string) => this.getProjectSerialDisplayForTask(operonId),
+			},
 		);
 	}
 
@@ -3247,6 +3430,9 @@ export default class OperonPlugin extends Plugin {
 			this.indexer,
 			() => this.settings,
 			TASK_FINDER_SCOPE_KANBAN_PLACE,
+			{
+				getProjectSerialDisplay: (operonId: string) => this.getProjectSerialDisplayForTask(operonId),
+			},
 		);
 	}
 
@@ -3361,7 +3547,7 @@ export default class OperonPlugin extends Plugin {
 		const filterSet = preset?.filterSetId
 			? this.settings.filterSets.find(entry => entry.id === preset.filterSetId) ?? null
 			: null;
-		const effectiveFilterSet = filterSet && !isDynamicFileTaskFilterSet(filterSet) ? filterSet : null;
+		const effectiveFilterSet = filterSet && !isSpecialDynamicFilterSet(filterSet) ? filterSet : null;
 		if (this.doesCalendarDraftMatchFilter(effectiveFilterSet, draft)) return;
 		new Notice(t('notifications', 'kanbanCreatedTaskFilterMismatch'));
 	}
@@ -3379,7 +3565,7 @@ export default class OperonPlugin extends Plugin {
 		const filterSet = preset.filterSetId
 			? this.settings.filterSets.find(entry => entry.id === preset.filterSetId) ?? null
 			: null;
-		const effectiveFilterSet = filterSet && !isDynamicFileTaskFilterSet(filterSet) ? filterSet : null;
+		const effectiveFilterSet = filterSet && !isSpecialDynamicFilterSet(filterSet) ? filterSet : null;
 
 		while (true) {
 			const task = await this.promptKanbanTaskSelection();
@@ -4332,7 +4518,7 @@ export default class OperonPlugin extends Plugin {
 			}
 			return;
 		}
-		const resolvedType = type ?? CANONICAL_KEY_MAP.get(key)?.type ?? 'text';
+		const resolvedType = type ?? getManagedTaskFieldType(key, this.settings.keyMappings) ?? 'text';
 		task.fields.push(this.createInlineField(key, value, resolvedType));
 		if (key === 'datetimeCreated') {
 			this.normalizeParsedTaskCreatedTimestamp(task, value);
@@ -4340,11 +4526,11 @@ export default class OperonPlugin extends Plugin {
 	}
 
 	private applyInheritedSubtaskFields(task: ParsedTask, inherited: SubtaskInitialFields): void {
-		if (inherited.parentTask) this.setParsedTaskField(task, 'parentTask', inherited.parentTask, 'text');
-		if (inherited.status) this.setParsedTaskField(task, 'status', inherited.status, 'text');
-		if (inherited.priority) this.setParsedTaskField(task, 'priority', inherited.priority, 'text');
-		if (inherited.taskIcon) this.setParsedTaskField(task, 'taskIcon', inherited.taskIcon, 'text');
-		if (inherited.taskColor) this.setParsedTaskField(task, 'taskColor', inherited.taskColor, 'text');
+		for (const key of getSubtaskInitialFieldKeys(inherited)) {
+			const value = inherited[key]?.trim();
+			if (!value) continue;
+			this.setParsedTaskField(task, key, value, getManagedTaskFieldType(key, this.settings.keyMappings) ?? 'text');
+		}
 	}
 
 	private buildNewInlineTaskWithInheritedFields(
@@ -4361,22 +4547,15 @@ export default class OperonPlugin extends Plugin {
 			const operonIdKey = this.getInlineWriteKeyName('operonId');
 			const datetimeCreatedKey = this.getInlineWriteKeyName('datetimeCreated');
 			const datetimeModifiedKey = this.getInlineWriteKeyName('datetimeModified');
-			const parentFragment = inherited.parentTask
-				? ` {{${this.getInlineWriteKeyName('parentTask')}:: ${inherited.parentTask}}}`
-				: '';
-			const statusFragment = inherited.status
-				? ` {{${this.getInlineWriteKeyName('status')}:: ${inherited.status}}}`
-				: '';
-			const priorityFragment = inherited.priority
-				? ` {{${this.getInlineWriteKeyName('priority')}:: ${inherited.priority}}}`
-				: '';
-			const iconFragment = inherited.taskIcon
-				? ` {{${this.getInlineWriteKeyName('taskIcon')}:: ${inherited.taskIcon}}}`
-				: '';
-			const colorFragment = inherited.taskColor
-				? ` {{${this.getInlineWriteKeyName('taskColor')}:: ${inherited.taskColor}}}`
-				: '';
-			return `- [${checkboxToken}] ${description} {{${operonIdKey}:: ${generateOperonId()}}} {{${datetimeCreatedKey}:: ${now}}}${parentFragment}${statusFragment}${priorityFragment}${iconFragment}${colorFragment} {{${datetimeModifiedKey}:: ${now}}}`.trimEnd();
+			const inheritedFragments = getSubtaskInitialFieldKeys(inherited)
+				.map(key => `{{${this.getInlineWriteKeyName(key)}:: ${inherited[key]?.trim() ?? ''}}}`);
+			return [
+				`- [${checkboxToken}] ${description}`,
+				`{{${operonIdKey}:: ${generateOperonId()}}}`,
+				`{{${datetimeCreatedKey}:: ${now}}}`,
+				...inheritedFragments,
+				`{{${datetimeModifiedKey}:: ${now}}}`,
+			].join(' ').trimEnd();
 		}
 
 		if (!parsed.operonId) this.setParsedTaskField(parsed, 'operonId', generateOperonId(), 'text');
@@ -4632,13 +4811,15 @@ export default class OperonPlugin extends Plugin {
 			updateDependencyField: (operonId: string, field: 'blocking' | 'blockedBy', value: string) => {
 				void this.updateTaskDependencyFieldAndRefresh(operonId, field, value);
 			},
-			onContextualAction: (taskId: string, actionId: ContextualMenuActionId) => this.handleContextualMenuAction(taskId, actionId),
+			onContextualAction: (taskId, actionId, context, invocation) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
 			pinnedCache: this.storage.pinned,
 			isTaskTracking: (taskId: string) => this.timeTracker.isTimerRunning(taskId),
 			toggleTimer: async (taskId: string) => {
 				await this.toggleTimerForTask(taskId, 'command');
 			},
 			getTrackingSignature: () => this.timeTracker.getActiveOperonId() ?? '',
+			getProjectSerialDisplay: (operonId: string) => this.getProjectSerialDisplayForTask(operonId),
+			getProjectSerialSignature: () => this.getProjectSerialSignature(),
 		};
 	}
 
@@ -4699,13 +4880,20 @@ export default class OperonPlugin extends Plugin {
 				requestSubtask: (operonId: string) => {
 					void this.requestSubtaskForParentId(operonId);
 				},
-					onContextualAction: (taskId: string, actionId: ContextualMenuActionId) => this.handleContextualMenuAction(taskId, actionId),
+					onContextualAction: (
+						taskId: string,
+						actionId: ContextualMenuActionId,
+						context?: ContextualMenuContext,
+						invocation?: ContextualMenuActionInvocation,
+					) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
 					pinnedCache: this.storage.pinned,
 					isTaskTracking: (taskId: string) => this.timeTracker.isTimerRunning(taskId),
 					toggleTimer: async (taskId: string) => {
 						await this.toggleTimerForTask(taskId, 'command');
 					},
 				getTrackingSignature: () => this.timeTracker.getActiveOperonId() ?? '',
+				getProjectSerialDisplay: (operonId: string) => this.getProjectSerialDisplayForTask(operonId),
+				getProjectSerialSignature: () => this.getProjectSerialSignature(),
 				saveFilterSet: (filterSet: FilterSet) => this.saveFilterSetAndRefresh(filterSet),
 				openDailyNote: (dateKey: string) => this.openDailyNoteFromDateKey(dateKey),
 				duplicateFilterSet: (filterSet: FilterSet) => this.duplicateFilterSetAndRefresh(filterSet),
@@ -4758,6 +4946,7 @@ export default class OperonPlugin extends Plugin {
 			// getIndexedTask
 			getIndexedTask: (id: string) => this.indexer.getTask(id),
 			getAllTasks: () => this.indexer.getAllTasks(),
+			getProjectSerialDisplay: (operonId: string) => this.getProjectSerialDisplayForTask(operonId),
 			// openEditor
 			openEditor: (task: ParsedTask, editorView: EditorView) => {
 				const view = this.getMarkdownViewForEditorView(editorView);
@@ -4891,8 +5080,9 @@ export default class OperonPlugin extends Plugin {
 						}
 					})();
 				},
-				onContextualAction: (taskId, actionId) => this.handleContextualMenuAction(taskId, actionId),
+				onContextualAction: (taskId, actionId, context, invocation) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
 				isTaskPinned: (taskId) => this.pinnedCache?.isPinned(taskId) === true,
+				hasSubtasks: (taskId) => this.indexer.secondary.getChildIds(taskId).size > 0,
 				isTaskTracking: (taskId) => this.timeTracker.isTimerRunning(taskId),
 				toggleTimer: async (taskId) => {
 					await this.toggleTimerForTask(taskId, 'command');
@@ -4953,10 +5143,12 @@ export default class OperonPlugin extends Plugin {
 			getAllTasks: () => this.indexer.getAllTasks(),
 			getFileTaskByPath: (filePath: string) => this.indexer.getFileTaskByPath(filePath),
 			getDescendantTaskSummary: (operonId: string) => this.indexer.getDescendantTaskSummary(operonId),
+			getProjectSerialDisplay: (operonId: string) => this.getProjectSerialDisplayForTask(operonId),
 			openTaskEditor: (operonId: string) => this.openEditorForId(operonId),
 			cycleStatus: (operonId: string) => { void this.cycleTaskStatusById(operonId); },
-				onContextualAction: (taskId, actionId) => this.handleContextualMenuAction(taskId, actionId),
+				onContextualAction: (taskId, actionId, context, invocation) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
 				isTaskPinned: (taskId) => this.pinnedCache?.isPinned(taskId) === true,
+				hasSubtasks: (taskId) => this.indexer.secondary.getChildIds(taskId).size > 0,
 				isTaskTracking: (taskId) => this.timeTracker.isTimerRunning(taskId),
 				toggleTimer: async (taskId) => {
 					await this.toggleTimerForTask(taskId, 'command');
@@ -5012,10 +5204,17 @@ export default class OperonPlugin extends Plugin {
 				getAllTasks: () => this.indexer.getAllTasks(),
 				getFileTaskByPath: (filePath: string) => this.indexer.getFileTaskByPath(filePath),
 				getDescendantTaskSummary: (operonId: string) => this.indexer.getDescendantTaskSummary(operonId),
+				getProjectSerialDisplay: (operonId: string) => this.getProjectSerialDisplayForTask(operonId),
 				openTaskEditor: (operonId: string) => this.openEditorForId(operonId),
 				cycleStatus: (operonId: string) => { void this.cycleTaskStatusById(operonId); },
-					onContextualAction: (taskId: string, actionId: ContextualMenuActionId) => this.handleContextualMenuAction(taskId, actionId),
+					onContextualAction: (
+						taskId: string,
+						actionId: ContextualMenuActionId,
+						context?: ContextualMenuContext,
+						invocation?: ContextualMenuActionInvocation,
+					) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
 					isTaskPinned: (taskId: string) => this.pinnedCache?.isPinned(taskId) === true,
+					hasSubtasks: (taskId: string) => this.indexer.secondary.getChildIds(taskId).size > 0,
 					isTaskTracking: (taskId: string) => this.timeTracker.isTimerRunning(taskId),
 					toggleTimer: async (taskId: string) => {
 						await this.toggleTimerForTask(taskId, 'command');
@@ -5082,6 +5281,7 @@ export default class OperonPlugin extends Plugin {
 					getPriorities: () => this.settings.priorities ?? DEFAULT_PRIORITIES,
 					getSettings: () => this.settings,
 					getAllTasks: () => this.indexer.getAllTasks(),
+					getProjectSerialDisplay: (operonId: string) => this.getProjectSerialDisplayForTask(operonId),
 					openEditor: (operonId: string) => {
 						void (async () => {
 							const task = this.indexer.getTask(operonId);
@@ -5135,10 +5335,15 @@ export default class OperonPlugin extends Plugin {
 									});
 							}
 					},
-						updateField: async (operonId: string, key: string, value: string) => {
-							await this.updateTaskFieldAndRefresh(operonId, key, value);
-						},
-					onContextualAction: (taskId: string, actionId: ContextualMenuActionId) => this.handleContextualMenuAction(taskId, actionId),
+							updateField: async (operonId: string, key: string, value: string) => {
+								await this.updateTaskFieldAndRefresh(operonId, key, value);
+							},
+					onContextualAction: (
+						taskId: string,
+						actionId: ContextualMenuActionId,
+						context?: ContextualMenuContext,
+						invocation?: ContextualMenuActionInvocation,
+					) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
 					isTaskPinned: (taskId: string) => this.pinnedCache?.isPinned(taskId) === true,
 					isTaskTracking: (taskId: string) => this.timeTracker.isTimerRunning(taskId),
 					toggleTimer: async (taskId: string) => {
@@ -5607,50 +5812,6 @@ export default class OperonPlugin extends Plugin {
 		}
 	}
 
-	private async insertInlineSubtaskAfterParent(
-		parentTask: ParsedTask,
-		taskLine: string,
-	): Promise<{ filePath: string; lineNumber: number } | null> {
-		if (!parentTask.operonId) return null;
-
-		const freshParent = this.indexer.getTask(parentTask.operonId);
-		const parentPath = freshParent?.primary.filePath ?? parentTask.filePath;
-		const parentLineHint = freshParent?.primary.lineNumber ?? parentTask.lineNumber;
-
-		if (!parentPath) return null;
-		const parentFile = this.app.vault.getAbstractFileByPath(parentPath);
-		if (!(parentFile instanceof TFile)) return null;
-
-		const content = await this.app.vault.cachedRead(parentFile);
-		const lines = content.split('\n');
-		let parentLine = -1;
-
-		if (parentLineHint >= 0 && parentLineHint < lines.length) {
-			const hinted = this.parseInlineTaskLine(lines[parentLineHint], parentLineHint, parentPath);
-			if (hinted?.operonId === parentTask.operonId) {
-				parentLine = parentLineHint;
-			}
-		}
-
-		if (parentLine === -1) {
-			for (let i = 0; i < lines.length; i++) {
-				const parsed = this.parseInlineTaskLine(lines[i], i, parentPath);
-				if (parsed?.operonId === parentTask.operonId) {
-					parentLine = i;
-					break;
-				}
-			}
-		}
-
-		if (parentLine === -1) return null;
-
-		const insertedLineNumber = parentLine + 1;
-		lines.splice(insertedLineNumber, 0, taskLine);
-		await this.app.vault.modify(parentFile, lines.join('\n'));
-		await this.indexer.reindexFilePath(parentPath);
-		return { filePath: parentPath, lineNumber: insertedLineNumber };
-	}
-
 	private openInlineSubtaskCreatorFromParent(
 		request: TaskEditorSubtaskRequest,
 		parentTask: ParsedTask,
@@ -5669,16 +5830,24 @@ export default class OperonPlugin extends Plugin {
 		onBeforeCreate?: () => boolean | Promise<boolean>,
 		onCreated?: (createdOperonId: string) => void | Promise<void>,
 	): void {
+		const fallbackFile = this.getParsedTaskMarkdownFile(parentTask);
 		this.openTaskCreator(initialDraft, {
-			submitMode: 'inline-only',
-			onSubmitInline: (draft) => this.createInlineSubtaskFromCreatorDraft(draft, parentTask, onBeforeCreate, onCreated),
-			onSubmitFile: () => false,
+			submitMode: 'both',
+			initialCreateType: 'inline',
+			onSubmitInline: (draft) => this.createInlineSubtaskFromFlexibleCreatorDraft(draft, onBeforeCreate, onCreated),
+			onSubmitFile: (draft) => this.createFileSubtaskFromCreatorDraft(draft, fallbackFile, onBeforeCreate, onCreated),
 		});
 	}
 
-	private async createInlineSubtaskFromCreatorDraft(
+	private getParsedTaskMarkdownFile(task: ParsedTask): TFile | null {
+		const filePath = task.filePath.trim();
+		if (!filePath) return null;
+		const file = this.app.vault.getAbstractFileByPath(filePath);
+		return file instanceof TFile && file.extension === 'md' ? file : null;
+	}
+
+	private async createInlineSubtaskFromFlexibleCreatorDraft(
 		draft: TaskCreatorDraft,
-		parentTask: ParsedTask,
 		onBeforeCreate?: () => boolean | Promise<boolean>,
 		onCreated?: (createdOperonId: string) => void | Promise<void>,
 	): Promise<boolean> {
@@ -5687,46 +5856,9 @@ export default class OperonPlugin extends Plugin {
 			return false;
 		}
 
-		const freshParent = parentTask.operonId ? this.indexer.getTask(parentTask.operonId) : null;
-		const parentPath = freshParent?.primary.filePath ?? parentTask.filePath;
-		const parentLineHint = freshParent?.primary.lineNumber ?? parentTask.lineNumber;
-		if (!parentPath) {
-			new Notice(t('notifications', 'inlineTaskCreateFailed'));
-			return false;
-		}
-
-		const now = localNow();
-		const createdLine = this.buildTaskCreatorInlineTaskLine(
-			draft,
-			parentPath,
-			parentLineHint + 1,
-			{},
-			now,
-		);
-		if (!createdLine) {
-			new Notice(t('notifications', 'inlineTaskCreateFailed'));
-			return false;
-		}
-
-		this.suppressRawTaskCreationNotice(createdLine.operonId);
-		const createdLocation = await this.insertInlineSubtaskAfterParent(parentTask, createdLine.taskLine);
-		if (!createdLocation) {
-			new Notice(t('notifications', 'inlineTaskCreateFailed'));
-			return false;
-		}
-
-		await this.finalizeTaskCreatorCreatedTask(
-			createdLine.operonId,
-			draft,
-			draft.fieldValues['parentTask'],
-		);
-		this.refreshViews();
-		await this.notifySubtaskCreated(onCreated, createdLine.operonId);
-		this.showTaskNotice('inline-created', {
-			description: draft.description,
-			indexedDescription: this.indexer.getTask(createdLine.operonId)?.description,
-			operonId: createdLine.operonId,
-		});
+		const created = await this.createInlineTaskFromCreatorDraftResult(draft);
+		if (!created) return false;
+		await this.notifySubtaskCreated(onCreated, created.operonId);
 		return true;
 	}
 
@@ -5751,8 +5883,9 @@ export default class OperonPlugin extends Plugin {
 		onCreated?: (createdOperonId: string) => void | Promise<void>,
 	): void {
 		this.openTaskCreator(initialDraft, {
-			submitMode: 'file-only',
-			onSubmitInline: () => false,
+			submitMode: 'both',
+			initialCreateType: 'file',
+			onSubmitInline: (draft) => this.createInlineSubtaskFromFlexibleCreatorDraft(draft, onBeforeCreate, onCreated),
 			onSubmitFile: (draft) => this.createFileSubtaskFromCreatorDraft(draft, fallbackFile, onBeforeCreate, onCreated),
 		});
 	}
@@ -5947,6 +6080,7 @@ export default class OperonPlugin extends Plugin {
 				return await this.applyEstimateReallocationFromEditor(request);
 			},
 			pinnedCache: this.storage.pinned,
+			getProjectSerialDisplay: (operonId: string) => this.getProjectSerialDisplayForTask(operonId),
 			...options,
 		};
 		resolvedOptions = await this.resolveTaskEditorFileBodyOption(task, baseOptions);
@@ -6043,6 +6177,7 @@ export default class OperonPlugin extends Plugin {
 				await this.syncRepeatSeriesEntryIfNeeded(afterTask);
 			}
 		await this.refreshAggregateTotalsAfterTaskMutation(task, afterTask);
+		await this.reconcileProjectSerialsForIndexMutation();
 		this.refreshViews();
 		return true;
 	}
@@ -6051,6 +6186,7 @@ export default class OperonPlugin extends Plugin {
 	 * Refresh all open Operon views (pinned dock, filter view).
 	 */
 	private scheduleIndexSideEffects(): void {
+		this.scheduleProjectSerialIndexReconcile();
 		this.indexSideEffectFollowupRequested = true;
 		if (this.indexSideEffectTimer || this.indexSideEffectRunning) return;
 
@@ -6058,6 +6194,32 @@ export default class OperonPlugin extends Plugin {
 			this.indexSideEffectTimer = null;
 			void this.runScheduledIndexSideEffects();
 		}, 80);
+	}
+
+	private scheduleProjectSerialIndexReconcile(): void {
+		if (!this.startupReady) return;
+		this.projectSerialIndexReconcileFollowupRequested = true;
+		if (this.projectSerialIndexReconcileRunning) return;
+		void this.runProjectSerialIndexReconcile();
+	}
+
+	private async runProjectSerialIndexReconcile(): Promise<void> {
+		if (this.projectSerialIndexReconcileRunning) return;
+		this.projectSerialIndexReconcileRunning = true;
+		const startedAt = enginePerfNow();
+		try {
+			do {
+				this.projectSerialIndexReconcileFollowupRequested = false;
+				await this.reconcileProjectSerialsForIndexMutation();
+			} while (this.projectSerialIndexReconcileFollowupRequested);
+			this.refreshViews();
+		} finally {
+			this.projectSerialIndexReconcileRunning = false;
+			enginePerfLog('projectSerials.reconcileFromIndex', `${Math.round(enginePerfNow() - startedAt)}ms`);
+			if (this.projectSerialIndexReconcileFollowupRequested) {
+				void this.runProjectSerialIndexReconcile();
+			}
+		}
 	}
 
 	private async runScheduledIndexSideEffects(): Promise<void> {
@@ -6389,6 +6551,9 @@ export default class OperonPlugin extends Plugin {
 		const embedsStartedAt = perfContext ? enginePerfNow() : 0;
 		if (isPrimaryPass && this.embedFilterDeps) {
 			refreshEmbedFilters(this.embedFilterDeps);
+		}
+		if (isPrimaryPass) {
+			this.subtasksFilterModal?.refresh();
 		}
 		if (isPrimaryPass) {
 			this.recordRefreshViewsPerfStage(stageTimings, perfContext, 'embeds', embedsStartedAt);
@@ -8700,7 +8865,7 @@ export default class OperonPlugin extends Plugin {
 		const nextFieldValues = { ...linkedSeed.fieldValues };
 		const nextFieldPresence = new Set(linkedSeed.fieldPresence);
 
-		for (const key of SUBTASK_INITIAL_FIELD_KEYS) {
+		for (const key of getSubtaskInitialFieldKeys(inherited)) {
 			const value = inherited[key];
 			const normalizedValue = value?.trim();
 			if (!normalizedValue) continue;
@@ -8826,14 +8991,15 @@ export default class OperonPlugin extends Plugin {
 			allTasks: this.indexer.getAllTasks(),
 			initialDraft,
 			submitMode: options.submitMode,
+			initialCreateType: options.initialCreateType,
 			fileTaskTemplateOptions: this.getFileTaskTemplateOptionsForPicker(),
 			onFileTemplateSelected: async (template) => {
 				this.settings.lastUsedFileTaskTemplateId = template.id;
 				await this.storage.saveSettings();
 			},
-				getAllRepeatSeriesIds: () => this.storage.repeatSeries.getAllSeriesIds(),
-				initialOutsidePointerGraceMs: options.initialOutsidePointerGraceMs,
-				onSubmitInline: options.onSubmitInline ?? ((draft) => this.createInlineTaskFromCreatorDraft(draft)),
+			getAllRepeatSeriesIds: () => this.storage.repeatSeries.getAllSeriesIds(),
+			initialOutsidePointerGraceMs: options.initialOutsidePointerGraceMs,
+			onSubmitInline: options.onSubmitInline ?? ((draft) => this.createInlineTaskFromCreatorDraft(draft)),
 			onSubmitFile: options.onSubmitFile ?? ((draft) => this.startFileTaskCreationFromCreatorDraft(draft)),
 			onSubmitFailure: (draft, createType) => {
 				if (createType !== 'inline') return;
@@ -9936,6 +10102,9 @@ export default class OperonPlugin extends Plugin {
 			this.indexer,
 			() => this.settings,
 			TASK_FINDER_SCOPE_CONVERT_FILE_TASK_TO_INLINE,
+			{
+				getProjectSerialDisplay: (operonId: string) => this.getProjectSerialDisplayForTask(operonId),
+			},
 		);
 		if (!selectedTask) return;
 		if (selectedTask.primary.format !== 'yaml') {
@@ -10572,6 +10741,7 @@ export default class OperonPlugin extends Plugin {
 				this.resolveAfterTaskForRecurrenceMaterialization(afterTask ?? null, recurrenceResult),
 				{ autoUnpinCandidate: afterTask ?? null },
 			);
+			await this.reconcileProjectSerialsForIndexMutation();
 			this.refreshViews();
 			return true;
 		}
@@ -10628,6 +10798,7 @@ export default class OperonPlugin extends Plugin {
 			this.resolveAfterTaskForRecurrenceMaterialization(afterTask ?? null, recurrenceResult),
 			{ autoUnpinCandidate: afterTask ?? null },
 		);
+		await this.reconcileProjectSerialsForIndexMutation();
 		this.refreshViews();
 		return true;
 	}
@@ -11022,6 +11193,7 @@ export default class OperonPlugin extends Plugin {
 				getTask: taskId => this.indexer.getTask(taskId),
 			})
 			: undefined;
+		await this.reconcileProjectSerialsForIndexMutation();
 		this.refreshViews(isStatusCycleRefresh || options.statusCycleTrace
 			? {
 				statusCycleTrace: options.statusCycleTrace,
@@ -11106,7 +11278,7 @@ export default class OperonPlugin extends Plugin {
 	}
 
 	private getInlineFieldTypeForKey(key: string): OperonField['type'] {
-		return CANONICAL_KEY_MAP.get(key)?.type ?? 'text';
+		return getManagedTaskFieldType(key, this.settings.keyMappings) ?? 'text';
 	}
 
 	private isLivePreviewPickerPending(session: EphemeralFieldSession | null): boolean {
@@ -11724,6 +11896,7 @@ export default class OperonPlugin extends Plugin {
 						parseInlineTaskLine: (lineText, lineNumber, filePath) => this.parseInlineTaskLine(lineText, lineNumber, filePath),
 						withDuplicateConflictAutoOpenSuppressed: operation => this.withDuplicateConflictAutoOpenSuppressed(operation),
 						refreshViews: () => this.refreshViews(),
+						getProjectSerialDisplay: (operonId: string) => this.getProjectSerialDisplayForTask(operonId),
 					},
 					editor,
 					view,

@@ -139,6 +139,7 @@ function compareLocaleFiles() {
 		Turkish: flattenStringLeaves(readJson('i18n/locales/tr.json')),
 		German: flattenStringLeaves(readJson('i18n/locales/de.json')),
 		French: flattenStringLeaves(readJson('i18n/locales/fr.json')),
+		Spanish: flattenStringLeaves(readJson('i18n/locales/es.json')),
 	};
 
 	for (const [label, locale] of Object.entries(translations)) {

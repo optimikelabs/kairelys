@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Validation
 
+## [1.5.0] - 2026-06-17
+
+Some tasks stay small. Some become projects.
+
+This release improves the second case. Operon now has better tools for seeing project structure, creating subtasks with the right context, and opening nested work without rebuilding your view by hand.
+
+**Project Serials** add readable parent IDs to task trees. They make project relationships visible in the interface while keeping Operon's stable task IDs untouched.
+
+**Selectable inheritance rules** make child tasks more predictable. You decide which parent fields should flow into new subtasks, and Status can either follow the parent pipeline or start from the default pipeline.
+
+The contextual menu now understands more of the work around a task. **Subtasks**, **Create subtask**, **Checkboxes**, and especially **Dynamic Subtasks Filter** make it easier to open the right project layer from the task you are already looking at.
+
+### New
+- Added **Spanish localization**, including Settings language selection, translated UI strings, Spanish date parsing, calendar wording, task editing labels, and filter surfaces.
+- Added **Project Serials** for parent task trees, showing read-only visual serial chips without changing real Operon task IDs; serial display refreshes when settings change, prefixes can be renamed inline, and numbers removed from the end of a series can be reused while middle gaps remain reserved.
+- Added **Parent-Child task inheritance** as a separate Relationships section with compact single-line field rows and Workflow Picker-style field tokens, so child tasks can inherit only the parent fields you choose while Status can start from either the parent pipeline or the default pipeline.
+- Added **Subtasks**, **Create subtask**, and **Checkboxes** contextual menu actions, with migration for existing custom menus so the new actions appear in the intended order where supported.
+- Added **Dynamic Subtasks Filter** as a centered contextual window for tasks that already have subtasks, with its own auto-expand limit, open-only toggle, locked filter template, higher desktop placement, page-preview layering, and a single close button.
+
+### Fixed
+- Fixed **Calendar toolbar** controls picking up preset dropdown styling, so navigation icons stay centered and the preset selector keeps its compact chevron on hover.
+- Fixed **Kanban contextual Checkboxes** opening with leftover hover-menu text or tooltip fragments visible behind the checkbox popover.
+
+### Validation
+- Local validation passed `npm run check:local`, `npm run release:guard`, `git diff --check`, and `npm audit`, including strict linting, production build, release guard, and 952/952 Phase 5 regression checks.
+
 ## [1.4.1] - 2026-06-15
 
 This release is a compact visual consistency pass for Operon's busiest surfaces. It reduces theme-related button noise across editors, pickers, calendars, sidebars, and tracking controls while adding a couple of practical improvements to file-task creation and saved preset filters.

@@ -78,6 +78,7 @@ export function buildFilterTaskRowElement(
 		showPinAction: callbacks.getSettings().filterTaskShowPinAction,
 		showSubtaskAction: options?.showSubtaskAction ?? callbacks.getSettings().filterTaskShowSubtaskAction,
 		rowClassName: 'operon-filter-task-row',
+		projectSerialPlacement: 'tail',
 		beforeTailContent: hasChildren
 			? (tail, context) => {
 				const expandButton = el('button', 'operon-live-preview-edit operon-reading-task-edit operon-live-preview-action operon-filter-expand-action operon-task-chip-action operon-task-chip-progress', tail);

@@ -6,7 +6,7 @@ import { resolveTaskColorSourceForTask } from '../core/task-color-source';
 import { OperonIndexer } from '../indexer/indexer';
 import { TimeTracker } from '../systems/time-tracker';
 import { PinnedCache } from '../storage/pinned-cache';
-import type { ContextualMenuActionId } from '../core/contextual-menu-engine';
+import type { ContextualMenuActionHandler } from '../core/contextual-menu-engine';
 import { IndexedTask } from '../types/fields';
 import { findStatusDef } from '../types/pipeline';
 import { OperonSettings, resolveTaskDisplayIcon } from '../types/settings';
@@ -18,7 +18,8 @@ export const PINNED_TASKS_SIDEBAR_VIEW_TYPE = 'operon-pinned-tasks-sidebar';
 export interface PinnedTasksSidebarCallbacks {
 	openTaskEditor: (operonId: string) => void;
 	cycleStatus: (operonId: string) => void | Promise<void>;
-	onContextualAction?: (taskId: string, actionId: ContextualMenuActionId) => void | Promise<void>;
+	onContextualAction?: ContextualMenuActionHandler;
+	hasSubtasks?: (taskId: string) => boolean;
 	toggleTimer: (taskId: string) => Promise<boolean>;
 }
 
@@ -126,6 +127,7 @@ export class PinnedTasksSidebarView extends ItemView {
 				getSettings: () => this.settings,
 				onAction: this.callbacks.onContextualAction,
 				isPinned: () => this.pinnedCache.isPinned(task.operonId),
+				hasSubtasks: this.callbacks.hasSubtasks ? () => this.callbacks.hasSubtasks?.(task.operonId) === true : undefined,
 			});
 		}
 

@@ -5,6 +5,7 @@ export interface OperonStoragePaths {
 		repeatSeriesPath: string;
 		activeTrackersPath: string;
 		pinnedTasksPath: string;
+		projectSerialsPath: string;
 		storageMigrationPath: string;
 	};
 	runtime: {
@@ -58,6 +59,7 @@ export function buildOperonStoragePaths(
 			repeatSeriesPath: joinVaultPath(pluginDir, 'state', 'repeat-series.json'),
 			activeTrackersPath: joinVaultPath(pluginDir, 'state', 'active-trackers.json'),
 			pinnedTasksPath: joinVaultPath(pluginDir, 'state', 'pinned-tasks.json'),
+			projectSerialsPath: joinVaultPath(pluginDir, 'state', 'project-serials.json'),
 			storageMigrationPath: joinVaultPath(pluginDir, 'state', 'storage-migration.json'),
 		},
 		runtime: {

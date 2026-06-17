@@ -25,7 +25,7 @@ import { parseLocalDatetime } from '../../systems/tracker-utils';
 import { getConfiguredKeyMappingIcon } from '../../core/key-mapping-icons';
 import { t } from '../../core/i18n';
 import { getAppLocale } from '../../core/obsidian-app';
-import { getNormalFilterSets, isDynamicFileTaskFilterSet } from '../../core/dynamic-file-task-filter';
+import { getNormalFilterSets, isSpecialDynamicFilterSet } from '../../core/dynamic-file-task-filter';
 import { findStatusDef } from '../../types/pipeline';
 import {
 	CalendarItem,
@@ -839,7 +839,7 @@ export class CalendarView extends ItemView {
 			if (!preset || !task) return [];
 			const activeFilter = (() => {
 				const raw = settings.filterSets.find(entry => entry.id === preset.filterSetId) ?? null;
-				if (raw && isDynamicFileTaskFilterSet(raw)) return null;
+				if (raw && isSpecialDynamicFilterSet(raw)) return null;
 				return raw ? stripFilterViewOnlyOptions(raw) : null;
 			})();
 			const scopedTasks = filterTasksForCalendar(
@@ -1075,7 +1075,7 @@ export class CalendarView extends ItemView {
 		}
 		const activeFilter = (() => {
 			const raw = settings.filterSets.find(entry => entry.id === preset.filterSetId) ?? null;
-			if (raw && isDynamicFileTaskFilterSet(raw)) return null;
+			if (raw && isSpecialDynamicFilterSet(raw)) return null;
 			return raw ? stripFilterViewOnlyOptions(raw) : null;
 		})();
 		const queryAnchorDate = useMobileCalendar
@@ -4387,6 +4387,7 @@ export class CalendarView extends ItemView {
 					task,
 					now: localNow(),
 					isPinned: this.getPinnedCache()?.isPinned(task.operonId) ?? false,
+					hasSubtasks: this.indexer.secondary.getChildIds(task.operonId).size > 0,
 				};
 				const settings = this.getSettings();
 				const actions = resolveContextualMenu(
@@ -6638,6 +6639,9 @@ export class CalendarView extends ItemView {
 			task: item.sourceTask ?? item.renderSnapshot,
 			now: localNow(),
 			isPinned: this.getPinnedCache()?.isPinned(item.taskId) ?? false,
+			hasSubtasks: item.sourceTask
+				? this.indexer.secondary.getChildIds(item.sourceTask.operonId).size > 0
+				: false,
 			calendarItem: item,
 			projectedRef: item.origin === 'projected' && item.repeatRef
 				? {

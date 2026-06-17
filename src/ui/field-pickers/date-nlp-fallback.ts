@@ -137,6 +137,32 @@ const STRINGS: Record<DatePickerLang, DatePickerStrings> = {
 		nextWeekdayLabel: name => `${name} prochain`,
 		lastWeekdayLabel: name => `${name} dernier`,
 	},
+	es: {
+		searchPlaceholder: 'Escribir una fecha como próximo martes',
+		clear: 'Limpiar',
+		apply: 'Aplicar',
+		manualDate: 'Elegir una fecha',
+		parsedFrom: input => `Reconocido de "${input}"`,
+		quickSuggestions: 'Sugerencias',
+		today: 'Hoy',
+		tomorrow: 'Mañana',
+		yesterday: 'Ayer',
+		thisWeek: 'Esta semana',
+		nextWeek: 'La próxima semana',
+		lastWeek: 'La semana pasada',
+		thisWeekend: 'Este fin de semana',
+		nextWeekend: 'El próximo fin de semana',
+		lastWeekend: 'El fin de semana pasado',
+		daysAgo: count => `hace ${count} días`,
+		daysFromNow: count => `dentro de ${count} días`,
+		weeksAgo: count => `hace ${count} semanas`,
+		weeksFromNow: count => `dentro de ${count} semanas`,
+		monthsAgo: count => `hace ${count} meses`,
+		monthsFromNow: count => `dentro de ${count} meses`,
+		weekdayNames: ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'],
+		nextWeekdayLabel: name => `Próximo ${name}`,
+		lastWeekdayLabel: name => `${name} pasado`,
+	},
 };
 
 const ENGLISH_PHRASES: Record<string, (reference: Date) => Date> = {
@@ -233,6 +259,37 @@ const FRENCH_WEEKDAYS = new Map<string, number>([
 	['samedi', 6],
 ]);
 
+// Phrase keys are normalizeInput()-form: lowercase, accents stripped (mañana → manana, próxima → proxima).
+const SPANISH_PHRASES: Record<string, (reference: Date) => Date> = {
+	'hoy': reference => cloneDate(reference),
+	'manana': reference => addDays(reference, 1),
+	'ayer': reference => addDays(reference, -1),
+	'esta semana': reference => startOfWeek(reference),
+	'proxima semana': reference => addDays(startOfWeek(reference), 7),
+	'la proxima semana': reference => addDays(startOfWeek(reference), 7),
+	'semana proxima': reference => addDays(startOfWeek(reference), 7),
+	'semana pasada': reference => addDays(startOfWeek(reference), -7),
+	'la semana pasada': reference => addDays(startOfWeek(reference), -7),
+	'este fin de semana': reference => saturdayOfWeek(reference),
+	'proximo fin de semana': reference => addDays(saturdayOfWeek(reference), 7),
+	'el proximo fin de semana': reference => addDays(saturdayOfWeek(reference), 7),
+	'fin de semana proximo': reference => addDays(saturdayOfWeek(reference), 7),
+	'fin de semana pasado': reference => addDays(saturdayOfWeek(reference), -7),
+	'el fin de semana pasado': reference => addDays(saturdayOfWeek(reference), -7),
+};
+
+const SPANISH_WEEKDAYS = new Map<string, number>([
+	['domingo', 0],
+	['lunes', 1],
+	['martes', 2],
+	['miercoles', 3],
+	['miércoles', 3],
+	['jueves', 4],
+	['viernes', 5],
+	['sabado', 6],
+	['sábado', 6],
+]);
+
 const MONTH_ALIASES: Record<DatePickerLang, MonthAlias[]> = {
 	en: [
 		{ month: 1, aliases: ['january', 'jan'] },
@@ -289,6 +346,20 @@ const MONTH_ALIASES: Record<DatePickerLang, MonthAlias[]> = {
 		{ month: 10, aliases: ['octobre', 'oct'] },
 		{ month: 11, aliases: ['novembre', 'nov'] },
 		{ month: 12, aliases: ['decembre', 'décembre', 'dec', 'déc'] },
+	],
+	es: [
+		{ month: 1, aliases: ['enero', 'ene'] },
+		{ month: 2, aliases: ['febrero', 'feb'] },
+		{ month: 3, aliases: ['marzo', 'mar'] },
+		{ month: 4, aliases: ['abril', 'abr'] },
+		{ month: 5, aliases: ['mayo', 'may'] },
+		{ month: 6, aliases: ['junio', 'jun'] },
+		{ month: 7, aliases: ['julio', 'jul'] },
+		{ month: 8, aliases: ['agosto', 'ago'] },
+		{ month: 9, aliases: ['septiembre', 'setiembre', 'sept', 'sep'] },
+		{ month: 10, aliases: ['octubre', 'oct'] },
+		{ month: 11, aliases: ['noviembre', 'nov'] },
+		{ month: 12, aliases: ['diciembre', 'dic'] },
 	],
 };
 
@@ -378,6 +449,8 @@ function parsePhraseDate(input: string, language: DatePickerLang, reference: Dat
 		? GERMAN_PHRASES
 		: language === 'fr'
 		? FRENCH_PHRASES
+		: language === 'es'
+		? SPANISH_PHRASES
 		: ENGLISH_PHRASES;
 	const direct = phrases[input];
 	if (direct) return direct(reference);
@@ -388,6 +461,8 @@ function parsePhraseDate(input: string, language: DatePickerLang, reference: Dat
 		? GERMAN_WEEKDAYS
 		: language === 'fr'
 		? FRENCH_WEEKDAYS
+		: language === 'es'
+		? SPANISH_WEEKDAYS
 		: ENGLISH_WEEKDAYS;
 
 	if (weekdays.has(input)) {
@@ -398,6 +473,32 @@ function parsePhraseDate(input: string, language: DatePickerLang, reference: Dat
 	if (language === 'fr') {
 		const nextSuffix = ' prochain';
 		const lastSuffix = ' dernier';
+		if (input.endsWith(nextSuffix)) {
+			const weekday = input.slice(0, -nextSuffix.length).trim();
+			if (weekdays.has(weekday)) return nextWeekday(reference, weekdays.get(weekday)!);
+		}
+		if (input.endsWith(lastSuffix)) {
+			const weekday = input.slice(0, -lastSuffix.length).trim();
+			if (weekdays.has(weekday)) return previousWeekday(reference, weekdays.get(weekday)!);
+		}
+		return null;
+	}
+
+	// Spanish weekdays are masculine, so 'próximo'/'pasado' work as either prefix or suffix
+	// ('próximo lunes', 'lunes pasado', 'lunes próximo'). Keys are normalizeInput()-form.
+	if (language === 'es') {
+		const nextPrefix = 'proximo ';
+		const lastPrefix = 'pasado ';
+		const nextSuffix = ' proximo';
+		const lastSuffix = ' pasado';
+		if (input.startsWith(nextPrefix)) {
+			const weekday = input.slice(nextPrefix.length).trim();
+			if (weekdays.has(weekday)) return nextWeekday(reference, weekdays.get(weekday)!);
+		}
+		if (input.startsWith(lastPrefix)) {
+			const weekday = input.slice(lastPrefix.length).trim();
+			if (weekdays.has(weekday)) return previousWeekday(reference, weekdays.get(weekday)!);
+		}
 		if (input.endsWith(nextSuffix)) {
 			const weekday = input.slice(0, -nextSuffix.length).trim();
 			if (weekdays.has(weekday)) return nextWeekday(reference, weekdays.get(weekday)!);
@@ -561,6 +662,12 @@ function matchesUnit(token: string, language: DatePickerLang, unit: 'days' | 'we
 			weeks: ['s', 'se', 'sem', 'sema', 'semai', 'semain', 'semaine', 'semaines'],
 			months: ['m', 'mo', 'moi', 'mois'],
 		}
+		: language === 'es'
+		? {
+			days: ['d', 'di', 'dia', 'dias'],
+			weeks: ['s', 'se', 'sem', 'sema', 'seman', 'semana', 'semanas'],
+			months: ['m', 'me', 'mes', 'mese', 'meses'],
+		}
 		: {
 			days: ['d', 'da', 'day', 'days'],
 			weeks: ['w', 'we', 'wee', 'week', 'weeks'],
@@ -664,7 +771,7 @@ function toIsoDate(date: Date): string {
 }
 
 function formatLongDate(date: Date, language: DatePickerLang): string {
-	return new Intl.DateTimeFormat(language === 'tr' ? 'tr-TR' : language === 'de' ? 'de-DE' : language === 'fr' ? 'fr-FR' : 'en-US', {
+	return new Intl.DateTimeFormat(language === 'tr' ? 'tr-TR' : language === 'de' ? 'de-DE' : language === 'fr' ? 'fr-FR' : language === 'es' ? 'es-ES' : 'en-US', {
 		weekday: 'long',
 		year: 'numeric',
 		month: 'long',

@@ -103,10 +103,7 @@ export interface KanbanCellActionContext {
 export interface KanbanViewCallbacks {
 	getManualOrder?: (presetId: string) => Record<string, string[]>;
 	onCardDrop?: (context: KanbanDropContext) => void | Promise<void>;
-	onItemAction?: (
-		taskId: string,
-		actionId: import('../core/contextual-menu-engine').ContextualMenuActionId,
-	) => void | Promise<void>;
+	onItemAction?: import('../core/contextual-menu-engine').ContextualMenuActionHandler;
 	onStatusIconClick?: (taskId: string) => void | Promise<void>;
 	onOpenPresetSettings?: (presetId: string) => void | Promise<void>;
 	onCellAction?: (context: KanbanCellActionContext) => void | Promise<void>;

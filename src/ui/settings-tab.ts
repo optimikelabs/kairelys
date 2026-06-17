@@ -13,7 +13,15 @@
 import * as Obsidian from 'obsidian';
 import { AbstractInputSuggest, App, Notice, Plugin, PluginSettingTab, Setting, TFile, TFolder, ToggleComponent, getIcon, requireApiVersion, setIcon } from 'obsidian';
 import type { ButtonComponent, DropdownComponent, SettingControl, SettingDefinition, SettingDefinitionItem, SettingDefinitionPage, TextComponent } from 'obsidian';
-import { OperonSettings, DEFAULT_SETTINGS, DEFAULT_INLINE_TASK_TARGET_FILE, DEFAULT_INLINE_TASK_HEADING_KEYWORD, DEFAULT_INLINE_TASK_PARENT_FILE_HEADING_KEYWORD, KeyMapping, FilterSet, CALENDAR_TIME_GRID_SCALE_OPTIONS, CALENDAR_AUTO_SCROLL_POSITION_OPTIONS, CALENDAR_SIDEBAR_WIDTH_MIN, CALENDAR_SIDEBAR_WIDTH_MAX, CALENDAR_MOBILE_LAYOUT_MAX_WIDTH_MIN, CALENDAR_MOBILE_LAYOUT_MAX_WIDTH_MAX, CALENDAR_MOBILE_SLOT_MINUTES_OPTIONS, CALENDAR_MOBILE_AGENDA_PAST_DAYS_OPTIONS, CALENDAR_MOBILE_AGENDA_FUTURE_DAYS_OPTIONS, CALENDAR_MOBILE_ALL_DAY_VISIBLE_TASK_LIMIT_OPTIONS, KANBAN_EXPANDED_COLUMN_WIDTH_MIN, KANBAN_EXPANDED_COLUMN_WIDTH_MAX, KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MIN, KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MAX, KANBAN_MOBILE_LAYOUT_MAX_WIDTH_MIN, KANBAN_MOBILE_LAYOUT_MAX_WIDTH_MAX, KANBAN_MOBILE_COMPACT_SWIMLANE_WIDTH_MIN, KANBAN_MOBILE_COMPACT_SWIMLANE_WIDTH_MAX, DUPLICATE_ALERT_DELAY_SECONDS_OPTIONS, TASK_EDITOR_AUTOSAVE_DELAY_SECONDS_OPTIONS, DYNAMIC_FILE_TASK_FILTER_SUBTASK_AUTO_EXPAND_LIMIT_OPTIONS, createExternalCalendarSourceId, ExternalCalendarSource, TaskCreatorToolbarItem, TASK_CREATOR_TOOLBAR_FIELD_ORDER, TASK_CREATOR_FALLBACK_FIELD_ICONS, TASK_EDITOR_WORKFLOW_PICKER_ORDER, TASK_EDITOR_MOBILE_CORE_TOOL_ORDER, TASK_EDITOR_MOBILE_CORE_FALLBACK_ICONS, TaskEditorMobileCoreToolItem, TaskEditorWorkflowPickerItem, INLINE_TASK_COMPACT_CHIP_ORDER, INLINE_TASK_COMPACT_FALLBACK_ICONS, TrackerTaskDescriptionClickAction, TASK_FINDER_DEFAULT_SCOPE_ORDER, TaskFinderDefaultScopeKey, normalizeTaskEditorMobileCoreTools, normalizeTaskFinderShortcutValue, FLOW_TIME_PAUSE_MINUTE_OPTIONS, FLOW_TIME_DEFAULT_SESSION_MINUTE_OPTIONS, cloneFilterSet, getNumericConstraint, hasDuplicateKeyMappingVisiblePropertyName, isNumericSettingKey, normalizeCalendarSidebarDefaultExpansionState, normalizeFallbackTaskIconSource, normalizeInlineTaskHeadingKeyword, normalizeInlineTaskParentFileHeadingKeyword, setNumericSetting, isSupportedLanguage, type CalendarDayTitleAction, type CalendarMobileAgendaFutureDays, type CalendarMobileAgendaPastDays, type CalendarMobileAllDayVisibleTaskLimit, type CalendarSidebarDefaultStateKey, type FallbackTaskIconSource, type OperonLanguage, type WorkspaceTweaksPropertiesScope } from '../types/settings';
+import { OperonSettings, DEFAULT_SETTINGS, DEFAULT_INLINE_TASK_TARGET_FILE, DEFAULT_INLINE_TASK_HEADING_KEYWORD, DEFAULT_INLINE_TASK_PARENT_FILE_HEADING_KEYWORD, KeyMapping, FilterSet, CALENDAR_TIME_GRID_SCALE_OPTIONS, CALENDAR_AUTO_SCROLL_POSITION_OPTIONS, CALENDAR_SIDEBAR_WIDTH_MIN, CALENDAR_SIDEBAR_WIDTH_MAX, CALENDAR_MOBILE_LAYOUT_MAX_WIDTH_MIN, CALENDAR_MOBILE_LAYOUT_MAX_WIDTH_MAX, CALENDAR_MOBILE_SLOT_MINUTES_OPTIONS, CALENDAR_MOBILE_AGENDA_PAST_DAYS_OPTIONS, CALENDAR_MOBILE_AGENDA_FUTURE_DAYS_OPTIONS, CALENDAR_MOBILE_ALL_DAY_VISIBLE_TASK_LIMIT_OPTIONS, KANBAN_EXPANDED_COLUMN_WIDTH_MIN, KANBAN_EXPANDED_COLUMN_WIDTH_MAX, KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MIN, KANBAN_MAX_VISIBLE_TASKS_PER_CELL_MAX, KANBAN_MOBILE_LAYOUT_MAX_WIDTH_MIN, KANBAN_MOBILE_LAYOUT_MAX_WIDTH_MAX, KANBAN_MOBILE_COMPACT_SWIMLANE_WIDTH_MIN, KANBAN_MOBILE_COMPACT_SWIMLANE_WIDTH_MAX, DUPLICATE_ALERT_DELAY_SECONDS_OPTIONS, TASK_EDITOR_AUTOSAVE_DELAY_SECONDS_OPTIONS, DYNAMIC_FILE_TASK_FILTER_SUBTASK_AUTO_EXPAND_LIMIT_OPTIONS, createExternalCalendarSourceId, ExternalCalendarSource, TaskCreatorToolbarItem, TASK_CREATOR_TOOLBAR_FIELD_ORDER, TASK_CREATOR_FALLBACK_FIELD_ICONS, TASK_EDITOR_WORKFLOW_PICKER_ORDER, TASK_EDITOR_MOBILE_CORE_TOOL_ORDER, TASK_EDITOR_MOBILE_CORE_FALLBACK_ICONS, TaskEditorMobileCoreToolItem, TaskEditorWorkflowPickerItem, INLINE_TASK_COMPACT_CHIP_ORDER, INLINE_TASK_COMPACT_FALLBACK_ICONS, TrackerTaskDescriptionClickAction, TASK_FINDER_DEFAULT_SCOPE_ORDER, TaskFinderDefaultScopeKey, normalizeTaskEditorMobileCoreTools, normalizeTaskFinderShortcutValue, FLOW_TIME_PAUSE_MINUTE_OPTIONS, FLOW_TIME_DEFAULT_SESSION_MINUTE_OPTIONS, cloneFilterSet, getNumericConstraint, hasDuplicateKeyMappingVisiblePropertyName, isChildTaskInheritanceEligibleFieldKey, isNumericSettingKey, normalizeCalendarSidebarDefaultExpansionState, normalizeChildTaskInheritanceFields, normalizeChildTaskInheritanceStatusPipelineSource, normalizeFallbackTaskIconSource, normalizeInlineTaskHeadingKeyword, normalizeInlineTaskParentFileHeadingKeyword, setNumericSetting, isSupportedLanguage, type CalendarDayTitleAction, type CalendarMobileAgendaFutureDays, type CalendarMobileAgendaPastDays, type CalendarMobileAllDayVisibleTaskLimit, type CalendarSidebarDefaultStateKey, type ChildTaskInheritanceStatusPipelineSource, type FallbackTaskIconSource, type OperonLanguage, type WorkspaceTweaksPropertiesScope } from '../types/settings';
+import type { ProjectSerialScope } from '../types/settings';
+import {
+	createProjectSerialScopeId,
+	formatProjectSerialLabel,
+	normalizeProjectSerialPrefix,
+	previewProjectSerialScopeAdd,
+	previewProjectSerialScopeDelete,
+} from '../core/project-serials';
 import { clonePipeline, composeStatusValue, createPipelineId, createStatusId, Pipeline, StatusDefinition } from '../types/pipeline';
 import { PriorityDefinition, DEFAULT_PRIORITIES, clonePriorityDefinition, createPriorityId } from '../types/priority';
 import { CalendarPreset, createCalendarPresetId } from '../types/calendar';
@@ -23,6 +31,7 @@ import {
 	CONFIGURABLE_CONTEXTUAL_MENU_SURFACE_GROUPS,
 	CONTEXTUAL_MENU_SURFACE_LABEL_KEYS,
 	isContextualMenuActionSupportedOnSurface,
+	type ContextualMenuActionHandler,
 	type ContextualMenuActionId,
 	type ContextualMenuSurface,
 } from '../core/contextual-menu-engine';
@@ -130,8 +139,11 @@ import { normalizeTaskIconValue } from '../core/task-icon-value';
 import {
 	getNormalFilterSets,
 	isDynamicFileTaskFilterSet,
-	isDynamicFileTaskFilterSetId,
+	isDynamicSubtasksFilterSet,
+	isSpecialDynamicFilterSet,
+	isSpecialDynamicFilterSetId,
 	normalizeDynamicFileTaskFilterSet,
+	normalizeDynamicSubtasksFilterSet,
 } from '../core/dynamic-file-task-filter';
 import {
 	isExcludedFolderConflictWithFileTasksFolder,
@@ -213,6 +225,14 @@ type RepeatSeriesYamlRemovalRowModel = {
 type RepeatSeriesYamlRemovalSeriesOption = RepeatSeriesPropertyRemovalPickerOption & {
 	latestTask: import('../types/fields').IndexedTask;
 };
+
+interface ChildTaskInheritanceFieldOption {
+	key: string;
+	label: string;
+	icon: string;
+	type: KeyMapping['type'];
+	searchText: string;
+}
 
 type OperonSettingsPrimaryTabId = 'core' | 'tasks' | 'views' | 'interface' | 'mobile';
 
@@ -320,6 +340,8 @@ type NumberSettingKey = {
 function generateFilterSetId(): string {
 	return 'fs_' + Math.random().toString(36).slice(2, 9);
 }
+
+let parentChildInheritanceSearchInstanceId = 0;
 
 function getDynamicFileTaskFilterSubtaskAutoExpandLabel(limit: number): string {
 	return limit === 0
@@ -628,6 +650,7 @@ const SETTINGS_SEARCH_OPTION_NUMBER_KEYS = new Set<OperonSettingSearchKey>([
 	'calendarMobileAgendaPastDays',
 	'calendarMobileAgendaFutureDays',
 	'dynamicFileTaskFilterSubtaskAutoExpandLimit',
+	'dynamicSubtasksFilterSubtaskAutoExpandLimit',
 ]);
 
 export class OperonSettingsTab extends PluginSettingTab {
@@ -648,7 +671,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 	private filterPreviewCycleStatus: (operonId: string) => void;
 	private filterPreviewNavigateToTask: (task: import('../types/fields').IndexedTask) => void;
 	private filterPreviewUpdateField: (operonId: string, key: string, value: string) => void;
-	private filterPreviewOnContextualAction?: (taskId: string, actionId: ContextualMenuActionId) => void | Promise<void>;
+	private filterPreviewOnContextualAction?: ContextualMenuActionHandler;
 	private filterPreviewIsTaskTracking?: (taskId: string) => boolean;
 	private filterPreviewToggleTimer?: (taskId: string) => void | Promise<void>;
 	private filterPreviewTrackingSignature?: () => string;
@@ -683,7 +706,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 		filterPreviewCycleStatus?: (operonId: string) => void,
 		filterPreviewNavigateToTask?: (task: import('../types/fields').IndexedTask) => void,
 		filterPreviewUpdateField?: (operonId: string, key: string, value: string) => void,
-		filterPreviewOnContextualAction?: (taskId: string, actionId: ContextualMenuActionId) => void | Promise<void>,
+		filterPreviewOnContextualAction?: ContextualMenuActionHandler,
 		filterPreviewIsTaskTracking?: (taskId: string) => boolean,
 		filterPreviewToggleTimer?: (taskId: string) => void | Promise<void>,
 		filterPreviewTrackingSignature?: () => string,
@@ -768,6 +791,8 @@ export class OperonSettingsTab extends PluginSettingTab {
 			isTaskTracking: this.filterPreviewIsTaskTracking,
 			toggleTimer: this.filterPreviewToggleTimer,
 			getTrackingSignature: this.filterPreviewTrackingSignature,
+			getProjectSerialDisplay: (operonId: string) => this.storage.projectSerials.getDisplayForTask(operonId),
+			getProjectSerialSignature: () => this.storage.projectSerials.getSignature(),
 		};
 	}
 
@@ -1058,7 +1083,15 @@ export class OperonSettingsTab extends PluginSettingTab {
 	}
 
 	private buildRelationshipsSettingsItems(entries: OperonSettingsSearchEntry[]): SettingDefinitionItem[] {
-		return [
+		const inheritanceEntry = entries.find(entry => entry.id === 'automation.parentChildTaskInheritance');
+		const inheritanceDefinition = this.buildSettingsSearchRenderDefinition(inheritanceEntry, containerEl => {
+			this.renderParentChildTaskInheritanceSettings(containerEl);
+		});
+		const projectSerialsEntry = entries.find(entry => entry.id === 'automation.projectSerials');
+		const projectSerialsDefinition = this.buildSettingsSearchRenderDefinition(projectSerialsEntry, containerEl => {
+			this.renderProjectSerialSettings(containerEl);
+		});
+		return this.compactSettingsSearchItems([
 			{
 				type: 'group',
 				heading: t('settings', 'subtabRelationships'),
@@ -1066,9 +1099,12 @@ export class OperonSettingsTab extends PluginSettingTab {
 					this.buildSettingsSearchSettingDefinition(entries, 'estimateAutoReallocation'),
 					this.buildSettingsSearchSettingDefinition(entries, 'autoParentFileTask'),
 					this.buildSettingsSearchSettingDefinition(entries, 'autoParentLinkedFileSubtasks'),
+					this.buildSettingsSearchSettingDefinition(entries, 'childTaskInheritanceStatusPipelineSource'),
 				]),
 			},
-		];
+			inheritanceDefinition,
+			projectSerialsDefinition,
+		]);
 	}
 
 	private buildRecurrenceSettingsItems(entries: OperonSettingsSearchEntry[]): SettingDefinitionItem[] {
@@ -1807,7 +1843,9 @@ export class OperonSettingsTab extends PluginSettingTab {
 		if (key === 'calendarMobileSlotMinutes') return [...CALENDAR_MOBILE_SLOT_MINUTES_OPTIONS];
 		if (key === 'calendarMobileAgendaPastDays') return [...CALENDAR_MOBILE_AGENDA_PAST_DAYS_OPTIONS];
 		if (key === 'calendarMobileAgendaFutureDays') return [...CALENDAR_MOBILE_AGENDA_FUTURE_DAYS_OPTIONS];
-		if (key === 'dynamicFileTaskFilterSubtaskAutoExpandLimit') return [...DYNAMIC_FILE_TASK_FILTER_SUBTASK_AUTO_EXPAND_LIMIT_OPTIONS];
+		if (key === 'dynamicFileTaskFilterSubtaskAutoExpandLimit' || key === 'dynamicSubtasksFilterSubtaskAutoExpandLimit') {
+			return [...DYNAMIC_FILE_TASK_FILTER_SUBTASK_AUTO_EXPAND_LIMIT_OPTIONS];
+		}
 		return [];
 	}
 
@@ -1834,6 +1872,9 @@ export class OperonSettingsTab extends PluginSettingTab {
 		}
 		if (key === 'fileTaskParentInlineTargetMode' || key === 'fileTaskParentFileTargetMode') {
 			return text === 'default' ? 'default' : 'same-folder';
+		}
+		if (key === 'childTaskInheritanceStatusPipelineSource') {
+			return normalizeChildTaskInheritanceStatusPipelineSource(text);
 		}
 		if (key === 'newOccurrencePosition') {
 			return text === 'above' ? 'above' : 'below';
@@ -1960,6 +2001,9 @@ export class OperonSettingsTab extends PluginSettingTab {
 					: t('settings', 'fileTaskFileParentTargetSameFolder'),
 				default: t('settings', 'fileTaskParentTargetDefault'),
 			};
+		}
+		if (key === 'childTaskInheritanceStatusPipelineSource') {
+			return Object.fromEntries(this.getChildTaskInheritanceStatusPipelineOptions().map(option => [option.value, option.label]));
 		}
 		if (key === 'newOccurrencePosition') {
 			return {
@@ -2110,7 +2154,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 				t('settings', 'taskEditorAutosaveDelayOption', { seconds: String(seconds) }),
 			]));
 		}
-		if (key === 'dynamicFileTaskFilterSubtaskAutoExpandLimit') {
+		if (key === 'dynamicFileTaskFilterSubtaskAutoExpandLimit' || key === 'dynamicSubtasksFilterSubtaskAutoExpandLimit') {
 			return Object.fromEntries(DYNAMIC_FILE_TASK_FILTER_SUBTASK_AUTO_EXPAND_LIMIT_OPTIONS.map(limit => [
 				String(limit),
 				getDynamicFileTaskFilterSubtaskAutoExpandLabel(limit),
@@ -2133,6 +2177,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 			{ value: 'tr', label: t('settings', 'languageTurkish') },
 			{ value: 'de', label: t('settings', 'languageGerman') },
 			{ value: 'fr', label: t('settings', 'languageFrench') },
+			{ value: 'es', label: t('settings', 'languageSpanish') },
 		];
 		const collator = new Intl.Collator(getCurrentLang(), { sensitivity: 'base' });
 		languageOptions.sort((left, right) =>
@@ -3013,9 +3058,695 @@ export class OperonSettingsTab extends PluginSettingTab {
 	}
 
 	private renderTasksRelationshipsTab(containerEl: HTMLElement): void {
-		this.renderBoundToggleSetting(containerEl, t('settings', 'estimateAutoReallocation'), t('settings', 'estimateAutoReallocationDesc'), 'estimateAutoReallocation');
-		this.renderBoundToggleSetting(containerEl, t('settings', 'autoParentInlineSubtasks'), t('settings', 'autoParentInlineSubtasksDesc'), 'autoParentFileTask');
-		this.renderBoundToggleSetting(containerEl, t('settings', 'autoParentLinkedFileSubtasks'), t('settings', 'autoParentLinkedFileSubtasksDesc'), 'autoParentLinkedFileSubtasks');
+		const relationshipsBody = containerEl.createDiv('operon-native-settings-section-card operon-relationships-settings-card');
+		this.renderBoundToggleSetting(relationshipsBody, t('settings', 'estimateAutoReallocation'), t('settings', 'estimateAutoReallocationDesc'), 'estimateAutoReallocation');
+		this.renderBoundToggleSetting(relationshipsBody, t('settings', 'autoParentInlineSubtasks'), t('settings', 'autoParentInlineSubtasksDesc'), 'autoParentFileTask');
+		this.renderBoundToggleSetting(relationshipsBody, t('settings', 'autoParentLinkedFileSubtasks'), t('settings', 'autoParentLinkedFileSubtasksDesc'), 'autoParentLinkedFileSubtasks');
+		this.renderBoundDropdownSetting(relationshipsBody, t('settings', 'childTaskInheritanceStatusPipelineSource'), t('settings', 'childTaskInheritanceStatusPipelineSourceDesc'), 'childTaskInheritanceStatusPipelineSource', {
+			value: this.settings.childTaskInheritanceStatusPipelineSource,
+			dropdownOptions: this.getChildTaskInheritanceStatusPipelineOptions(),
+			normalize: value => normalizeChildTaskInheritanceStatusPipelineSource(value),
+		});
+		this.renderParentChildTaskInheritanceSettings(containerEl);
+		this.renderProjectSerialSettings(containerEl);
+	}
+
+	private renderProjectSerialSettings(containerEl: HTMLElement): void {
+		const sectionWrapperEl = containerEl.createDiv('operon-native-settings-section operon-project-serials-setting');
+		renderSettingsHeading(sectionWrapperEl, t('settings', 'projectSerials'), 'operon-project-serials-heading');
+		sectionWrapperEl.createEl('p', {
+			text: t('settings', 'projectSerialsDesc'),
+			cls: 'operon-native-settings-section-desc',
+		});
+		this.markSettingsSearchSectionTarget(sectionWrapperEl, 'automation.projectSerials');
+
+		const sectionEl = sectionWrapperEl.createDiv('operon-native-settings-section-card operon-project-serials-section-body');
+		const listEl = sectionEl.createDiv('operon-project-serials-list');
+		const addRowEl = sectionEl.createDiv('operon-project-serials-add-row');
+		let prefixDraft = '';
+		let parentDraft = '';
+		let editingScopeId: string | null = null;
+		let prefixEditDraft = '';
+
+		const formatScopePreview = (scope: ProjectSerialScope, draftPrefix?: string): string => {
+			const summary = this.storage.projectSerials.getSummary(scope.id);
+			const prefix = draftPrefix ? normalizeProjectSerialPrefix(draftPrefix) : scope.prefix;
+			if (!prefix) return summary?.formatPreview ?? formatProjectSerialLabel(scope.prefix, 1, 1);
+			const maxAssignedNumber = summary?.maxAssignedNumber ?? 1;
+			return formatProjectSerialLabel(prefix, Math.max(1, maxAssignedNumber), maxAssignedNumber);
+		};
+
+		const cancelPrefixEdit = (): void => {
+			editingScopeId = null;
+			prefixEditDraft = '';
+			render();
+		};
+
+		const savePrefixEdit = async (scope: ProjectSerialScope): Promise<void> => {
+			const renamed = await this.renameProjectSerialScope(scope, prefixEditDraft);
+			if (!renamed) return;
+			editingScopeId = null;
+			prefixEditDraft = '';
+			render();
+		};
+
+		const render = (): void => {
+			this.settings.projectSerialScopes = this.getNormalizedProjectSerialScopes();
+			const scopes = this.settings.projectSerialScopes;
+			listEl.empty();
+			if (scopes.length === 0) {
+				listEl.createDiv({
+					text: t('settings', 'projectSerialsEmpty'),
+					cls: 'operon-project-serials-empty',
+				});
+			}
+			for (const scope of scopes) {
+				const summary = this.storage.projectSerials.getSummary(scope.id);
+				const isEditing = editingScopeId === scope.id;
+				const rowEl = listEl.createDiv({
+					cls: `operon-project-serial-row${isEditing ? ' is-editing' : ''}`,
+				});
+				const mainEl = rowEl.createDiv('operon-project-serial-row-main');
+				let previewEl: HTMLElement | null = null;
+				if (isEditing) {
+					const prefixInput = mainEl.createEl('input', {
+						cls: 'operon-project-serial-input operon-project-serial-prefix-edit operon-settings-input-short',
+						attr: {
+							type: 'text',
+							autocomplete: 'off',
+							spellcheck: 'false',
+							maxlength: '5',
+						},
+					});
+					prefixInput.value = prefixEditDraft;
+					setAccessibleLabelWithoutTooltip(prefixInput, t('settings', 'projectSerialPrefix'));
+					prefixInput.addEventListener('input', () => {
+						prefixEditDraft = prefixInput.value;
+						if (previewEl) previewEl.setText(formatScopePreview(scope, prefixEditDraft));
+					});
+					prefixInput.addEventListener('keydown', event => {
+						if (event.key === 'Enter') {
+							event.preventDefault();
+							void savePrefixEdit(scope);
+						} else if (event.key === 'Escape') {
+							event.preventDefault();
+							cancelPrefixEdit();
+						}
+					});
+					prefixInput.focus();
+					prefixInput.select();
+				} else {
+					mainEl.createSpan({
+						cls: 'operon-project-serial-row-prefix',
+						text: scope.prefix,
+					});
+				}
+				mainEl.createSpan({
+					cls: 'operon-project-serial-row-parent',
+					text: scope.parentOperonId,
+				});
+				const metaEl = rowEl.createDiv('operon-project-serial-row-meta');
+				metaEl.createSpan({
+					cls: 'operon-project-serial-row-count',
+					text: t('settings', 'projectSerialActiveTaskCount', {
+						count: String(summary?.activeTaskCount ?? 0),
+					}),
+				});
+				previewEl = metaEl.createSpan({
+					cls: 'operon-project-serial-row-preview',
+					text: formatScopePreview(scope, isEditing ? prefixEditDraft : undefined),
+				});
+				const actionsEl = rowEl.createDiv('operon-project-serial-row-actions');
+				if (isEditing) {
+					const saveButton = actionsEl.createEl('button', {
+						cls: 'operon-settings-icon-action-button operon-project-serial-save',
+						attr: { type: 'button' },
+					});
+					setIcon(saveButton, 'check');
+					setAccessibleLabelWithoutTooltip(saveButton, `${t('settings', 'saveProjectSerialPrefix')}: ${scope.prefix}`);
+					saveButton.addEventListener('click', settingsAsyncHandler('settings project serial prefix save failed', async () => {
+						await savePrefixEdit(scope);
+					}));
+					const cancelButton = actionsEl.createEl('button', {
+						cls: 'operon-settings-icon-action-button operon-project-serial-cancel',
+						attr: { type: 'button' },
+					});
+					setIcon(cancelButton, 'x');
+					setAccessibleLabelWithoutTooltip(cancelButton, `${t('settings', 'cancelProjectSerialPrefixEdit')}: ${scope.prefix}`);
+					cancelButton.addEventListener('click', cancelPrefixEdit);
+				} else {
+					const editButton = actionsEl.createEl('button', {
+						cls: 'operon-settings-icon-action-button operon-project-serial-edit',
+						attr: { type: 'button' },
+					});
+					setIcon(editButton, 'pencil');
+					setAccessibleLabelWithoutTooltip(editButton, `${t('settings', 'editProjectSerialPrefix')}: ${scope.prefix}`);
+					editButton.addEventListener('click', () => {
+						editingScopeId = scope.id;
+						prefixEditDraft = scope.prefix;
+						render();
+					});
+					const deleteButton = actionsEl.createEl('button', {
+						cls: 'operon-settings-danger-icon-button operon-project-serial-delete',
+						attr: { type: 'button' },
+					});
+					setIcon(deleteButton, 'trash-2');
+					setAccessibleLabelWithoutTooltip(deleteButton, `${t('settings', 'deleteProjectSerial')}: ${scope.prefix}`);
+					deleteButton.addEventListener('click', settingsAsyncHandler('settings project serial delete failed', async () => {
+						await this.deleteProjectSerialScope(scope);
+						render();
+					}));
+				}
+			}
+
+			addRowEl.empty();
+			const prefixInput = addRowEl.createEl('input', {
+				cls: 'operon-project-serial-input operon-project-serial-prefix-input operon-settings-input-short',
+				attr: {
+					type: 'text',
+					placeholder: t('settings', 'projectSerialPrefixPlaceholder'),
+					autocomplete: 'off',
+					spellcheck: 'false',
+					maxlength: '5',
+				},
+			});
+			prefixInput.value = prefixDraft;
+			setAccessibleLabelWithoutTooltip(prefixInput, t('settings', 'projectSerialPrefix'));
+			const parentInput = addRowEl.createEl('input', {
+				cls: 'operon-project-serial-input operon-project-serial-parent-input operon-settings-input-long',
+				attr: {
+					type: 'text',
+					placeholder: t('settings', 'projectSerialParentPlaceholder'),
+					autocomplete: 'off',
+					spellcheck: 'false',
+				},
+			});
+			parentInput.value = parentDraft;
+			setAccessibleLabelWithoutTooltip(parentInput, t('settings', 'projectSerialParentOperonId'));
+			const addButton = createSettingsAddButton(addRowEl, t('settings', 'addProjectSerial'));
+
+			const updateAddButton = (): void => {
+				addButton.disabled = !prefixDraft.trim() || !parentDraft.trim();
+			};
+			const handleInput = (): void => {
+				prefixDraft = prefixInput.value;
+				parentDraft = parentInput.value;
+				updateAddButton();
+			};
+			const addSerial = async (): Promise<void> => {
+				const added = await this.addProjectSerialScope(prefixDraft, parentDraft);
+				if (!added) return;
+				prefixDraft = '';
+				parentDraft = '';
+				render();
+			};
+			prefixInput.addEventListener('input', handleInput);
+			parentInput.addEventListener('input', handleInput);
+			for (const input of [prefixInput, parentInput]) {
+				input.addEventListener('keydown', event => {
+					if (event.key !== 'Enter') return;
+					event.preventDefault();
+					void addSerial();
+				});
+			}
+			addButton.addEventListener('click', settingsAsyncHandler('settings project serial add failed', addSerial));
+			updateAddButton();
+		};
+
+		render();
+	}
+
+	private getNormalizedProjectSerialScopes(): ProjectSerialScope[] {
+		const normalizedScopes: ProjectSerialScope[] = [];
+		const seenIds = new Set<string>();
+		const seenParents = new Set<string>();
+		for (const scope of this.settings.projectSerialScopes ?? []) {
+			const prefix = normalizeProjectSerialPrefix(scope.prefix);
+			const parentOperonId = scope.parentOperonId.trim();
+			const id = scope.id.trim();
+			if (!id || !prefix || !parentOperonId || seenIds.has(id) || seenParents.has(parentOperonId)) continue;
+			normalizedScopes.push({
+				id,
+				prefix,
+				parentOperonId,
+				createdAt: scope.createdAt.trim(),
+				updatedAt: scope.updatedAt.trim(),
+			});
+			seenIds.add(id);
+			seenParents.add(parentOperonId);
+		}
+		return normalizedScopes;
+	}
+
+	private async addProjectSerialScope(prefixInput: string, parentInput: string): Promise<boolean> {
+		if (!this.indexer) {
+			new Notice(t('settings', 'projectSerialIndexerUnavailable'));
+			return false;
+		}
+		const prefix = normalizeProjectSerialPrefix(prefixInput);
+		if (!prefix) {
+			new Notice(t('settings', 'projectSerialInvalidPrefix'));
+			return false;
+		}
+		const parentOperonId = parentInput.trim();
+		if (!parentOperonId || !this.indexer.getTask(parentOperonId)) {
+			new Notice(t('settings', 'projectSerialParentNotFound'));
+			return false;
+		}
+		const scopes = this.getNormalizedProjectSerialScopes();
+		if (scopes.some(scope => scope.parentOperonId === parentOperonId)) {
+			new Notice(t('settings', 'projectSerialDuplicateParent'));
+			return false;
+		}
+		const now = new Date().toISOString();
+		const candidate: ProjectSerialScope = {
+			id: createProjectSerialScopeId(scopes.map(scope => scope.id)),
+			prefix,
+			parentOperonId,
+			createdAt: now,
+			updatedAt: now,
+		};
+		const preview = previewProjectSerialScopeAdd({
+			scopes,
+			candidate,
+			tasks: this.indexer.getAllTasks(),
+		});
+		if ((preview.duplicatePrefixScopeCount > 0 || preview.overlappingScopeCount > 0) && !await this.confirmAddProjectSerialScope(candidate, preview)) {
+			return false;
+		}
+		this.settings.projectSerialScopes = [...scopes, candidate];
+		await this.saveProjectSerialSettings();
+		return true;
+	}
+
+	private async renameProjectSerialScope(scope: ProjectSerialScope, prefixInput: string): Promise<boolean> {
+		const prefix = normalizeProjectSerialPrefix(prefixInput);
+		if (!prefix) {
+			new Notice(t('settings', 'projectSerialInvalidPrefix'));
+			return false;
+		}
+		const scopes = this.getNormalizedProjectSerialScopes();
+		const currentScope = scopes.find(candidate => candidate.id === scope.id);
+		if (!currentScope) return false;
+		if (prefix === currentScope.prefix) return true;
+		const duplicatePrefixScopeCount = scopes.filter(candidate =>
+			candidate.id !== currentScope.id && candidate.prefix.toLocaleLowerCase() === prefix.toLocaleLowerCase()
+		).length;
+		if (duplicatePrefixScopeCount > 0 && !await this.confirmRenameProjectSerialScope(prefix, duplicatePrefixScopeCount)) {
+			return false;
+		}
+		const now = new Date().toISOString();
+		this.settings.projectSerialScopes = scopes.map(candidate => candidate.id === currentScope.id
+			? {
+				id: currentScope.id,
+				prefix,
+				parentOperonId: currentScope.parentOperonId,
+				createdAt: currentScope.createdAt,
+				updatedAt: now,
+			}
+			: candidate);
+		await this.saveProjectSerialSettings();
+		return true;
+	}
+
+	private async deleteProjectSerialScope(scope: ProjectSerialScope): Promise<void> {
+		if (!this.indexer) {
+			new Notice(t('settings', 'projectSerialIndexerUnavailable'));
+			return;
+		}
+		const scopes = this.getNormalizedProjectSerialScopes();
+		const preview = previewProjectSerialScopeDelete({
+			scopes,
+			scopeId: scope.id,
+			tasks: this.indexer.getAllTasks(),
+		});
+		if (!await this.confirmDeleteProjectSerialScope(scope, preview)) return;
+		this.settings.projectSerialScopes = scopes.filter(candidate => candidate.id !== scope.id);
+		await this.saveProjectSerialSettings();
+	}
+
+	private async saveProjectSerialSettings(): Promise<void> {
+		await this.persistSettingsOnly();
+		const result = await this.storage.projectSerials.reconcile(
+			this.settings.projectSerialScopes,
+			this.indexer?.getAllTasks() ?? [],
+			new Date().toISOString(),
+		);
+		if (result.capacityBlockedScopeIds.length > 0) {
+			new Notice(t('notifications', 'projectSerialCapacityReached'));
+		}
+		this.notifySettingsChanged();
+		this.applyPendingSettingsChange();
+	}
+
+	private async confirmAddProjectSerialScope(
+		scope: ProjectSerialScope,
+		preview: ReturnType<typeof previewProjectSerialScopeAdd>,
+	): Promise<boolean> {
+		return await new Promise(resolve => {
+			new ConfirmActionModal(this.app, {
+				title: t('settings', 'projectSerialAddConfirmTitle', { prefix: scope.prefix }),
+				message: this.buildProjectSerialAddConfirmMessage(preview),
+				confirmText: t('settings', 'addProjectSerial'),
+				cancelText: t('buttons', 'cancel'),
+			}, resolve).open();
+		});
+	}
+
+	private async confirmDeleteProjectSerialScope(
+		scope: ProjectSerialScope,
+		preview: ReturnType<typeof previewProjectSerialScopeDelete>,
+	): Promise<boolean> {
+		return await new Promise(resolve => {
+			new ConfirmActionModal(this.app, {
+				title: t('settings', 'projectSerialDeleteConfirmTitle', { prefix: scope.prefix }),
+				message: this.buildProjectSerialDeleteConfirmMessage(preview),
+				confirmText: t('settings', 'deleteProjectSerial'),
+				cancelText: t('buttons', 'cancel'),
+				danger: true,
+			}, resolve).open();
+		});
+	}
+
+	private async confirmRenameProjectSerialScope(prefix: string, duplicatePrefixScopeCount: number): Promise<boolean> {
+		return await new Promise(resolve => {
+			new ConfirmActionModal(this.app, {
+				title: t('settings', 'projectSerialRenameConfirmTitle', { prefix }),
+				message: t('settings', 'projectSerialRenameDuplicatePrefixConfirm', {
+					count: String(duplicatePrefixScopeCount),
+				}),
+				confirmText: t('settings', 'saveProjectSerialPrefix'),
+				cancelText: t('buttons', 'cancel'),
+			}, resolve).open();
+		});
+	}
+
+	private buildProjectSerialAddConfirmMessage(preview: ReturnType<typeof previewProjectSerialScopeAdd>): string {
+		const lines: string[] = [];
+		if (preview.duplicatePrefixScopeCount > 0) {
+			lines.push(t('settings', 'projectSerialDuplicatePrefixConfirm', {
+				count: String(preview.duplicatePrefixScopeCount),
+			}));
+		}
+		if (preview.overlappingScopeCount > 0) {
+			lines.push(t('settings', 'projectSerialOverlapConfirm', {
+				count: String(preview.overlappingScopeCount),
+			}));
+		}
+		lines.push(t('settings', 'projectSerialChangeCountConfirm', {
+			count: String(preview.visibleSerialChangeCount),
+		}));
+		if (preview.nestedTaskCount > 0) {
+			lines.push(t('settings', 'projectSerialNestedRemainConfirm', {
+				count: String(preview.nestedTaskCount),
+			}));
+		}
+		return lines.join('\n');
+	}
+
+	private buildProjectSerialDeleteConfirmMessage(preview: ReturnType<typeof previewProjectSerialScopeDelete>): string {
+		const lines = [
+			t('settings', 'projectSerialDeleteLossConfirm', {
+				count: String(preview.serialLossCount),
+			}),
+		];
+		if (preview.visibleSerialChangeCount > 0) {
+			lines.push(t('settings', 'projectSerialChangeCountConfirm', {
+				count: String(preview.visibleSerialChangeCount),
+			}));
+		}
+		if (preview.nestedTaskCount > 0) {
+			lines.push(t('settings', 'projectSerialNestedRemainConfirm', {
+				count: String(preview.nestedTaskCount),
+			}));
+		}
+		lines.push(t('settings', 'projectSerialDeleteAssignmentsConfirm'));
+		return lines.join('\n');
+	}
+
+	private getChildTaskInheritanceStatusPipelineOptions(): DropdownSettingOption<ChildTaskInheritanceStatusPipelineSource>[] {
+		return [
+			{ value: 'parent', label: t('settings', 'childTaskInheritanceStatusPipelineParent') },
+			{ value: 'default', label: t('settings', 'childTaskInheritanceStatusPipelineDefault') },
+		];
+	}
+
+	private populateParentChildTaskInheritanceHeader(headerEl: HTMLElement): void {
+		renderSettingsHeading(headerEl, t('settings', 'parentChildTaskInheritance'), 'operon-parent-child-inheritance-heading');
+		headerEl.createEl('p', {
+			text: t('settings', 'parentChildTaskInheritanceDesc'),
+			cls: 'operon-native-settings-section-desc',
+		});
+	}
+
+	private renderParentChildTaskInheritanceSettings(containerEl: HTMLElement): void {
+		const isSearchRender = containerEl.hasClass('operon-settings-search-bounded-render');
+		if (isSearchRender) {
+			containerEl.addClass('operon-parent-child-inheritance-render-host');
+		}
+		const sectionWrapperEl = containerEl.createDiv('operon-native-settings-section operon-parent-child-inheritance-setting');
+		this.populateParentChildTaskInheritanceHeader(sectionWrapperEl);
+		this.markSettingsSearchSectionTarget(sectionWrapperEl, 'automation.parentChildTaskInheritance');
+
+		const sectionEl = sectionWrapperEl.createDiv('operon-native-settings-section-card operon-parent-child-inheritance-section-body');
+
+		const listEl = sectionEl.createDiv('operon-parent-child-inheritance-list');
+		const addRowEl = sectionEl.createDiv('operon-parent-child-inheritance-add-row');
+		parentChildInheritanceSearchInstanceId += 1;
+		const searchListId = `operon-parent-child-inheritance-results-${parentChildInheritanceSearchInstanceId}`;
+		const searchOptionIdPrefix = `${searchListId}-option`;
+
+		let query = '';
+		let selectedKey = '';
+		let activeResultIndex = 0;
+
+		const saveInheritanceFields = async (): Promise<void> => {
+			this.settings.childTaskInheritanceFields = normalizeChildTaskInheritanceFields(
+				this.settings.childTaskInheritanceFields,
+				this.settings.keyMappings,
+			);
+			await this.saveSettings();
+		};
+
+		const getOption = (key: string): ChildTaskInheritanceFieldOption | null => {
+			return this.getParentChildTaskInheritanceFieldOptions().find(option => option.key === key) ?? null;
+		};
+
+		const render = (): void => {
+			this.settings.childTaskInheritanceFields = normalizeChildTaskInheritanceFields(
+				this.settings.childTaskInheritanceFields,
+				this.settings.keyMappings,
+			);
+			const selectedKeys = new Set(this.settings.childTaskInheritanceFields);
+			listEl.empty();
+			for (const fieldKey of this.settings.childTaskInheritanceFields) {
+				const option = getOption(fieldKey);
+				if (!option) continue;
+				const rowEl = listEl.createDiv('operon-parent-child-inheritance-row');
+				const iconEl = rowEl.createSpan('operon-parent-child-inheritance-row-icon');
+				setIcon(iconEl, option.icon);
+				rowEl.createSpan({
+					cls: 'operon-parent-child-inheritance-row-label',
+					text: option.label,
+				});
+				rowEl.createSpan({
+					cls: 'operon-parent-child-inheritance-row-key',
+					text: `{{${option.key}:: }}`,
+				});
+				const removeButton = rowEl.createEl('button', {
+					cls: 'operon-parent-child-inheritance-remove',
+					attr: { type: 'button' },
+				});
+				setIcon(removeButton, 'trash-2');
+				setAccessibleLabelWithoutTooltip(removeButton, `${t('settings', 'removeParentChildInheritanceField')}: ${option.label}`);
+				removeButton.addEventListener('click', settingsAsyncHandler('settings parent-child inheritance remove failed', async () => {
+					this.settings.childTaskInheritanceFields = this.settings.childTaskInheritanceFields.filter(key => key !== fieldKey);
+					await saveInheritanceFields();
+					render();
+				}));
+			}
+			if (this.settings.childTaskInheritanceFields.length === 0) {
+				listEl.createDiv({
+					text: t('settings', 'parentChildTaskInheritanceEmpty'),
+					cls: 'operon-parent-child-inheritance-empty',
+				});
+			}
+
+			addRowEl.empty();
+			const inputWrapEl = addRowEl.createDiv('operon-parent-child-inheritance-search-wrap');
+			const inputEl = inputWrapEl.createEl('input', {
+				cls: 'operon-parent-child-inheritance-search operon-settings-input-long',
+				attr: {
+					type: 'text',
+					placeholder: t('settings', 'parentChildTaskInheritanceSearchPlaceholder'),
+					autocomplete: 'off',
+					spellcheck: 'false',
+					role: 'combobox',
+					'aria-autocomplete': 'list',
+					'aria-controls': searchListId,
+					'aria-expanded': 'false',
+				},
+			});
+			setAccessibleLabelWithoutTooltip(inputEl, t('settings', 'parentChildTaskInheritanceSearch'));
+			inputEl.value = query;
+			const resultsEl = inputWrapEl.createDiv('operon-parent-child-inheritance-results');
+			resultsEl.id = searchListId;
+			resultsEl.setAttribute('role', 'listbox');
+			resultsEl.setAttribute('aria-label', t('settings', 'parentChildTaskInheritanceSearch'));
+			const addButton = createSettingsAddButton(addRowEl, t('settings', 'addParentChildInheritanceField'));
+			addButton.disabled = true;
+			let visibleOptions: ChildTaskInheritanceFieldOption[] = [];
+
+			const selectResult = (option: ChildTaskInheritanceFieldOption): void => {
+				selectedKey = option.key;
+				query = option.label;
+				inputEl.value = query;
+				activeResultIndex = 0;
+				renderResults();
+			};
+
+			const renderResults = (): void => {
+				const normalizedQuery = query.trim().toLocaleLowerCase();
+				const availableOptions = this.getParentChildTaskInheritanceFieldOptions()
+					.filter(option => !selectedKeys.has(option.key));
+				visibleOptions = [];
+				resultsEl.empty();
+				if (!normalizedQuery || selectedKey) {
+					addButton.disabled = !selectedKey;
+					inputEl.setAttribute('aria-expanded', 'false');
+					inputEl.removeAttribute('aria-activedescendant');
+					return;
+				}
+				if (availableOptions.length === 0) {
+					addButton.disabled = true;
+					inputEl.setAttribute('aria-expanded', 'true');
+					inputEl.removeAttribute('aria-activedescendant');
+					resultsEl.createDiv({
+						text: t('settings', 'parentChildTaskInheritanceNoAvailableFields'),
+						cls: 'operon-parent-child-inheritance-result-empty',
+					});
+					return;
+				}
+				visibleOptions = availableOptions
+					.filter(option => option.searchText.includes(normalizedQuery))
+					.slice(0, 8);
+				addButton.disabled = !selectedKey;
+				inputEl.setAttribute('aria-expanded', 'true');
+				if (visibleOptions.length === 0) {
+					inputEl.removeAttribute('aria-activedescendant');
+					resultsEl.createDiv({
+						text: t('settings', 'parentChildTaskInheritanceNoMatches'),
+						cls: 'operon-parent-child-inheritance-result-empty',
+					});
+					return;
+				}
+				activeResultIndex = Math.max(0, Math.min(activeResultIndex, visibleOptions.length - 1));
+				for (const [index, option] of visibleOptions.entries()) {
+					const resultEl = resultsEl.createEl('button', {
+						cls: 'operon-parent-child-inheritance-result',
+						attr: {
+							type: 'button',
+							id: `${searchOptionIdPrefix}-${index}`,
+							role: 'option',
+							'aria-selected': String(index === activeResultIndex),
+						},
+					});
+					resultEl.toggleClass('is-selected', index === activeResultIndex);
+					resultEl.dataset.optionIndex = String(index);
+					const iconEl = resultEl.createSpan('operon-parent-child-inheritance-result-icon');
+					setIcon(iconEl, option.icon);
+					resultEl.createSpan({
+						cls: 'operon-parent-child-inheritance-result-label',
+						text: option.label,
+					});
+					resultEl.createSpan({
+						cls: 'operon-parent-child-inheritance-result-key',
+						text: `{{${option.key}:: }}`,
+					});
+					resultEl.addEventListener('mouseenter', () => {
+						if (activeResultIndex === index) return;
+						activeResultIndex = index;
+						renderResults();
+					});
+					resultEl.addEventListener('click', () => {
+						selectResult(option);
+					});
+				}
+				inputEl.setAttribute('aria-activedescendant', `${searchOptionIdPrefix}-${activeResultIndex}`);
+			};
+
+			inputEl.addEventListener('input', () => {
+				query = inputEl.value;
+				selectedKey = '';
+				activeResultIndex = 0;
+				renderResults();
+			});
+			inputEl.addEventListener('keydown', event => {
+				if (event.key === 'ArrowDown') {
+					if (visibleOptions.length === 0) return;
+					event.preventDefault();
+					activeResultIndex = Math.min(activeResultIndex + 1, visibleOptions.length - 1);
+					renderResults();
+					return;
+				}
+				if (event.key === 'ArrowUp') {
+					if (visibleOptions.length === 0) return;
+					event.preventDefault();
+					activeResultIndex = Math.max(activeResultIndex - 1, 0);
+					renderResults();
+					return;
+				}
+				if (event.key !== 'Enter') return;
+				if (selectedKey) {
+					event.preventDefault();
+					addButton.click();
+					return;
+				}
+				const activeOption = visibleOptions[activeResultIndex];
+				if (!activeOption) return;
+				event.preventDefault();
+				selectResult(activeOption);
+			});
+			addButton.addEventListener('click', settingsAsyncHandler('settings parent-child inheritance add failed', async () => {
+				if (!selectedKey || selectedKeys.has(selectedKey)) return;
+				this.settings.childTaskInheritanceFields = [...this.settings.childTaskInheritanceFields, selectedKey];
+				query = '';
+				selectedKey = '';
+				await saveInheritanceFields();
+				render();
+			}));
+			renderResults();
+		};
+
+		render();
+	}
+
+	private getParentChildTaskInheritanceFieldOptions(): ChildTaskInheritanceFieldOption[] {
+		const options: ChildTaskInheritanceFieldOption[] = [];
+		for (const canonical of CANONICAL_KEY_ORDER) {
+			if (!isChildTaskInheritanceEligibleFieldKey(canonical.name, this.settings.keyMappings)) continue;
+			const mapping = this.settings.keyMappings.find(candidate => candidate.canonicalKey === canonical.name);
+			const label = mapping?.visiblePropertyName?.trim() || canonical.name;
+			options.push({
+				key: canonical.name,
+				label,
+				icon: mapping?.icon?.trim() || (TASK_CREATOR_FALLBACK_FIELD_ICONS as Record<string, string>)[canonical.name] || 'circle-dot',
+				type: canonical.type,
+				searchText: `${label} ${canonical.name} ${canonical.type} ${canonical.description}`.toLocaleLowerCase(),
+			});
+		}
+		for (const mapping of getManagedCustomFieldMappings(this.settings.keyMappings, { includeCheckbox: true })) {
+			if (!isChildTaskInheritanceEligibleFieldKey(mapping.canonicalKey, this.settings.keyMappings)) continue;
+			const label = getCustomFieldLabel(mapping);
+			options.push({
+				key: mapping.canonicalKey,
+				label,
+				icon: getCustomFieldIcon(mapping),
+				type: mapping.type,
+				searchText: `${label} ${mapping.canonicalKey} ${mapping.type} ${mapping.description ?? ''}`.toLocaleLowerCase(),
+			});
+		}
+		return options;
 	}
 
 	private renderGeneralSystemTab(containerEl: HTMLElement): void {
@@ -8177,6 +8908,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 		});
 
 		this.renderDynamicFileTaskFilterSection(containerEl, refreshTab);
+		this.renderDynamicSubtasksFilterSection(containerEl, refreshTab);
 
 		const userFiltersSection = renderNativeSettingsGroupedSection(containerEl, t('filterSets', 'userFiltersTitle'));
 		userFiltersSection.addClass('operon-settings-add-list-section');
@@ -8315,6 +9047,71 @@ export class OperonSettingsTab extends PluginSettingTab {
 		});
 	}
 
+	private renderDynamicSubtasksFilterSection(containerEl: HTMLElement, refresh: () => void): void {
+		const section = renderNativeSettingsGroupedSection(containerEl, t('filterSets', 'dynamicSubtasksFilterTitle'));
+		this.markSettingsSearchSectionTarget(section, 'views.dynamicSubtasksFilter');
+		section.addClass('operon-settings-card-list-section');
+		section.addClass('operon-dynamic-file-task-filter-settings-section');
+		section.addClass('operon-dynamic-subtasks-filter-settings-section');
+
+		this.renderBoundDropdownSetting(section, t('settings', 'dynamicSubtasksFilterSubtaskAutoExpandLimit'), t('settings', 'dynamicSubtasksFilterSubtaskAutoExpandLimitDesc'), 'dynamicSubtasksFilterSubtaskAutoExpandLimit', {
+			value: String(this.settings.dynamicSubtasksFilterSubtaskAutoExpandLimit),
+			dropdownOptions: DYNAMIC_FILE_TASK_FILTER_SUBTASK_AUTO_EXPAND_LIMIT_OPTIONS.map(limit => ({
+				value: String(limit),
+				label: getDynamicFileTaskFilterSubtaskAutoExpandLabel(limit),
+			})),
+			normalize: value => {
+				const parsed = Number.parseInt(value, 10);
+				return DYNAMIC_FILE_TASK_FILTER_SUBTASK_AUTO_EXPAND_LIMIT_OPTIONS.includes(parsed as typeof DYNAMIC_FILE_TASK_FILTER_SUBTASK_AUTO_EXPAND_LIMIT_OPTIONS[number])
+					? parsed as typeof DYNAMIC_FILE_TASK_FILTER_SUBTASK_AUTO_EXPAND_LIMIT_OPTIONS[number]
+					: DEFAULT_SETTINGS.dynamicSubtasksFilterSubtaskAutoExpandLimit;
+			},
+			errorContext: 'settings dynamic subtasks filter subtask auto-expand limit change failed',
+		});
+
+		this.renderBoundToggleSetting(section, t('settings', 'dynamicSubtasksFilterShowOnlyOpenSubtasks'), t('settings', 'dynamicSubtasksFilterShowOnlyOpenSubtasksDesc'), 'dynamicSubtasksFilterShowOnlyOpenSubtasks', {
+			errorContext: 'settings dynamic subtasks filter open subtasks change failed',
+		});
+
+		const filterSet = normalizeDynamicSubtasksFilterSet(
+			this.settings.filterSets.find(entry => isDynamicSubtasksFilterSet(entry)) ?? null,
+		);
+		const card = createSettingsListCard({
+			containerEl: section.createDiv('operon-filter-set-list'),
+			icon: filterSet.icon || 'filter',
+			title: filterSet.name,
+			className: 'operon-filter-set-card operon-dynamic-file-task-filter-card',
+		});
+		createSettingsListCardChip({
+			containerEl: card.metaEl,
+			icon: 'lock-keyhole',
+			label: t('filterSets', 'dynamicFileTaskFilterLockedConditionChip'),
+			className: 'operon-filter-card-used-chip',
+		});
+		createSettingsListCardActionButton({
+			containerEl: card.actionsEl,
+			label: t('filterSets', 'editFilterNamed', { name: filterSet.name }),
+			ariaLabel: t('filterSets', 'editFilterNamed', { name: filterSet.name }),
+			tooltip: t('filterSets', 'editFilterNamed', { name: filterSet.name }),
+			text: t('filterSets', 'edit'),
+			wide: true,
+			onClick: () => {
+				const clone = normalizeDynamicSubtasksFilterSet(filterSet);
+				new FilterSetModal(this.app, clone, this.settings.keyMappings, settingsAsyncHandler('settings dynamic subtasks filter edit failed', async (saved) => {
+					await this.upsertFilterSet(normalizeDynamicSubtasksFilterSet(saved));
+					await this.saveSettings();
+					refresh();
+				}), undefined, {
+					title: t('filterSets', 'dynamicSubtasksFilterTitle'),
+					lockConditions: 'dynamicSubtasks',
+					hideUsageInfo: true,
+					showCountBadge: false,
+					getSettings: () => this.settings,
+				}).open();
+			},
+		});
+	}
+
 	private countFilterConditions(filterSet: FilterSet): number {
 		const countNodes = (nodes: typeof filterSet.rootGroup.children): number => {
 			let count = 0;
@@ -8340,13 +9137,13 @@ export class OperonSettingsTab extends PluginSettingTab {
 	}
 
 	private async deleteFilterSet(filterId: string): Promise<void> {
-		if (isDynamicFileTaskFilterSetId(filterId)) return;
+		if (isSpecialDynamicFilterSetId(filterId)) return;
 		await this.storage.filters.delete(filterId);
 		this.syncFilterSetsFromStore();
 	}
 
 	private async moveFilterSet(filterId: string, direction: 'up' | 'down'): Promise<void> {
-		if (isDynamicFileTaskFilterSetId(filterId)) return;
+		if (isSpecialDynamicFilterSetId(filterId)) return;
 		const ids = getNormalFilterSets(this.settings.filterSets).map(f => f.id);
 		const idx = ids.indexOf(filterId);
 		if (idx === -1) return;
@@ -8358,7 +9155,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 	}
 
 	private async copyFilterSet(filterSet: FilterSet): Promise<void> {
-		if (isDynamicFileTaskFilterSet(filterSet)) return;
+		if (isSpecialDynamicFilterSet(filterSet)) return;
 		const copy = cloneFilterSet(filterSet);
 		copy.id = generateFilterSetId();
 		copy.name = `${filterSet.name} Copy`;

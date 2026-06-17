@@ -23,6 +23,10 @@ export function suppressNativeModalCloseButton(containerEl: HTMLElement, modalEl
 	if (!containerEl.contains(modalEl)) {
 		observer.observe(modalEl, { childList: true, subtree: true });
 	}
+	const bodyObserver = new MutationObserver(hideCloseButtons);
+	if (ownerDocument.body) {
+		bodyObserver.observe(ownerDocument.body, { childList: true, subtree: true });
+	}
 
 	hideCloseButtons();
 	if (ownerWindow) {
@@ -32,6 +36,7 @@ export function suppressNativeModalCloseButton(containerEl: HTMLElement, modalEl
 
 	return () => {
 		observer.disconnect();
+		bodyObserver.disconnect();
 		if (ownerWindow && animationFrame !== null) {
 			ownerWindow.cancelAnimationFrame(animationFrame);
 		}

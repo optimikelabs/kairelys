@@ -1,6 +1,7 @@
 import { App } from 'obsidian';
 import { createOwnerElement } from '../core/dom-compat';
 import { IndexedTask } from '../types/fields';
+import type { ProjectSerialDisplay } from '../core/project-serials';
 import {
 	InlineTaskCompactChipEntry,
 	buildInlineTaskCompactChipEntries,
@@ -24,6 +25,7 @@ import {
 	shouldOpenIconOnlyChipPreview,
 } from './icon-only-chip-preview';
 import { t } from '../core/i18n';
+import { createProjectSerialChipElement } from './project-serial-chip';
 
 interface OverlayChipRenderCallbacks {
 	app: App;
@@ -31,6 +33,7 @@ interface OverlayChipRenderCallbacks {
 	getAllTasks: () => IndexedTask[];
 	sourcePath: string;
 	owner?: Node | null;
+	getProjectSerialDisplay?: (operonId: string) => ProjectSerialDisplay | null;
 }
 
 export function getTaskFileOverlayChipSignature(
@@ -38,6 +41,7 @@ export function getTaskFileOverlayChipSignature(
 	app: App,
 	settings: OperonSettings,
 	allTasks: IndexedTask[],
+	getProjectSerialDisplay?: (operonId: string) => ProjectSerialDisplay | null,
 ): string {
 	const locationIndex = shouldResolveLocationCompactChips(settings, settings.overlayTaskCompactChips)
 		? getLocationPlaceIndex(app, settings)
@@ -66,6 +70,7 @@ export function getTaskFileOverlayChipSignature(
 	].join(':')).join('|');
 	return [
 		locationIndex?.getSignature() ?? '',
+		getProjectSerialDisplay?.(task.operonId)?.label ?? '',
 		entrySignature,
 	].join('|');
 }
@@ -97,12 +102,19 @@ export function buildTaskFileOverlayChipContainer(
 		settings.overlayTaskCompactChips,
 		locationResolver,
 	);
-	if (entries.length === 0) return null;
+	const projectSerialDisplay = callbacks.getProjectSerialDisplay?.(task.operonId) ?? null;
+	if (entries.length === 0 && !projectSerialDisplay) return null;
 
 	const taskColor = normalizeTaskColor(task.fieldValues['taskColor']);
 	const statusColor = lookupStatusColor(task.fieldValues['status'], settings.pipelines);
 	const row = createOwnerElement(callbacks.owner, 'span');
 	row.className = 'operon-task-wikilink-chip-row operon-task-chip-surface';
+	if (projectSerialDisplay) {
+		row.appendChild(createProjectSerialChipElement(projectSerialDisplay, 'operon-task-wikilink-chip operon-task-chip', {
+			keyMappings: settings.keyMappings,
+			owner: row,
+		}));
+	}
 
 	for (const rawEntry of entries) {
 		const entry = {

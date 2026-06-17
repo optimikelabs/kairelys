@@ -21,7 +21,7 @@ import { ActiveTrackerState, TrackerSource, TrackerStopReason } from '../types/t
 import { promptTaskFinderSelection, TASK_FINDER_SCOPE_TIME_TRACKER } from './task-finder-integrations';
 import { renderQuickInlineTaskCreatorInput } from './task-creator-integrations';
 import { bindTaskContextualHoverMenu, hideTaskContextualHoverMenu } from './contextual-hover-menu';
-import type { ContextualMenuActionId } from '../core/contextual-menu-engine';
+import type { ContextualMenuActionHandler } from '../core/contextual-menu-engine';
 import type { QuickInlineTaskCreationResult } from './task-creator-integrations';
 import type { TaskCreatorDraft } from './task-creator-modal';
 import { WindowIntervalHandle, clearWindowInterval, getOwnerDocument, setWindowInterval } from '../core/dom-compat';
@@ -46,8 +46,9 @@ interface FlowTimeViewCallbacks {
 	startTimerForTask: (operonId: string, source: TrackerSource, startOverride?: string | null) => Promise<boolean>;
 	startUnassignedTimer: (source: TrackerSource) => Promise<boolean>;
 	stopActiveTimer: (reason: TrackerStopReason) => Promise<boolean>;
-	onContextualAction?: (taskId: string, actionId: ContextualMenuActionId) => void | Promise<void>;
+	onContextualAction?: ContextualMenuActionHandler;
 	isTaskPinned?: (taskId: string) => boolean;
+	hasSubtasks?: (taskId: string) => boolean;
 }
 
 interface DialState {
@@ -1112,6 +1113,7 @@ export class FlowTimeView extends ItemView {
 			getSettings: this.callbacks.getSettings,
 			onAction: this.callbacks.onContextualAction,
 			isPinned: this.callbacks.isTaskPinned ? () => this.callbacks.isTaskPinned?.(task.operonId) === true : undefined,
+			hasSubtasks: this.callbacks.hasSubtasks ? () => this.callbacks.hasSubtasks?.(task.operonId) === true : undefined,
 		});
 	}
 

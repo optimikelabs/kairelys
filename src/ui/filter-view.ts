@@ -22,7 +22,7 @@ import { buildFilterTaskRowElement, FilterTaskRowCallbacks } from './filter-task
 import { shouldResolveLocationCompactChips } from './compact-task-layout';
 import { FilterSetModal, type FilterSetModalQuickActions } from './filter-set-modal';
 import { ConfirmActionModal } from './confirm-action-modal';
-import type { ContextualMenuActionId } from '../core/contextual-menu-engine';
+import type { ContextualMenuActionHandler } from '../core/contextual-menu-engine';
 import { bindOperonHoverTooltip } from './operon-hover-tooltip';
 import { applyFilterSearch, buildFilterTreeScope, isFilterSearchActive } from '../systems/filter-search';
 import {
@@ -33,6 +33,7 @@ import {
 import { getOwnerDocument } from '../core/dom-compat';
 import { asyncHandler, runAsyncAction } from '../core/async-action';
 import { IndexedTask } from '../types/fields';
+import type { ProjectSerialDisplay } from '../core/project-serials';
 import { closeFloatingPanelsForRoot } from './field-pickers/common';
 import { closeIconOnlyChipPreviewsForRoot } from './icon-only-chip-preview';
 import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
@@ -106,10 +107,12 @@ export class FilterView extends ItemView {
 	private getRepeatSeriesInlineCompletionMode?: (repeatSeriesId: string) => InlineRepeatCompletionMode;
 	private updateRepeatSeriesInlineCompletionMode?: (operonId: string, mode: InlineRepeatCompletionMode) => void | Promise<void>;
 	private requestSubtask?: (operonId: string) => void | Promise<void>;
-	private onContextualAction: ((taskId: string, actionId: ContextualMenuActionId) => void | Promise<void>) | null = null;
+	private onContextualAction: ContextualMenuActionHandler | null = null;
 	private isTaskTracking?: (taskId: string) => boolean;
 	private toggleTimer?: (taskId: string) => void | Promise<void>;
 	private getTrackingSignature?: () => string;
+	private getProjectSerialDisplay?: (operonId: string) => ProjectSerialDisplay | null;
+	private getProjectSerialSignature?: () => string;
 	private saveFilterSet?: (filterSet: FilterSet) => Promise<void>;
 	private openDailyNote?: (dateKey: string) => void | Promise<void>;
 	private duplicateFilterSet?: (filterSet: FilterSet) => Promise<void>;
@@ -155,11 +158,13 @@ export class FilterView extends ItemView {
 		getRepeatSeriesInlineCompletionMode?: (repeatSeriesId: string) => InlineRepeatCompletionMode,
 		updateRepeatSeriesInlineCompletionMode?: (operonId: string, mode: InlineRepeatCompletionMode) => void | Promise<void>,
 		requestSubtask?: (operonId: string) => void | Promise<void>,
-		onContextualAction?: (taskId: string, actionId: ContextualMenuActionId) => void | Promise<void>,
+		onContextualAction?: ContextualMenuActionHandler,
 		pinnedCache?: PinnedCache,
 		isTaskTracking?: (taskId: string) => boolean,
 		toggleTimer?: (taskId: string) => void | Promise<void>,
 		getTrackingSignature?: () => string,
+		getProjectSerialDisplay?: (operonId: string) => ProjectSerialDisplay | null,
+		getProjectSerialSignature?: () => string,
 		saveFilterSet?: (filterSet: FilterSet) => Promise<void>,
 		openDailyNote?: (dateKey: string) => void | Promise<void>,
 		duplicateFilterSet?: (filterSet: FilterSet) => Promise<void>,
@@ -188,6 +193,8 @@ export class FilterView extends ItemView {
 		this.isTaskTracking = isTaskTracking;
 		this.toggleTimer = toggleTimer;
 		this.getTrackingSignature = getTrackingSignature;
+		this.getProjectSerialDisplay = getProjectSerialDisplay;
+		this.getProjectSerialSignature = getProjectSerialSignature;
 		this.saveFilterSet = saveFilterSet;
 		this.openDailyNote = openDailyNote;
 		this.duplicateFilterSet = duplicateFilterSet;
@@ -339,6 +346,7 @@ export class FilterView extends ItemView {
 			isTaskPinned: this.pinnedCache ? (taskId) => this.pinnedCache?.isPinned(taskId) === true : undefined,
 			isTaskTracking: this.isTaskTracking,
 			toggleTimer: this.toggleTimer,
+			getProjectSerialDisplay: this.getProjectSerialDisplay,
 		};
 		const globalShowSubtasks = this.settings.filterShowSubtasks === true;
 		const globalShowOnlyOpenSubtasks = this.settings.filterShowOnlyOpenSubtasks === true;
@@ -963,6 +971,7 @@ export class FilterView extends ItemView {
 			this.indexer.getGeneration(),
 			this.pinnedCache?.getGeneration() ?? 0,
 			this.getTrackingSignature?.() ?? '',
+			this.getProjectSerialSignature?.() ?? '',
 			this.currentFilterSetId ?? '',
 			this.searchQuery.trim().toLocaleLowerCase(),
 			JSON.stringify(filterSet),

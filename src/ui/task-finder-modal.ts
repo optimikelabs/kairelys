@@ -9,6 +9,7 @@ import {
 	resolveProjectSearchVisibleTaskIds,
 } from '../systems/task-search';
 import { IndexedTask } from '../types/fields';
+import type { ProjectSerialDisplay } from '../core/project-serials';
 import { resolveWorkflowStatus } from '../types/pipeline';
 import { localToday } from '../core/local-time';
 import { getConfiguredKeyMappingIcon } from '../core/key-mapping-icons';
@@ -21,6 +22,7 @@ import {
 	shouldResolveLocationCompactChips,
 } from './compact-task-layout';
 import { bindOperonHoverTooltip } from './operon-hover-tooltip';
+import { createProjectSerialChipElement } from './project-serial-chip';
 import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
 import { suppressNativeModalCloseButton } from './modal-close-button';
 import {
@@ -52,6 +54,7 @@ export interface TaskFinderModalOptions {
 	};
 	onCancel?: () => void;
 	onPersistDefaultScope?: (scope: TaskFinderDefaultScopeItem[], selectedProjectId: string) => void | Promise<void>;
+	getProjectSerialDisplay?: (operonId: string) => ProjectSerialDisplay | null;
 }
 
 const TASK_FINDER_MIN_QUERY_LENGTH = 2;
@@ -987,6 +990,15 @@ export class TaskFinderModal extends Modal {
 
 	private renderTaskChipLine(body: HTMLElement, task: IndexedTask): void {
 		const chips = body.createDiv('operon-task-finder-chip-row operon-task-chip-surface');
+		const projectSerialDisplay = this.options.getProjectSerialDisplay?.(task.operonId) ?? null;
+		const settings = this.getSettings();
+		if (projectSerialDisplay) {
+			chips.appendChild(createProjectSerialChipElement(
+				projectSerialDisplay,
+				'operon-task-finder-chip operon-task-chip',
+				{ keyMappings: settings.keyMappings, owner: chips },
+			));
+		}
 		this.renderTaskChips(chips, task);
 		if (chips.childElementCount === 0) {
 			chips.createSpan({ cls: 'operon-task-finder-result-id', text: task.operonId });

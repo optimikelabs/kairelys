@@ -13,7 +13,7 @@ import { TimeTracker } from '../systems/time-tracker';
 import { t } from '../core/i18n';
 import { PinnedCache } from '../storage/pinned-cache';
 import { bindTaskContextualHoverMenu } from './contextual-hover-menu';
-import type { ContextualMenuActionId } from '../core/contextual-menu-engine';
+import type { ContextualMenuActionHandler } from '../core/contextual-menu-engine';
 import { resolveTaskColorSourceForTask } from '../core/task-color-source';
 import { WindowTimeoutHandle, clearWindowTimeout, createOwnerElement, getOwnerBody, getOwnerDocument, getOwnerWindow, setWindowTimeout } from '../core/dom-compat';
 import { asyncHandler } from '../core/async-action';
@@ -22,7 +22,8 @@ import { getPinnedTasksForDisplay } from '../core/pinned-task-query';
 export interface PinnedDockCallbacks {
 	openTaskEditor: (operonId: string) => void;
 	cycleStatus: (operonId: string) => void;
-	onContextualAction?: (taskId: string, actionId: ContextualMenuActionId) => void | Promise<void>;
+	onContextualAction?: ContextualMenuActionHandler;
+	hasSubtasks?: (taskId: string) => boolean;
 	toggleTimer: (taskId: string) => Promise<boolean>;
 	saveSettings: () => void;
 	refreshLayout: () => void;
@@ -229,6 +230,7 @@ export class PinnedTasksDock extends Component {
 						getSettings: () => this.settings,
 						onAction: this.callbacks.onContextualAction,
 						isPinned: () => this.pinnedCache.isPinned(task.operonId),
+						hasSubtasks: this.callbacks.hasSubtasks ? () => this.callbacks.hasSubtasks?.(task.operonId) === true : undefined,
 					});
 				}
 

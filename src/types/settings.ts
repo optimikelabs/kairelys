@@ -56,11 +56,18 @@ import {
 	cloneDefaultColorPalette,
 	normalizeColorPalette,
 } from '../core/color-palette';
+import {
+	createProjectSerialScopeId,
+	normalizeProjectSerialPrefix,
+	normalizeProjectSerialScopes,
+} from '../core/project-serials';
 
-export const CURRENT_SETTINGS_VERSION = 92;
+export const CURRENT_SETTINGS_VERSION = 96;
 export const CURRENT_TASK_STATS_BACKFILL_VERSION = 2;
-export const SUPPORTED_LANGUAGE_OPTIONS = ['auto', 'en', 'tr', 'de', 'fr'] as const;
+export const SUPPORTED_LANGUAGE_OPTIONS = ['auto', 'en', 'tr', 'de', 'fr', 'es'] as const;
 export type OperonLanguage = typeof SUPPORTED_LANGUAGE_OPTIONS[number];
+export const DEFAULT_CHILD_TASK_INHERITANCE_FIELDS = ['status', 'priority', 'taskIcon', 'taskColor'] as const;
+export type ChildTaskInheritanceStatusPipelineSource = 'parent' | 'default';
 
 export function isSupportedLanguage(value: string): value is OperonLanguage {
 	return (SUPPORTED_LANGUAGE_OPTIONS as readonly string[]).includes(value);
@@ -77,8 +84,41 @@ export interface MobileGlobalTaskFabPosition {
 	yRatio: number;
 }
 
+export interface ProjectSerialScope {
+	id: string;
+	prefix: string;
+	parentOperonId: string;
+	createdAt: string;
+	updatedAt: string;
+}
+
 const DEFAULT_CALENDAR_DEFAULT_PRESET_ID = 'calendar-preset-3day';
 const DEFAULT_KANBAN_DEFAULT_PRESET_ID = 'kanban-preset-default';
+const SPECIAL_DYNAMIC_FILTER_SET_IDS = new Set(['fs_dynamic_file_task', 'fs_dynamic_subtasks_filter']);
+const CHILD_TASK_INHERITANCE_BLOCKED_FIELD_KEYS = new Set<string>([
+	'operonId',
+	'parentTask',
+	'datetimeCreated',
+	'datetimeModified',
+	'blocking',
+	'blockedBy',
+	'duration',
+	'totalEstimate',
+	'totalDuration',
+	'directSubtaskCount',
+	'directDoneSubtaskCount',
+	'directOpenSubtaskCount',
+	'treeDescendantCount',
+	'treeDoneDescendantCount',
+	'treeOpenDescendantCount',
+	'repeatSeriesId',
+	'repeatOccurrenceDate',
+	'reminders',
+	'timezone',
+	'trackers',
+	'activeTracker',
+	'related',
+]);
 const DEFAULT_CONTEXTUAL_MENU_ACTION_ALLOWLIST: ContextualMenuActionId[] = [
 	'markDone',
 	'startTimer',
@@ -87,6 +127,9 @@ const DEFAULT_CONTEXTUAL_MENU_ACTION_ALLOWLIST: ContextualMenuActionId[] = [
 	'unschedule',
 	'clearDueDate',
 	'openEditor',
+	'subtasks',
+	'createSubtask',
+	'checkboxes',
 	'jumpToSource',
 	'taskStatus',
 	'cancelTask',
@@ -95,6 +138,9 @@ const DEFAULT_CONTEXTUAL_MENU_COMMON_SURFACE_ACTIONS: ContextualMenuActionId[] =
 	'taskStatus',
 	'pinToggle',
 	'openEditor',
+	'subtasks',
+	'createSubtask',
+	'checkboxes',
 	'startTimer',
 	'markDone',
 	'unschedule',
@@ -106,6 +152,9 @@ const DEFAULT_CONTEXTUAL_MENU_WITH_CANCEL_ACTIONS: ContextualMenuActionId[] = [
 	'taskStatus',
 	'pinToggle',
 	'openEditor',
+	'subtasks',
+	'createSubtask',
+	'checkboxes',
 	'startTimer',
 	'markDone',
 	'cancelTask',
@@ -116,6 +165,9 @@ const DEFAULT_CONTEXTUAL_MENU_WITH_CANCEL_ACTIONS: ContextualMenuActionId[] = [
 ];
 const DEFAULT_CONTEXTUAL_MENU_TRACKER_ACTIONS: ContextualMenuActionId[] = [
 	'markDone',
+	'subtasks',
+	'createSubtask',
+	'checkboxes',
 	'unschedule',
 	'setAsTracked',
 	'clearDueDate',
@@ -124,6 +176,9 @@ const DEFAULT_CONTEXTUAL_MENU_KANBAN_ACTIONS: ContextualMenuActionId[] = [
 	'pinToggle',
 	'startTimer',
 	'markDone',
+	'subtasks',
+	'createSubtask',
+	'checkboxes',
 	'unschedule',
 	'jumpToSource',
 	'clearDueDate',
@@ -936,6 +991,50 @@ export function isRetiredKeyMapping(canonicalKey: string): boolean {
 	return RETIRED_KEY_MAPPING_KEYS.has(canonicalKey);
 }
 
+export function isChildTaskInheritanceEligibleFieldKey(
+	canonicalKey: string,
+	keyMappings: readonly KeyMapping[] | null | undefined,
+): boolean {
+	const normalizedKey = canonicalKey.trim();
+	if (!normalizedKey || CHILD_TASK_INHERITANCE_BLOCKED_FIELD_KEYS.has(normalizedKey) || isRetiredKeyMapping(normalizedKey)) {
+		return false;
+	}
+	const canonical = CANONICAL_KEYS.find(key => key.name === normalizedKey);
+	if (canonical) {
+		return canonical.internal !== true;
+	}
+	const mapping = keyMappings?.find(candidate => candidate.canonicalKey === normalizedKey);
+	return !!mapping
+		&& mapping.isSystem === false
+		&& mapping.isInternal !== true
+		&& !isRetiredKeyMapping(mapping.canonicalKey);
+}
+
+export function normalizeChildTaskInheritanceFields(
+	raw: unknown,
+	keyMappings: readonly KeyMapping[] | null | undefined,
+): string[] {
+	if (!Array.isArray(raw)) return [...DEFAULT_CHILD_TASK_INHERITANCE_FIELDS];
+	const seen = new Set<string>();
+	const fields: string[] = [];
+	for (const value of raw) {
+		if (typeof value !== 'string') continue;
+		const key = value.trim();
+		if (!isChildTaskInheritanceEligibleFieldKey(key, keyMappings) || seen.has(key)) continue;
+		seen.add(key);
+		fields.push(key);
+	}
+	return fields;
+}
+
+export function normalizeChildTaskInheritanceStatusPipelineSource(
+	raw: unknown,
+	fallback: ChildTaskInheritanceStatusPipelineSource = 'parent',
+): ChildTaskInheritanceStatusPipelineSource {
+	if (raw === 'parent' || raw === 'default') return raw;
+	return fallback;
+}
+
 function getDefaultKeyMappingIcon(canonicalKey: string): string {
 	return normalizeTaskIconValue(DEFAULT_KEY_MAPPING_ICONS[canonicalKey] ?? '');
 }
@@ -996,6 +1095,10 @@ export interface OperonSettings {
 	dynamicFileTaskFilterSubtaskAutoExpandLimit: DynamicFileTaskFilterSubtaskAutoExpandLimit;
 	/** Dynamic filter presentation: hide non-open subtasks under each parent. */
 	dynamicFileTaskFilterShowOnlyOpenSubtasks: boolean;
+	/** Dynamic subtasks filter presentation: auto-expand the visible subtask tree at or below this limit. */
+	dynamicSubtasksFilterSubtaskAutoExpandLimit: DynamicFileTaskFilterSubtaskAutoExpandLimit;
+	/** Dynamic subtasks filter presentation: hide non-open subtasks under each parent. */
+	dynamicSubtasksFilterShowOnlyOpenSubtasks: boolean;
 
 	/** UI language override. 'auto' = detect from Obsidian locale. */
 	language: OperonLanguage;
@@ -1047,6 +1150,12 @@ export interface OperonSettings {
 	autoParentFileTask: boolean;
 	/** If true, linked file tasks created inside a file task file auto-get parentTask set to that file task. */
 	autoParentLinkedFileSubtasks: boolean;
+	/** Ordered list of parent fields copied or derived when creating child tasks. */
+	childTaskInheritanceFields: string[];
+	/** Pipeline source used when status is inherited into a child task. */
+	childTaskInheritanceStatusPipelineSource: ChildTaskInheritanceStatusPipelineSource;
+	/** Read-only visual serial scopes assigned to parent task trees. */
+	projectSerialScopes: ProjectSerialScope[];
 	/** If true, estimate reallocation is applied automatically on explicit estimate commits. */
 	estimateAutoReallocation: boolean;
 	/** Ordered, user-customizable visual controls for the New Operon Task toolbar. */
@@ -1452,6 +1561,8 @@ export const DEFAULT_SETTINGS: OperonSettings = {
 	dynamicFileTaskFilterPlacement: 'body-top',
 	dynamicFileTaskFilterSubtaskAutoExpandLimit: 10,
 	dynamicFileTaskFilterShowOnlyOpenSubtasks: false,
+	dynamicSubtasksFilterSubtaskAutoExpandLimit: 10,
+	dynamicSubtasksFilterShowOnlyOpenSubtasks: false,
 
 	language: 'auto',
 	timeFormat: '24h',
@@ -1481,6 +1592,9 @@ export const DEFAULT_SETTINGS: OperonSettings = {
 	inlineTaskDailyNoteAddScheduledDate: false,
 	autoParentFileTask: true,
 	autoParentLinkedFileSubtasks: true,
+	childTaskInheritanceFields: [...DEFAULT_CHILD_TASK_INHERITANCE_FIELDS],
+	childTaskInheritanceStatusPipelineSource: 'parent',
+	projectSerialScopes: [],
 	estimateAutoReallocation: false,
 	taskCreatorToolbar: buildDefaultTaskCreatorToolbarItems(),
 	taskEditorShowLineNumbers: false,
@@ -2292,6 +2406,78 @@ function normalizeContextualMenuActionAllowlist(raw: unknown): ContextualMenuAct
 		typeof value === 'string' && CONTEXTUAL_MENU_ACTION_ID_SET.has(value as ContextualMenuActionId));
 }
 
+function insertContextualMenuActionAfter(
+	actionIds: ContextualMenuActionId[],
+	actionId: ContextualMenuActionId,
+	afterActionId: ContextualMenuActionId,
+): ContextualMenuActionId[] {
+	if (actionIds.includes(actionId)) return actionIds;
+	const afterIndex = actionIds.indexOf(afterActionId);
+	const insertAt = afterIndex >= 0 ? afterIndex + 1 : actionIds.length;
+	return [
+		...actionIds.slice(0, insertAt),
+		actionId,
+		...actionIds.slice(insertAt),
+	];
+}
+
+function insertContextualMenuActionAfterOrBefore(
+	actionIds: ContextualMenuActionId[],
+	actionId: ContextualMenuActionId,
+	afterActionId: ContextualMenuActionId,
+	beforeActionId: ContextualMenuActionId,
+): ContextualMenuActionId[] {
+	if (actionIds.includes(actionId)) return actionIds;
+	const afterIndex = actionIds.indexOf(afterActionId);
+	if (afterIndex >= 0) {
+		return [
+			...actionIds.slice(0, afterIndex + 1),
+			actionId,
+			...actionIds.slice(afterIndex + 1),
+		];
+	}
+	const beforeIndex = actionIds.indexOf(beforeActionId);
+	if (beforeIndex >= 0) {
+		return [
+			...actionIds.slice(0, beforeIndex),
+			actionId,
+			...actionIds.slice(beforeIndex),
+		];
+	}
+	return [...actionIds, actionId];
+}
+
+function backfillContextualMenuSurfaceAction(
+	matrix: ContextualMenuSurfaceActionMatrix,
+	actionId: ContextualMenuActionId,
+	afterActionId: ContextualMenuActionId,
+): ContextualMenuSurfaceActionMatrix {
+	const next: ContextualMenuSurfaceActionMatrix = { ...matrix };
+	for (const surface of CONTEXTUAL_MENU_SURFACES) {
+		if (surface === 'calendarProjectedOccurrence' || surface === 'calendarExternalItem') continue;
+		const actionIds = next[surface];
+		if (!Array.isArray(actionIds) || !actionIds.includes(afterActionId)) continue;
+		next[surface] = insertContextualMenuActionAfter(actionIds, actionId, afterActionId);
+	}
+	return next;
+}
+
+function backfillContextualMenuSurfaceActionAfterOrBefore(
+	matrix: ContextualMenuSurfaceActionMatrix,
+	actionId: ContextualMenuActionId,
+	afterActionId: ContextualMenuActionId,
+	beforeActionId: ContextualMenuActionId,
+): ContextualMenuSurfaceActionMatrix {
+	const next: ContextualMenuSurfaceActionMatrix = { ...matrix };
+	for (const surface of CONTEXTUAL_MENU_SURFACES) {
+		if (surface === 'calendarProjectedOccurrence' || surface === 'calendarExternalItem') continue;
+		const actionIds = next[surface];
+		if (!Array.isArray(actionIds) || (!actionIds.includes(afterActionId) && !actionIds.includes(beforeActionId))) continue;
+		next[surface] = insertContextualMenuActionAfterOrBefore(actionIds, actionId, afterActionId, beforeActionId);
+	}
+	return next;
+}
+
 export function buildDefaultContextualMenuSurfaceActionMatrix(): ContextualMenuSurfaceActionMatrix {
 	return {
 		readingRow: [...DEFAULT_CONTEXTUAL_MENU_COMMON_SURFACE_ACTIONS],
@@ -2770,6 +2956,16 @@ export function migrateSettings(raw: unknown): OperonSettings {
 		: src.dynamicFileTaskFilterShowSubtasks === false
 			? 0
 			: DEFAULT_SETTINGS.dynamicFileTaskFilterSubtaskAutoExpandLimit;
+	out.dynamicSubtasksFilterSubtaskAutoExpandLimit = typeof src.dynamicSubtasksFilterSubtaskAutoExpandLimit === 'number'
+		? normalizeAllowedNumber(
+			Math.round(src.dynamicSubtasksFilterSubtaskAutoExpandLimit),
+			DYNAMIC_FILE_TASK_FILTER_SUBTASK_AUTO_EXPAND_LIMIT_OPTIONS,
+			DEFAULT_SETTINGS.dynamicSubtasksFilterSubtaskAutoExpandLimit,
+		) as DynamicFileTaskFilterSubtaskAutoExpandLimit
+		: out.dynamicFileTaskFilterSubtaskAutoExpandLimit;
+	out.dynamicSubtasksFilterShowOnlyOpenSubtasks = typeof src.dynamicSubtasksFilterShowOnlyOpenSubtasks === 'boolean'
+		? src.dynamicSubtasksFilterShowOnlyOpenSubtasks
+		: out.dynamicFileTaskFilterShowOnlyOpenSubtasks;
 	if (!['tracktime', 'flowtime'].includes(out.flowTimeMode)) {
 		out.flowTimeMode = DEFAULT_SETTINGS.flowTimeMode;
 	}
@@ -2855,6 +3051,44 @@ export function migrateSettings(raw: unknown): OperonSettings {
 		src.contextualMenuActionAllowlist ?? src.calendarHoverActionAllowlist,
 	);
 	out.contextualMenuSurfaceActionMatrix = normalizeContextualMenuSurfaceActionMatrix(src.contextualMenuSurfaceActionMatrix);
+	if (sourceSettingsVersion < 93) {
+		out.contextualMenuActionAllowlist = insertContextualMenuActionAfterOrBefore(
+			out.contextualMenuActionAllowlist,
+			'createSubtask',
+			'openEditor',
+			'jumpToSource',
+		);
+		out.contextualMenuSurfaceActionMatrix = backfillContextualMenuSurfaceActionAfterOrBefore(
+			out.contextualMenuSurfaceActionMatrix,
+			'createSubtask',
+			'openEditor',
+			'jumpToSource',
+		);
+		out.contextualMenuActionAllowlist = insertContextualMenuActionAfter(
+			out.contextualMenuActionAllowlist,
+			'checkboxes',
+			'createSubtask',
+		);
+		out.contextualMenuSurfaceActionMatrix = backfillContextualMenuSurfaceAction(
+			out.contextualMenuSurfaceActionMatrix,
+			'checkboxes',
+			'createSubtask',
+		);
+	}
+	if (sourceSettingsVersion < 94) {
+		out.contextualMenuActionAllowlist = insertContextualMenuActionAfterOrBefore(
+			out.contextualMenuActionAllowlist,
+			'subtasks',
+			'openEditor',
+			'createSubtask',
+		);
+		out.contextualMenuSurfaceActionMatrix = backfillContextualMenuSurfaceActionAfterOrBefore(
+			out.contextualMenuSurfaceActionMatrix,
+			'subtasks',
+			'openEditor',
+			'createSubtask',
+		);
+	}
 	out.contextualMenuOpenDelayMs = normalizeContextualMenuOpenDelayMs(
 		src.contextualMenuOpenDelayMs ?? src.calendarHoverMenuOpenDelayMs,
 	);
@@ -3137,8 +3371,8 @@ export function migrateSettings(raw: unknown): OperonSettings {
 	) {
 		out.leftRailDefaultFilterViewId = out.filterSets[0]?.id ?? null;
 	}
-	if (out.leftRailDefaultFilterViewId === 'fs_dynamic_file_task') {
-		out.leftRailDefaultFilterViewId = out.filterSets.find(filterSet => filterSet.id !== 'fs_dynamic_file_task')?.id ?? null;
+	if (SPECIAL_DYNAMIC_FILTER_SET_IDS.has(out.leftRailDefaultFilterViewId ?? '')) {
+		out.leftRailDefaultFilterViewId = out.filterSets.find(filterSet => !SPECIAL_DYNAMIC_FILTER_SET_IDS.has(filterSet.id))?.id ?? null;
 	}
 
 	if (!Array.isArray(src.pipelines) || src.pipelines.length === 0) {
@@ -3252,6 +3486,11 @@ export function migrateSettings(raw: unknown): OperonSettings {
 		out.keyMappings = dedupeKeyMappingsByCanonicalKey(out.keyMappings);
 	}
 	out.keyMappings = normalizeKeyMappingCollection(out.keyMappings);
+	out.childTaskInheritanceFields = normalizeChildTaskInheritanceFields(src.childTaskInheritanceFields, out.keyMappings);
+	out.childTaskInheritanceStatusPipelineSource = normalizeChildTaskInheritanceStatusPipelineSource(
+		src.childTaskInheritanceStatusPipelineSource,
+	);
+	out.projectSerialScopes = normalizeSettingsProjectSerialScopes(src.projectSerialScopes);
 	normalizeSurfaceOrderingSettings(out, src);
 
 	out.fileTasksFolder = normalizeSettingsFolderPath(out.fileTasksFolder);
@@ -3353,6 +3592,29 @@ function normalizeSurfaceOrderingSettings(out: OperonSettings, src: Record<strin
 	out.filterTaskCompactChips = normalizeFilterTaskCompactChips(src, out.keyMappings);
 	out.taskFinderCompactChips = normalizeTaskFinderCompactChips(src.taskFinderCompactChips, out.keyMappings);
 	out.overlayTaskCompactChips = normalizeOverlayTaskCompactChips(src.overlayTaskCompactChips, out.keyMappings);
+}
+
+export function normalizeSettingsProjectSerialScopes(raw: unknown): ProjectSerialScope[] {
+	const normalized = normalizeProjectSerialScopes(raw);
+	const scopes: ProjectSerialScope[] = [];
+	const seenIds = new Set<string>();
+	const seenParentIds = new Set<string>();
+	for (const scope of normalized) {
+		const id = scope.id.trim() || createProjectSerialScopeId(seenIds);
+		const prefix = normalizeProjectSerialPrefix(scope.prefix);
+		const parentOperonId = scope.parentOperonId.trim();
+		if (!prefix || !parentOperonId || seenIds.has(id) || seenParentIds.has(parentOperonId)) continue;
+		scopes.push({
+			id,
+			prefix,
+			parentOperonId,
+			createdAt: scope.createdAt.trim(),
+			updatedAt: scope.updatedAt.trim(),
+		});
+		seenIds.add(id);
+		seenParentIds.add(parentOperonId);
+	}
+	return scopes;
 }
 
 function isProjectableCustomSurfaceMapping(mapping: KeyMapping): boolean {

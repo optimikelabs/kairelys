@@ -30,7 +30,7 @@ import {
 	TaskFinderDefaultScopeKey,
 } from '../../types/settings';
 import { t } from '../../core/i18n';
-import { isDynamicFileTaskFilterSet } from '../../core/dynamic-file-task-filter';
+import { isSpecialDynamicFilterSet } from '../../core/dynamic-file-task-filter';
 import { resolveTaskColorSourceForTask } from '../../core/task-color-source';
 import { filterTasksForCalendar, stripFilterViewOnlyOptions } from '../../systems/calendar-filter-materialization';
 import {
@@ -328,7 +328,7 @@ export class KanbanView extends ItemView {
 			const raw = preset?.filterSetId
 				? settings.filterSets.find(entry => entry.id === preset.filterSetId) ?? null
 				: null;
-			if (raw && isDynamicFileTaskFilterSet(raw)) return null;
+			if (raw && isSpecialDynamicFilterSet(raw)) return null;
 			return raw ? stripFilterViewOnlyOptions(raw) : null;
 		})();
 		const parentSearchUi = pipeline && preset
@@ -815,7 +815,7 @@ export class KanbanView extends ItemView {
 				const raw = preset.filterSetId
 					? settings.filterSets.find(entry => entry.id === preset.filterSetId) ?? null
 					: null;
-				if (raw && isDynamicFileTaskFilterSet(raw)) return null;
+				if (raw && isSpecialDynamicFilterSet(raw)) return null;
 				return raw ? stripFilterViewOnlyOptions(raw) : null;
 			})();
 			const parentSearchUi = pipeline
@@ -890,7 +890,7 @@ export class KanbanView extends ItemView {
 				const raw = preset.filterSetId
 					? settings.filterSets.find(entry => entry.id === preset.filterSetId) ?? null
 					: null;
-				if (raw && isDynamicFileTaskFilterSet(raw)) return null;
+				if (raw && isSpecialDynamicFilterSet(raw)) return null;
 				return raw ? stripFilterViewOnlyOptions(raw) : null;
 			})();
 			return this.buildParentSearchUiState(state.searchQuery, pipeline, filterSet, settings, this.searchScope);
@@ -1953,6 +1953,7 @@ export class KanbanView extends ItemView {
 			task,
 			now: localNow(),
 			isPinned: this.getPinnedCache()?.isPinned(task.operonId) ?? false,
+			hasSubtasks: this.indexer.secondary.getChildIds(task.operonId).size > 0,
 		};
 	}
 

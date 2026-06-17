@@ -3,10 +3,11 @@ import { createOwnerElement } from '../core/dom-compat';
 import { t } from '../core/i18n';
 import { DescendantTaskSummary } from '../indexer/indexer';
 import { IndexedTask } from '../types/fields';
+import type { ProjectSerialDisplay } from '../core/project-serials';
 import { OperonSettings } from '../types/settings';
 import { Pipeline } from '../types/pipeline';
 import { bindTaskContextualHoverMenu } from './contextual-hover-menu';
-import type { ContextualMenuActionId } from '../core/contextual-menu-engine';
+import type { ContextualMenuActionHandler } from '../core/contextual-menu-engine';
 import { getConfiguredKeyMappingIcon } from '../core/key-mapping-icons';
 import {
 	computeTaskFileLinkPlainCheckboxIndicator,
@@ -33,11 +34,13 @@ interface ReadingTaskFileWikilinkCallbacks {
 	getDescendantTaskSummary: (operonId: string) => DescendantTaskSummary;
 	openTaskEditor: (operonId: string) => void;
 	cycleStatus: (operonId: string) => void;
-	onContextualAction?: (taskId: string, actionId: ContextualMenuActionId) => void | Promise<void>;
+	onContextualAction?: ContextualMenuActionHandler;
 	isTaskPinned?: (taskId: string) => boolean;
+	hasSubtasks?: (taskId: string) => boolean;
 	isTaskTracking?: (taskId: string) => boolean;
 	toggleTimer?: (taskId: string) => void | Promise<void>;
 	requestSubtask?: (operonId: string) => void | Promise<void>;
+	getProjectSerialDisplay?: (operonId: string) => ProjectSerialDisplay | null;
 }
 
 export function enhanceReadingTaskFileWikilinks(
@@ -106,6 +109,7 @@ export function enhanceReadingTaskFileWikilinks(
 				getSettings: callbacks.getSettings,
 				onAction: callbacks.onContextualAction,
 				isPinned: callbacks.isTaskPinned ? () => callbacks.isTaskPinned?.(resolved.task.operonId) === true : undefined,
+				hasSubtasks: callbacks.hasSubtasks ? () => callbacks.hasSubtasks?.(resolved.task.operonId) === true : undefined,
 			});
 		}
 		const rightButton = createActionButton(
@@ -156,6 +160,7 @@ export function enhanceReadingTaskFileWikilinks(
 			getAllTasks: callbacks.getAllTasks,
 			sourcePath,
 			owner: wrapper,
+			getProjectSerialDisplay: callbacks.getProjectSerialDisplay,
 		});
 		if (chipRow) {
 			wrapper.appendChild(chipRow);

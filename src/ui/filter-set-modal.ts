@@ -10,15 +10,21 @@ import { PinnedCache } from '../storage/pinned-cache';
 import { buildFilterTaskRowElement, FilterTaskRowCallbacks } from './filter-task-row';
 import { t } from '../core/i18n';
 import { OperonIndexer } from '../indexer/indexer';
+import type { ProjectSerialDisplay } from '../core/project-serials';
 import { PriorityDefinition } from '../types/priority';
 import { Pipeline } from '../types/pipeline';
-import type { ContextualMenuActionId } from '../core/contextual-menu-engine';
+import type { ContextualMenuActionHandler } from '../core/contextual-menu-engine';
 import { bindOperonHoverTooltip } from './operon-hover-tooltip';
 import { WindowTimeoutHandle, clearWindowTimeout, createOwnerElement, getActiveWindow, getOwnerBody, getOwnerWindow, setWindowTimeout } from '../core/dom-compat';
 import { buildTaskWikilinkOverlaySettingsSignature } from './task-file-overlay-chips';
 import { openSettingsIconPickerModal } from './settings/settings-icon-picker-modal';
 import { normalizeTaskIconValue } from '../core/task-icon-value';
-import { DYNAMIC_FILE_TASK_FILTER_DEFAULT_ICON, isDynamicFileTaskFilterSet } from '../core/dynamic-file-task-filter';
+import {
+	DYNAMIC_FILE_TASK_FILTER_DEFAULT_ICON,
+	DYNAMIC_SUBTASKS_FILTER_DEFAULT_ICON,
+	isDynamicFileTaskFilterSet,
+	isDynamicSubtasksFilterSet,
+} from '../core/dynamic-file-task-filter';
 import { showOperonDayPickerPopover } from './field-pickers/day-picker-popover';
 import { showDatetimePicker } from './field-pickers/datetime-picker';
 import { closeFloatingPanelsForRoot } from './field-pickers/common';
@@ -75,17 +81,19 @@ export interface FilterModalEvalDeps {
 	updateFields?: (operonId: string, payload: Record<string, string>) => void;
 	updateSubtasks?: (operonId: string, subtaskIds: string[]) => void;
 	updateDependencyField?: (operonId: string, field: 'blocking' | 'blockedBy', value: string) => void;
-	onContextualAction?: (taskId: string, actionId: ContextualMenuActionId) => void | Promise<void>;
+	onContextualAction?: ContextualMenuActionHandler;
 	pinnedCache?: PinnedCache;
 	isTaskTracking?: (taskId: string) => boolean;
 	toggleTimer?: (taskId: string) => void | Promise<void>;
 	getTrackingSignature?: () => string;
+	getProjectSerialDisplay?: (operonId: string) => ProjectSerialDisplay | null;
+	getProjectSerialSignature?: () => string;
 }
 
 export interface FilterSetModalOptions {
 	title?: string;
 	lockName?: boolean;
-	lockConditions?: 'dynamicFileTask';
+	lockConditions?: 'dynamicFileTask' | 'dynamicSubtasks';
 	hideUsageInfo?: boolean;
 	showCountBadge?: boolean;
 	quickActions?: FilterSetModalQuickActions;
@@ -554,9 +562,11 @@ export class FilterSetModal extends Modal {
 		iconBtn.type = 'button';
 		iconBtn.addClass('operon-filter-set-icon-trigger');
 		bindOperonHoverTooltip(iconBtn, { content: t('filterSets', 'filterIcon'), taskColor: null });
-		const getFallbackIcon = (): string => isDynamicFileTaskFilterSet(this.filterSet)
-			? DYNAMIC_FILE_TASK_FILTER_DEFAULT_ICON
-			: 'filter';
+		const getFallbackIcon = (): string => {
+			if (isDynamicFileTaskFilterSet(this.filterSet)) return DYNAMIC_FILE_TASK_FILTER_DEFAULT_ICON;
+			if (isDynamicSubtasksFilterSet(this.filterSet)) return DYNAMIC_SUBTASKS_FILTER_DEFAULT_ICON;
+			return 'filter';
+		};
 		const refreshIconPreview = (): void => {
 			setIcon(iconBtn, normalizeTaskIconValue(this.filterSet.icon) || getFallbackIcon());
 		};
@@ -599,8 +609,8 @@ export class FilterSetModal extends Modal {
 	// --------------------------------------------------------
 
 	private renderConditions(container: HTMLElement): void {
-		if (this.options.lockConditions === 'dynamicFileTask') {
-			this.renderDynamicFileTaskLockedConditions(container);
+		if (this.options.lockConditions) {
+			this.renderDynamicLockedConditions(container, this.options.lockConditions);
 			return;
 		}
 		const section = container.createDiv();
@@ -610,25 +620,36 @@ export class FilterSetModal extends Modal {
 		this.renderGroupEditor(listEl, this.filterSet.rootGroup, null, -1, true);
 	}
 
-	private renderDynamicFileTaskLockedConditions(container: HTMLElement): void {
+	private renderDynamicLockedConditions(container: HTMLElement, mode: 'dynamicFileTask' | 'dynamicSubtasks'): void {
+		const copy = mode === 'dynamicSubtasks'
+			? {
+				title: t('filterSets', 'dynamicSubtasksFilterLockedConditionTitle'),
+				value: t('filterSets', 'dynamicSubtasksFilterCurrentTaskOperonId'),
+				desc: t('filterSets', 'dynamicSubtasksFilterLockedConditionDesc'),
+			}
+			: {
+				title: t('filterSets', 'dynamicFileTaskFilterLockedConditionTitle'),
+				value: t('filterSets', 'dynamicFileTaskFilterCurrentFileOperonId'),
+				desc: t('filterSets', 'dynamicFileTaskFilterLockedConditionDesc'),
+			};
 		const section = container.createDiv();
 		section.addClass('operon-filter-section');
 		section.addClass('operon-filter-conditions-section');
 		section.addClass('operon-filter-conditions-section--locked');
 		section.createEl('h4', {
 			cls: 'operon-filter-modal-section-title',
-			text: t('filterSets', 'dynamicFileTaskFilterLockedConditionTitle'),
+			text: copy.title,
 		});
 		const row = section.createDiv('operon-condition-row operon-condition-row--locked');
 		row.createDiv({ cls: 'operon-filter-locked-condition-token', text: 'operonId' });
 		row.createDiv({ cls: 'operon-filter-locked-condition-token', text: t('filterSets', 'operator_is') });
 		row.createDiv({
 			cls: 'operon-filter-locked-condition-token is-dynamic',
-			text: t('filterSets', 'dynamicFileTaskFilterCurrentFileOperonId'),
+			text: copy.value,
 		});
 		section.createDiv({
 			cls: 'setting-item-description operon-filter-locked-condition-note',
-			text: t('filterSets', 'dynamicFileTaskFilterLockedConditionDesc'),
+			text: copy.desc,
 		});
 	}
 
@@ -1328,6 +1349,7 @@ class FilterPreviewModal extends Modal {
 			this.deps.indexer.getGeneration(),
 			this.deps.pinnedCache?.getGeneration() ?? 0,
 			this.deps.getTrackingSignature?.() ?? '',
+			this.deps.getProjectSerialSignature?.() ?? '',
 			JSON.stringify(this.filterSet),
 			this.deps.getSettings().filterShowSubtasks ? '1' : '0',
 			this.deps.getSettings().filterShowOnlyOpenSubtasks ? '1' : '0',
@@ -1383,6 +1405,7 @@ class FilterPreviewModal extends Modal {
 			isTaskPinned: this.deps.pinnedCache ? (taskId) => this.deps.pinnedCache?.isPinned(taskId) === true : undefined,
 			isTaskTracking: this.deps.isTaskTracking,
 			toggleTimer: this.deps.toggleTimer,
+			getProjectSerialDisplay: this.deps.getProjectSerialDisplay,
 		};
 
 		const { contentEl } = this;

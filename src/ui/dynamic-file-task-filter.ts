@@ -2,9 +2,12 @@ import { Extension } from '@codemirror/state';
 import { EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
 import { editorLivePreviewField } from 'obsidian';
 import {
-	materializeDynamicFileTaskFilterSet,
-	normalizeDynamicFileTaskFilterSet,
 	DYNAMIC_FILE_TASK_FILTER_ID,
+	DYNAMIC_SUBTASKS_FILTER_ID,
+	materializeDynamicFileTaskFilterSet,
+	materializeDynamicSubtasksFilterSet,
+	normalizeDynamicFileTaskFilterSet,
+	normalizeDynamicSubtasksFilterSet,
 } from '../core/dynamic-file-task-filter';
 import { createOwnerElement } from '../core/dom-compat';
 import { resolveFileTaskAutoParentOperonId } from '../core/file-task-auto-parent';
@@ -28,6 +31,12 @@ const DYNAMIC_FILE_TASK_FILTER_PLACEMENT_CLASSES = [
 ];
 export interface DynamicFileTaskFilterContext {
 	fileTask: IndexedTask;
+	filterSet: FilterSet;
+	template: FilterSet;
+}
+
+export interface SubtasksFilterContext {
+	parentTask: IndexedTask;
 	filterSet: FilterSet;
 	template: FilterSet;
 }
@@ -73,6 +82,24 @@ function resolveDynamicFileTask(
 		: null;
 }
 
+export function resolveSubtasksFilterContext(
+	parentTaskId: string,
+	deps: EmbedFilterDeps,
+): SubtasksFilterContext | null {
+	const normalizedParentTaskId = parentTaskId.trim();
+	if (!normalizedParentTaskId) return null;
+
+	const parentTask = deps.indexer.getTask(normalizedParentTaskId);
+	if (!parentTask?.operonId) return null;
+
+	const template = getDynamicSubtasksFilterTemplate(deps.getSettings());
+	return {
+		parentTask,
+		template,
+		filterSet: materializeDynamicSubtasksFilterSet(template, parentTask.operonId),
+	};
+}
+
 export function renderDynamicFileTaskFilterSurface(
 	instance: FilterSurfaceInstance,
 	filePath: string,
@@ -87,25 +114,69 @@ export function renderDynamicFileTaskFilterSurface(
 	}
 
 	const settings = deps.getSettings();
+	renderDynamicTaskFilterSurface(instance, context.fileTask, context.template, context.filterSet, deps, {
+		showSubtasks: shouldAutoExpandDynamicFileTaskSubtasks(context.fileTask.operonId, deps, settings),
+		showOnlyOpenSubtasks: settings.dynamicFileTaskFilterShowOnlyOpenSubtasks,
+		onEditFilter,
+	});
+	return true;
+}
+
+export function renderSubtasksFilterSurface(
+	instance: FilterSurfaceInstance,
+	parentTaskId: string,
+	deps: EmbedFilterDeps,
+	onEditFilter?: (template: FilterSet) => void,
+): boolean {
+	const context = resolveSubtasksFilterContext(parentTaskId, deps);
+	if (!context) {
+		destroyFilterSurfaceInstance(instance);
+		instance.el.empty();
+		return false;
+	}
+
+	const settings = deps.getSettings();
+	renderDynamicTaskFilterSurface(instance, context.parentTask, context.template, context.filterSet, deps, {
+		showSubtasks: shouldAutoExpandDynamicSubtasksFilterSubtasks(context.parentTask.operonId, deps, settings),
+		showOnlyOpenSubtasks: settings.dynamicSubtasksFilterShowOnlyOpenSubtasks,
+		onEditFilter,
+	});
+	return true;
+}
+
+interface DynamicTaskFilterSurfaceOptions {
+	showSubtasks: boolean;
+	showOnlyOpenSubtasks: boolean;
+	onEditFilter?: (template: FilterSet) => void;
+}
+
+function renderDynamicTaskFilterSurface(
+	instance: FilterSurfaceInstance,
+	rootTask: IndexedTask,
+	template: FilterSet,
+	filterSet: FilterSet,
+	deps: EmbedFilterDeps,
+	options: DynamicTaskFilterSurfaceOptions,
+): void {
+	const rootTaskId = rootTask.operonId;
 	const dynamicDeps: EmbedFilterDeps = {
 		...deps,
 		navigateToTask: (task) => {
-			if (task.operonId === context.fileTask.operonId) return;
+			if (task.operonId === rootTaskId) return;
 			deps.navigateToTask(task);
 		},
 	};
-	renderFilterSurface(instance, context.filterSet, dynamicDeps, {
+	renderFilterSurface(instance, filterSet, dynamicDeps, {
 		surfaceClassName: 'operon-filter-surface--dynamic-file-task',
-		showSubtasks: shouldAutoExpandDynamicFileTaskSubtasks(context.fileTask.operonId, dynamicDeps, settings),
-		showOnlyOpenSubtasks: settings.dynamicFileTaskFilterShowOnlyOpenSubtasks,
+		showSubtasks: options.showSubtasks,
+		showOnlyOpenSubtasks: options.showOnlyOpenSubtasks,
 		includeSubtasksInSearch: true,
 		preserveManualSubtaskExpansion: true,
 		showSettingsButton: true,
-		subtaskSorts: context.filterSet.sorts,
-		dynamicRootTaskId: context.fileTask.operonId,
-		onEditFilter: () => onEditFilter?.(context.template),
+		subtaskSorts: filterSet.sorts,
+		dynamicRootTaskId: rootTaskId,
+		onEditFilter: () => options.onEditFilter?.(template),
 	});
-	return true;
 }
 
 export interface DynamicFileTaskSubtaskCountDeps {
@@ -119,13 +190,39 @@ export function shouldAutoExpandDynamicFileTaskSubtasks(
 	deps: EmbedFilterDeps,
 	settings: OperonSettings,
 ): boolean {
-	const limit = settings.dynamicFileTaskFilterSubtaskAutoExpandLimit;
+	return shouldAutoExpandDynamicTaskSubtasks(
+		rootTaskId,
+		deps,
+		settings.dynamicFileTaskFilterShowOnlyOpenSubtasks,
+		settings.dynamicFileTaskFilterSubtaskAutoExpandLimit,
+	);
+}
+
+export function shouldAutoExpandDynamicSubtasksFilterSubtasks(
+	rootTaskId: string,
+	deps: EmbedFilterDeps,
+	settings: OperonSettings,
+): boolean {
+	return shouldAutoExpandDynamicTaskSubtasks(
+		rootTaskId,
+		deps,
+		settings.dynamicSubtasksFilterShowOnlyOpenSubtasks,
+		settings.dynamicSubtasksFilterSubtaskAutoExpandLimit,
+	);
+}
+
+function shouldAutoExpandDynamicTaskSubtasks(
+	rootTaskId: string,
+	deps: EmbedFilterDeps,
+	showOnlyOpenSubtasks: boolean,
+	limit: number,
+): boolean {
 	if (limit <= 0) return false;
 	const visibleCount = countVisibleDynamicFileTaskDescendants(rootTaskId, {
 		getChildIds: deps.getChildIds,
 		getTask: (operonId) => deps.indexer.getTask(operonId),
 		getPipelines: deps.getPipelines,
-	}, settings.dynamicFileTaskFilterShowOnlyOpenSubtasks, limit);
+	}, showOnlyOpenSubtasks, limit);
 	return visibleCount <= limit;
 }
 
@@ -356,6 +453,12 @@ export function operonDynamicFileTaskFilterLivePreviewExtension(
 function getDynamicFileTaskFilterTemplate(settings: OperonSettings): FilterSet {
 	return normalizeDynamicFileTaskFilterSet(
 		settings.filterSets.find(filterSet => filterSet.id === DYNAMIC_FILE_TASK_FILTER_ID) ?? null,
+	);
+}
+
+function getDynamicSubtasksFilterTemplate(settings: OperonSettings): FilterSet {
+	return normalizeDynamicSubtasksFilterSet(
+		settings.filterSets.find(filterSet => filterSet.id === DYNAMIC_SUBTASKS_FILTER_ID) ?? null,
 	);
 }
 

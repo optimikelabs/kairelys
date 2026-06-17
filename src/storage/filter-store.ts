@@ -2,9 +2,13 @@ import { App } from 'obsidian';
 import { FilterSet, normalizeFilterSet } from '../types/settings';
 import {
 	DYNAMIC_FILE_TASK_FILTER_ID,
-	isDynamicFileTaskFilterSetId,
+	DYNAMIC_SUBTASKS_FILTER_ID,
+	createDynamicSubtasksFilterSetFromDynamicFileTaskFilter,
+	isSpecialDynamicFilterSetId,
 	normalizeDynamicFileTaskFilterSet,
+	normalizeSpecialDynamicFilterSet,
 	seedDynamicFileTaskFilterDefaultSorts,
+	seedDynamicSubtasksFilterDefaultSorts,
 } from '../core/dynamic-file-task-filter';
 import { WriteQueue } from './write-queue';
 import { isRecord } from '../core/unknown-value';
@@ -93,7 +97,7 @@ export class FilterStore {
 		}
 		this.filters = loadedFilters;
 		this.orderedIds = orderedIds;
-		this.ensureDynamicFileTaskFilter(options);
+		this.ensureSpecialDynamicFilters(options);
 	}
 
 	toPackage(): OperonFiltersPackageV1 {
@@ -141,32 +145,32 @@ export class FilterStore {
 
 		this.filters = loadedFilters;
 		this.orderedIds = orderedIds;
-		this.ensureDynamicFileTaskFilter();
+		this.ensureSpecialDynamicFilters();
 	}
 
 	async upsert(filterSet: FilterSet): Promise<void> {
 		const normalized = normalizeFilterSet(filterSet);
 		if (!normalized) throw new Error(`Operon: invalid filter set ${filterSet.id ?? '<missing>'}`);
-		const persisted = isDynamicFileTaskFilterSetId(normalized.id)
-			? normalizeDynamicFileTaskFilterSet(normalized)
+		const persisted = isSpecialDynamicFilterSetId(normalized.id)
+			? normalizeSpecialDynamicFilterSet(normalized)
 			: normalized;
 		this.filters.set(persisted.id, persisted);
 		if (!this.orderedIds.includes(persisted.id)) {
 			this.orderedIds.push(persisted.id);
 		}
-		this.ensureDynamicFileTaskFilter();
+		this.ensureSpecialDynamicFilters();
 		await this.persistStore();
 	}
 
 	async delete(filterId: string): Promise<void> {
-		if (isDynamicFileTaskFilterSetId(filterId)) {
-			this.ensureDynamicFileTaskFilter();
+		if (isSpecialDynamicFilterSetId(filterId)) {
+			this.ensureSpecialDynamicFilters();
 			await this.persistStore();
 			return;
 		}
 		this.filters.delete(filterId);
 		this.orderedIds = this.orderedIds.filter(id => id !== filterId);
-		this.ensureDynamicFileTaskFilter();
+		this.ensureSpecialDynamicFilters();
 		await this.persistStore([filterId]);
 	}
 
@@ -184,7 +188,7 @@ export class FilterStore {
 			nextOrder.push(filterId);
 		}
 		this.orderedIds = nextOrder;
-		this.ensureDynamicFileTaskFilter();
+		this.ensureSpecialDynamicFilters();
 		await this.persistStore();
 	}
 
@@ -199,21 +203,32 @@ export class FilterStore {
 		}
 		this.filters = nextFilters;
 		this.orderedIds = nextOrder;
-		this.ensureDynamicFileTaskFilter();
+		this.ensureSpecialDynamicFilters();
 		await this.persistStore();
 	}
 
-	private ensureDynamicFileTaskFilter(options: { seedDynamicDefaultSorts?: boolean } = {}): void {
+	private ensureSpecialDynamicFilters(options: { seedDynamicDefaultSorts?: boolean } = {}): void {
 		const existing = this.filters.get(DYNAMIC_FILE_TASK_FILTER_ID) ?? null;
 		const normalized = normalizeDynamicFileTaskFilterSet(existing);
-		const repaired = options.seedDynamicDefaultSorts && normalized.sorts.length === 0
+		const repairedFileFilter = options.seedDynamicDefaultSorts && normalized.sorts.length === 0
 			? normalizeDynamicFileTaskFilterSet(seedDynamicFileTaskFilterDefaultSorts(normalized))
 			: normalized;
-		this.filters.set(DYNAMIC_FILE_TASK_FILTER_ID, repaired);
+
+		const existingSubtasks = this.filters.get(DYNAMIC_SUBTASKS_FILTER_ID) ?? null;
+		const normalizedSubtasks = existingSubtasks
+			? normalizeSpecialDynamicFilterSet(existingSubtasks)
+			: createDynamicSubtasksFilterSetFromDynamicFileTaskFilter(repairedFileFilter);
+		const repairedSubtasksFilter = options.seedDynamicDefaultSorts && normalizedSubtasks.sorts.length === 0
+			? normalizeSpecialDynamicFilterSet(seedDynamicSubtasksFilterDefaultSorts(normalizedSubtasks))
+			: normalizedSubtasks;
+
+		this.filters.set(DYNAMIC_FILE_TASK_FILTER_ID, repairedFileFilter);
+		this.filters.set(DYNAMIC_SUBTASKS_FILTER_ID, repairedSubtasksFilter);
 		this.orderedIds = this.orderedIds.filter((id, index, ids) =>
-			id !== DYNAMIC_FILE_TASK_FILTER_ID && ids.indexOf(id) === index
+			!isSpecialDynamicFilterSetId(id) && ids.indexOf(id) === index
 		);
 		this.orderedIds.push(DYNAMIC_FILE_TASK_FILTER_ID);
+		this.orderedIds.push(DYNAMIC_SUBTASKS_FILTER_ID);
 	}
 
 	private async ensureFolder(): Promise<void> {

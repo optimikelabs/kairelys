@@ -17,7 +17,8 @@ import { OperonSettings } from '../types/settings';
 import { Pipeline } from '../types/pipeline';
 import { operonIndexRefreshEffect } from './live-preview-conceal';
 import { bindTaskContextualHoverMenu } from './contextual-hover-menu';
-import type { ContextualMenuActionId } from '../core/contextual-menu-engine';
+import type { ContextualMenuActionHandler } from '../core/contextual-menu-engine';
+import type { ProjectSerialDisplay } from '../core/project-serials';
 import { getConfiguredKeyMappingIcon } from '../core/key-mapping-icons';
 import {
 	computeTaskFileLinkPlainCheckboxIndicator,
@@ -47,11 +48,13 @@ export interface LivePreviewTaskWikilinkCallbacks {
 	getDescendantTaskSummary: (operonId: string) => DescendantTaskSummary;
 	openTaskEditor: (operonId: string) => void;
 	cycleStatus: (operonId: string) => void;
-	onContextualAction?: (taskId: string, actionId: ContextualMenuActionId) => void | Promise<void>;
+	onContextualAction?: ContextualMenuActionHandler;
 	isTaskPinned?: (taskId: string) => boolean;
+	hasSubtasks?: (taskId: string) => boolean;
 	isTaskTracking?: (taskId: string) => boolean;
 	toggleTimer?: (taskId: string) => void | Promise<void>;
 	requestSubtask?: (operonId: string) => void | Promise<void>;
+	getProjectSerialDisplay?: (operonId: string) => ProjectSerialDisplay | null;
 }
 
 class TaskWikilinkLeftWidget extends WidgetType {
@@ -95,6 +98,7 @@ class TaskWikilinkLeftWidget extends WidgetType {
 				getSettings: this.callbacks.getSettings,
 				onAction: this.callbacks.onContextualAction,
 				isPinned: this.callbacks.isTaskPinned ? () => this.callbacks.isTaskPinned?.(this.task.operonId) === true : undefined,
+				hasSubtasks: this.callbacks.hasSubtasks ? () => this.callbacks.hasSubtasks?.(this.task.operonId) === true : undefined,
 			});
 		}
 
@@ -127,6 +131,7 @@ class TaskWikilinkTrailingWidget extends WidgetType {
 			callbacks.app,
 			callbacks.getSettings(),
 			callbacks.getAllTasks(),
+			callbacks.getProjectSerialDisplay,
 		);
 		this.renderSignature = buildTaskWikilinkTrailingRenderSignature(
 			task,
@@ -177,6 +182,7 @@ class TaskWikilinkTrailingWidget extends WidgetType {
 			getAllTasks: this.callbacks.getAllTasks,
 			sourcePath: this.callbacks.getFilePath(view),
 			owner: wrap,
+			getProjectSerialDisplay: this.callbacks.getProjectSerialDisplay,
 		});
 		if (chipRow) {
 			wrap.appendChild(chipRow);

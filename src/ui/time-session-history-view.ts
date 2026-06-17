@@ -10,7 +10,7 @@ import { t } from '../core/i18n';
 import { formatTaskNotice } from '../core/task-notice';
 import { formatTrackerDayHeader, formatTrackerSessionRange } from './tracker-time-labels';
 import { bindTaskContextualHoverMenu, hideTaskContextualHoverMenu } from './contextual-hover-menu';
-import type { ContextualMenuActionId } from '../core/contextual-menu-engine';
+import type { ContextualMenuActionHandler } from '../core/contextual-menu-engine';
 import { asyncHandler } from '../core/async-action';
 import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
 
@@ -24,8 +24,9 @@ interface TimeSessionHistoryViewCallbacks {
 	getPipelines: () => import('../types/pipeline').Pipeline[];
 	getSettings: () => OperonSettings;
 	startTimerForTask: (operonId: string, source: TrackerSource) => Promise<boolean>;
-	onContextualAction?: (taskId: string, actionId: ContextualMenuActionId) => void | Promise<void>;
+	onContextualAction?: ContextualMenuActionHandler;
 	isTaskPinned?: (taskId: string) => boolean;
+	hasSubtasks?: (taskId: string) => boolean;
 }
 
 export type TimeSessionHistoryTaskDescriptionClickAction = OperonSettings['trackerTaskDescriptionClickAction'];
@@ -283,6 +284,7 @@ export class TimeSessionHistoryView extends ItemView {
 				getSettings: this.callbacks.getSettings,
 				onAction: this.callbacks.onContextualAction,
 				isPinned: this.callbacks.isTaskPinned ? () => this.callbacks.isTaskPinned?.(task.operonId) === true : undefined,
+				hasSubtasks: this.callbacks.hasSubtasks ? () => this.callbacks.hasSubtasks?.(task.operonId) === true : undefined,
 			});
 		}
 

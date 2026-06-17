@@ -41,6 +41,7 @@ interface ContextualHoverMenuBindOptions {
 	getSettings: () => ContextualHoverMenuSettings;
 	onAction: ContextualMenuActionHandler;
 	isPinned?: () => boolean;
+	hasSubtasks?: () => boolean;
 	resolveAnchorRect?: () => DOMRect;
 }
 
@@ -259,8 +260,12 @@ export class ContextualHoverMenuController {
 			button.addEventListener('click', event => {
 				event.preventDefault();
 				event.stopPropagation();
+				const invocation = {
+					actionAnchor: button,
+					actionAnchorRect: button.getBoundingClientRect(),
+				};
 				this.hide(true);
-				void options.onAction(options.taskId, action.id, options.context);
+				void options.onAction(options.taskId, action.id, options.context, invocation);
 			});
 
 			menu.appendChild(button);
@@ -572,6 +577,7 @@ export function bindTaskContextualHoverMenu(
 			task,
 			now: localNow(),
 			isPinned: options.isPinned?.(),
+			hasSubtasks: options.hasSubtasks?.() === true,
 		};
 		const settings = options.getSettings();
 		const actions = resolveContextualMenu(
