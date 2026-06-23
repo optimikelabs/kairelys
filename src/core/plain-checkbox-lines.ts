@@ -15,6 +15,8 @@ export interface PlainCheckboxLine {
 	completed: boolean;
 }
 
+export type PlainCheckboxMoveLine = Pick<PlainCheckboxLine, 'lineNumber' | 'rawLine'>;
+
 export type PlainCheckboxEditScope =
 	| { kind: 'file' }
 	| { kind: 'inline'; operonId: string };
@@ -92,6 +94,53 @@ export function collectPlainCheckboxLines(
 	}
 
 	return results;
+}
+
+export function collectScopedPlainCheckboxMoveLines(
+	content: string,
+	filePath: string,
+	keyMappings: KeyMapping[],
+	scope: PlainCheckboxEditScope,
+	targetLineNumber: number,
+): PlainCheckboxMoveLine[] {
+	return collectPlainCheckboxLines(content, filePath, keyMappings, scope)
+		.filter(line => line.lineNumber > targetLineNumber)
+		.map(line => ({
+			lineNumber: line.lineNumber,
+			rawLine: line.rawLine,
+		}));
+}
+
+export function canRemovePlainCheckboxMoveLines(
+	lines: readonly string[],
+	targetLineNumber: number,
+	checkboxLines: readonly PlainCheckboxMoveLine[],
+): boolean {
+	const seenLineNumbers = new Set<number>();
+	for (const checkboxLine of checkboxLines) {
+		if (seenLineNumbers.has(checkboxLine.lineNumber)) return false;
+		seenLineNumbers.add(checkboxLine.lineNumber);
+		if (checkboxLine.lineNumber <= targetLineNumber || checkboxLine.lineNumber >= lines.length) return false;
+		if (lines[checkboxLine.lineNumber] !== checkboxLine.rawLine) return false;
+	}
+	return true;
+}
+
+export function removePlainCheckboxMoveLinesFromContent(
+	content: string,
+	targetLineNumber: number,
+	checkboxLines: readonly PlainCheckboxMoveLine[],
+): string | null {
+	const lines = content.split('\n');
+	if (!canRemovePlainCheckboxMoveLines(lines, targetLineNumber, checkboxLines)) return null;
+
+	const nextLines = [...lines];
+	const descendingLines = [...checkboxLines]
+		.sort((left, right) => right.lineNumber - left.lineNumber);
+	for (const line of descendingLines) {
+		nextLines.splice(line.lineNumber, 1);
+	}
+	return nextLines.join('\n');
 }
 
 export function updatePlainCheckboxLineContent(

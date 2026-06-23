@@ -16652,6 +16652,16 @@ button.operon-pinned-sidebar-action svg {
 	white-space: normal;
 }
 
+.operon-task-wikilink-label {
+	cursor: pointer;
+	color: var(--link-color);
+}
+
+.operon-task-wikilink-label .operon-task-wikilink-label-description-link {
+	text-decoration: underline dotted color-mix(in srgb, var(--link-color) 38%, transparent) 1px;
+	text-underline-offset: 0.14em;
+}
+
 .operon-task-wikilink-reading .operon-task-wikilink-action {
 	background: transparent;
 	background-color: transparent;
@@ -17552,6 +17562,28 @@ body .operon-calendar-root.is-sidebar-mode .operon-calendar-sidebar .operon-cale
 
 .operon-calendar-sidebar-managed-section.is-open {
 	overflow: hidden;
+}
+
+.operon-calendar-root.is-sidebar-mode.is-sidebar-native-scroll-fallback .operon-calendar-sidebar {
+	overflow-y: auto;
+}
+
+.operon-calendar-root.is-sidebar-mode.is-sidebar-native-scroll-fallback .operon-calendar-sidebar-pools-wrapper,
+.operon-calendar-root.is-sidebar-mode.is-sidebar-native-scroll-fallback .operon-calendar-sidebar-managed-section.is-open {
+	flex: 0 0 auto;
+	min-height: auto;
+	overflow: visible;
+}
+
+.operon-calendar-root.is-sidebar-mode.is-sidebar-native-scroll-fallback .operon-calendar-sidebar-section-scroll {
+	scrollbar-gutter: auto;
+}
+
+.operon-calendar-root.is-sidebar-mode.is-sidebar-native-scroll-fallback .operon-calendar-sidebar-preset-list,
+.operon-calendar-root.is-sidebar-mode.is-sidebar-native-scroll-fallback .operon-calendar-sidebar-task-pool-list {
+	flex: 0 0 auto;
+	max-height: none;
+	overflow-y: visible;
 }
 
 .operon-calendar-sidebar-task-pool-summary {

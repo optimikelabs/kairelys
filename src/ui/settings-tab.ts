@@ -4048,6 +4048,14 @@ export class OperonSettingsTab extends PluginSettingTab {
 			],
 		});
 
+		const conversionSection = renderNativeSettingsGroupedSection(containerEl, t('settings', 'fileTaskConversion'));
+		this.renderBoundToggleSetting(
+			conversionSection,
+			t('settings', 'inlineToFileTaskMovePlainCheckboxes'),
+			t('settings', 'inlineToFileTaskMovePlainCheckboxesDesc'),
+			'inlineToFileTaskMovePlainCheckboxes',
+		);
+
 		const templateSection = renderNativeSettingsGroupedSection(containerEl, t('settings', 'fileTaskTemplates'));
 		this.renderFileTaskTemplateSettings(templateSection, containerEl);
 	}

@@ -27,6 +27,7 @@ import {
 	createTaskFileLinkPlainCheckboxProgressElement,
 	FileTaskLookup,
 	resolveTaskFileLink,
+	ResolvedTaskFileLink,
 	TaskFileLinkProgressIndicator,
 	TaskFileLinkVisuals,
 	buildTaskFileLinkProgressTooltip,
@@ -37,6 +38,8 @@ import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
 import { buildTaskFileOverlayChipContainer, getTaskFileOverlayChipSignature } from './task-file-overlay-chips';
 import { resolveSubtaskActionIcon, resolveSubtaskActionLabelKey } from '../core/subtask-action';
 import { scanTaskWikiLinksInLine } from './task-wikilink-scanner';
+import { bindTaskTitleLinkPreview } from './compact-chip-link-preview';
+import { isTaskDescriptionWikilinkEventTarget, renderTaskDescriptionWikilinks } from './task-description-wikilinks';
 
 export interface LivePreviewTaskWikilinkCallbacks {
 	app: App;
@@ -54,6 +57,7 @@ export interface LivePreviewTaskWikilinkCallbacks {
 	isTaskTracking?: (taskId: string) => boolean;
 	toggleTimer?: (taskId: string) => void | Promise<void>;
 	requestSubtask?: (operonId: string) => void | Promise<void>;
+	getRepeatSkipDates?: (repeatSeriesId: string) => string[];
 	getProjectSerialDisplay?: (operonId: string, task?: IndexedTask) => ProjectSerialDisplay | null;
 }
 
@@ -132,6 +136,7 @@ class TaskWikilinkTrailingWidget extends WidgetType {
 			callbacks.getSettings(),
 			callbacks.getAllTasks(),
 			callbacks.getProjectSerialDisplay,
+			callbacks.getRepeatSkipDates,
 		);
 		this.renderSignature = buildTaskWikilinkTrailingRenderSignature(
 			task,
@@ -183,6 +188,7 @@ class TaskWikilinkTrailingWidget extends WidgetType {
 			sourcePath: this.callbacks.getFilePath(view),
 			owner: wrap,
 			getProjectSerialDisplay: this.callbacks.getProjectSerialDisplay,
+			getRepeatSkipDates: this.callbacks.getRepeatSkipDates,
 		});
 		if (chipRow) {
 			wrap.appendChild(chipRow);
@@ -296,6 +302,71 @@ class TaskWikilinkTrailingWidget extends WidgetType {
 	}
 }
 
+class TaskWikilinkLabelWidget extends WidgetType {
+	private readonly renderSignature: string;
+
+	constructor(
+		private readonly resolved: ResolvedTaskFileLink,
+		private readonly visuals: TaskFileLinkVisuals,
+		private readonly callbacks: LivePreviewTaskWikilinkCallbacks,
+	) {
+		super();
+		this.renderSignature = buildTaskWikilinkLabelRenderSignature(resolved, visuals, callbacks);
+	}
+
+	toDOM(view: EditorView): HTMLElement {
+		const sourcePath = this.callbacks.getFilePath(view);
+		const label = createOwnerElement(view.dom, 'span');
+		label.classList.add('internal-link', 'operon-task-wikilink-anchor', 'operon-task-wikilink-label', 'operon-task-wikilink-live-label');
+		label.dataset.operonTaskWikilinkEnhanced = 'true';
+		label.setAttribute('data-href', this.resolved.rawLinktext);
+		label.setAttribute('role', 'link');
+		label.setAttribute('tabindex', '0');
+		label.setCssProps({ '--operon-task-wikilink-hover': this.visuals.hoverColor });
+		applyTaskFileLinkLabelState(label, this.visuals);
+
+		const alias = this.resolved.alias?.trim();
+		const description = this.resolved.task.description.trim();
+		const rendered = !alias && description
+			? renderTaskDescriptionWikilinks(label, {
+				app: this.callbacks.app,
+				description,
+				sourcePath: this.resolved.task.primary.filePath,
+				containerClassName: 'operon-task-wikilink-label-markdown',
+				linkClassName: 'operon-task-wikilink-label-description-link',
+			})
+			: false;
+		if (!rendered) {
+			label.textContent = alias || description || this.resolved.rawLinktext;
+		}
+
+		bindTaskTitleLinkPreview(this.callbacks.app, label, this.resolved.resolvedFile.path, sourcePath);
+		label.addEventListener('mousedown', (event) => {
+			event.stopPropagation();
+		});
+		label.addEventListener('click', (event) => {
+			if (isTaskDescriptionWikilinkEventTarget(event.target, label)) return;
+			event.preventDefault();
+			event.stopPropagation();
+			void this.callbacks.app.workspace.openLinkText(this.resolved.resolvedFile.path, sourcePath, false);
+		});
+		label.addEventListener('keydown', (event) => {
+			if (event.target !== label) return;
+			if (event.key !== 'Enter' && event.key !== ' ') return;
+			event.preventDefault();
+			event.stopPropagation();
+			void this.callbacks.app.workspace.openLinkText(this.resolved.resolvedFile.path, sourcePath, false);
+		});
+
+		return label;
+	}
+
+	eq(other: TaskWikilinkLabelWidget): boolean {
+		return this.resolved.task.operonId === other.resolved.task.operonId
+			&& this.renderSignature === other.renderSignature;
+	}
+}
+
 export function operonLivePreviewTaskWikilinkOverlayExtension(
 	callbacks: LivePreviewTaskWikilinkCallbacks,
 ): Extension {
@@ -396,12 +467,6 @@ export function operonLivePreviewTaskWikilinkOverlayExtension(
 						callbacks,
 					);
 					const progress = computeTaskFileLinkProgressIndicator(resolved.task, summary);
-					const markClasses = ['operon-task-wikilink-live-mark'];
-					if (visuals.labelState === 'done') {
-						markClasses.push('operon-task-done');
-					} else if (visuals.labelState === 'cancelled') {
-						markClasses.push('operon-task-cancelled');
-					}
 
 					decorations.add(
 						from,
@@ -414,11 +479,8 @@ export function operonLivePreviewTaskWikilinkOverlayExtension(
 					decorations.add(
 						from,
 						to,
-						Decoration.mark({
-							class: markClasses.join(' '),
-							attributes: {
-								style: `--operon-task-wikilink-hover: ${visuals.hoverColor};`,
-							},
+						Decoration.replace({
+							widget: new TaskWikilinkLabelWidget(resolved, visuals, callbacks),
 						}),
 					);
 					decorations.add(
@@ -452,7 +514,6 @@ export function operonLivePreviewTaskWikilinkOverlayExtension(
 
 		private getSelectionOverlaySignature(view: EditorView): string {
 			const selection = view.state.selection.main;
-			if (selection.from === selection.to) return '';
 			const fromLine = view.state.doc.lineAt(selection.from);
 			const toLine = view.state.doc.lineAt(selection.to);
 			const signatures: string[] = [];
@@ -461,7 +522,10 @@ export function operonLivePreviewTaskWikilinkOverlayExtension(
 				for (const match of scanTaskWikiLinksInLine(line.text, { includeEmbeds: true })) {
 					const from = line.from + match.from;
 					const to = line.from + match.to;
-					if (selection.from < to && selection.to > from) {
+					const overlaps = selection.from === selection.to
+						? selection.from > from && selection.from < to
+						: selection.from < to && selection.to > from;
+					if (overlaps) {
 						signatures.push(`${from}:${to}:${match.linktext}:${match.alias ?? ''}`);
 					}
 				}
@@ -522,6 +586,32 @@ export function buildTaskWikilinkTrailingRenderSignature(
 		trackingSnapshot,
 		noteIcon: getConfiguredKeyMappingIcon('note', settings.keyMappings) || 'notebook-pen',
 	});
+}
+
+export function buildTaskWikilinkLabelRenderSignature(
+	resolved: ResolvedTaskFileLink,
+	visuals: TaskFileLinkVisuals,
+	callbacks: LivePreviewTaskWikilinkCallbacks,
+): string {
+	const settings = callbacks.getSettings();
+	return stableStringify({
+		alias: resolved.alias ?? '',
+		checkbox: resolved.task.checkbox,
+		description: resolved.task.description,
+		language: settings.language,
+		labelState: visuals.labelState,
+		rawLinktext: resolved.rawLinktext,
+		resolvedFilePath: resolved.resolvedFile.path,
+		hoverColor: visuals.hoverColor,
+	});
+}
+
+function applyTaskFileLinkLabelState(label: HTMLElement, visuals: TaskFileLinkVisuals): void {
+	if (visuals.labelState === 'done') {
+		label.classList.add('operon-task-done');
+	} else if (visuals.labelState === 'cancelled') {
+		label.classList.add('operon-task-cancelled');
+	}
 }
 
 function stableStringify(value: unknown): string {

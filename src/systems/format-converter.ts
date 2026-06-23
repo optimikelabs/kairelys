@@ -12,6 +12,7 @@ import { OperonIndexer } from '../indexer/indexer';
 import { ParsedTask } from '../types/fields';
 import { CANONICAL_KEY_MAP } from '../types/keys';
 import { serializeTask } from '../core/serializer';
+import { getManagedTaskFieldType, isManagedTaskFieldCanonicalKey } from '../core/managed-task-fields';
 import { OperonSettings } from '../types/settings';
 import { t } from '../core/i18n';
 
@@ -112,7 +113,7 @@ export class FormatConverter {
 		if (!task) return null;
 
 		const fields = Object.entries(task.fieldValues)
-			.filter(([key]) => CANONICAL_KEY_MAP.has(key))
+			.filter(([key]) => isManagedTaskFieldCanonicalKey(key, this.settings.keyMappings))
 			.map(([key, value]) => {
 				const def = CANONICAL_KEY_MAP.get(key);
 				return {
@@ -120,7 +121,7 @@ export class FormatConverter {
 					key,
 					value,
 					rawValue: value,
-					type: def?.type ?? 'text',
+					type: def?.type ?? getManagedTaskFieldType(key, this.settings.keyMappings) ?? 'text',
 					isCanonical: !!def,
 					containerRange: { from: 0, to: 0 },
 					valueRange: { from: 0, to: 0 },
@@ -145,8 +146,10 @@ export class FormatConverter {
 		};
 
 		// File-task to inline conversion always writes canonical inline keys,
-		// regardless of any YAML-visible property mappings.
-		return serializeTask(parsed, []);
+		// regardless of any YAML-visible property mappings. keyMappings is passed
+		// only so managed custom keys sort into their configured order; key names
+		// stay canonical because each field carries its own sourceKey.
+		return serializeTask(parsed, this.settings.keyMappings);
 	}
 
 	/**

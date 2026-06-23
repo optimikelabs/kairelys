@@ -41,7 +41,12 @@ export function scanTaskWikiLinksInLine(
 
 		if (codeDelimiter === 0 && ch === '[' && i + 1 < text.length && text[i + 1] === '[') {
 			if (!includeEmbeds && i > 0 && text[i - 1] === '!') {
-				i++;
+				const closeIndex = findWikiLinkClose(text, i + 2);
+				if (closeIndex === -1) {
+					i += 2;
+					continue;
+				}
+				i = closeIndex + 2;
 				continue;
 			}
 
@@ -76,13 +81,21 @@ function countRun(text: string, index: number, char: string): number {
 }
 
 function findWikiLinkClose(text: string, start: number): number {
+	let depth = 1;
 	for (let i = start; i < text.length - 1; i++) {
 		if (text[i] === '\\') {
 			i++;
 			continue;
 		}
+		if (text[i] === '[' && text[i + 1] === '[') {
+			depth++;
+			i++;
+			continue;
+		}
 		if (text[i] === ']' && text[i + 1] === ']') {
-			return i;
+			depth--;
+			if (depth === 0) return i;
+			i++;
 		}
 	}
 	return -1;

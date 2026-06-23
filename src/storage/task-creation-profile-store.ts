@@ -22,6 +22,7 @@ export type TaskCreationProfileStoreSettings = Pick<
 	| 'inlineTaskHeading'
 	| 'fileTaskParentInlineTargetMode'
 	| 'fileTaskParentFileTargetMode'
+	| 'inlineToFileTaskMovePlainCheckboxes'
 	| 'inlineTaskParentInlineTargetMode'
 	| 'inlineTaskParentFileTargetMode'
 	| 'inlineTaskParentFileHeadingKeyword'
@@ -132,6 +133,10 @@ function readStoreData(
 		fileTaskParentFileTargetMode: readFileTaskParentTargetMode(
 			raw.fileTaskParentFileTargetMode,
 			fallback.fileTaskParentFileTargetMode,
+		),
+		inlineToFileTaskMovePlainCheckboxes: readBoolean(
+			raw.inlineToFileTaskMovePlainCheckboxes,
+			fallback.inlineToFileTaskMovePlainCheckboxes,
 		),
 		inlineTaskParentInlineTargetMode: readInlineTaskParentInlineTargetMode(
 			raw.inlineTaskParentInlineTargetMode,

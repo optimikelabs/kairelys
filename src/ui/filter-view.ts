@@ -104,6 +104,8 @@ export class FilterView extends ItemView {
 	private updateFields?: (operonId: string, payload: Record<string, string>) => void | Promise<void>;
 	private updateSubtasks?: (operonId: string, subtaskIds: string[]) => void;
 	private updateDependencyField?: (operonId: string, field: 'blocking' | 'blockedBy', value: string) => void;
+	private getRepeatSkipDates?: (repeatSeriesId: string) => string[];
+	private getRepeatSkipSignature?: () => string;
 	private getRepeatSeriesInlineCompletionMode?: (repeatSeriesId: string) => InlineRepeatCompletionMode;
 	private updateRepeatSeriesInlineCompletionMode?: (operonId: string, mode: InlineRepeatCompletionMode) => void | Promise<void>;
 	private requestSubtask?: (operonId: string) => void | Promise<void>;
@@ -155,6 +157,8 @@ export class FilterView extends ItemView {
 		updateFields?: (operonId: string, payload: Record<string, string>) => void | Promise<void>,
 		updateSubtasks?: (operonId: string, subtaskIds: string[]) => void,
 		updateDependencyField?: (operonId: string, field: 'blocking' | 'blockedBy', value: string) => void,
+		getRepeatSkipDates?: (repeatSeriesId: string) => string[],
+		getRepeatSkipSignature?: () => string,
 		getRepeatSeriesInlineCompletionMode?: (repeatSeriesId: string) => InlineRepeatCompletionMode,
 		updateRepeatSeriesInlineCompletionMode?: (operonId: string, mode: InlineRepeatCompletionMode) => void | Promise<void>,
 		requestSubtask?: (operonId: string) => void | Promise<void>,
@@ -185,6 +189,8 @@ export class FilterView extends ItemView {
 		this.updateFields = updateFields;
 		this.updateSubtasks = updateSubtasks;
 		this.updateDependencyField = updateDependencyField;
+		this.getRepeatSkipDates = getRepeatSkipDates;
+		this.getRepeatSkipSignature = getRepeatSkipSignature;
 		this.getRepeatSeriesInlineCompletionMode = getRepeatSeriesInlineCompletionMode;
 		this.updateRepeatSeriesInlineCompletionMode = updateRepeatSeriesInlineCompletionMode;
 		this.requestSubtask = requestSubtask;
@@ -339,6 +345,7 @@ export class FilterView extends ItemView {
 			updateFields: this.updateFields,
 			updateSubtasks: this.updateSubtasks,
 			updateDependencyField: this.updateDependencyField,
+			getRepeatSkipDates: this.getRepeatSkipDates,
 			getRepeatSeriesInlineCompletionMode: this.getRepeatSeriesInlineCompletionMode,
 			updateRepeatSeriesInlineCompletionMode: this.updateRepeatSeriesInlineCompletionMode,
 			requestSubtask: this.requestSubtask,
@@ -972,6 +979,7 @@ export class FilterView extends ItemView {
 			this.pinnedCache?.getGeneration() ?? 0,
 			this.getTrackingSignature?.() ?? '',
 			this.getProjectSerialSignature?.() ?? '',
+			this.getRepeatSkipSignature?.() ?? '',
 			this.currentFilterSetId ?? '',
 			this.searchQuery.trim().toLocaleLowerCase(),
 			JSON.stringify(filterSet),

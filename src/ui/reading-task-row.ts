@@ -66,6 +66,7 @@ export interface ReadingTaskRowCallbacks {
 	updateDependencyField?: (operonId: string, field: 'blocking' | 'blockedBy', value: string) => void;
 	getRepeatSeriesInlineCompletionMode?: (repeatSeriesId: string) => InlineRepeatCompletionMode;
 	updateRepeatSeriesInlineCompletionMode?: (operonId: string, mode: InlineRepeatCompletionMode) => void | Promise<void>;
+	getRepeatSkipDates?: (repeatSeriesId: string) => string[];
 	getProjectSerialDisplay?: (operonId: string, task?: IndexedTask) => ProjectSerialDisplay | null;
 }
 
@@ -236,6 +237,7 @@ export function buildReadingTaskRowElement(
 		callbacks.getAllTasks(),
 		options?.chipItems,
 		locationResolver,
+		{ repeatSkipDateResolver: callbacks.getRepeatSkipDates },
 	);
 	for (const entry of entries) {
 		const renderEntry = readOnly && entry.interactive ? { ...entry, interactive: false } : entry;
@@ -470,6 +472,9 @@ function enhanceTaskDescriptionWikilinkOverlays(
 		toggleTimer: callbacks.toggleTimer,
 		requestSubtask: callbacks.requestSubtask,
 		getProjectSerialDisplay: callbacks.getProjectSerialDisplay,
+		getRepeatSkipDates: callbacks.getRepeatSkipDates,
+	}, {
+		sourceText: task.description,
 	});
 }
 
@@ -608,6 +613,39 @@ function attachReadingChipAction(
 						},
 				});
 				break;
+			case 'repeat': {
+				const settings = callbacks.getSettings();
+				openTaskFieldPicker({
+					app: callbacks.app,
+					settings,
+					allTasks: callbacks.getAllTasks(),
+					canonicalKey: 'repeat',
+					anchor: chip,
+					currentFieldValues: task.fieldValues,
+					currentTags: task.tags,
+					sourcePath: task.primary.filePath,
+					taskFormat: task.primary.format,
+					repeatInlineCompletionMode: callbacks.getRepeatSeriesInlineCompletionMode?.(task.fieldValues['repeatSeriesId'] ?? ''),
+					onRepeatInlineCompletionModeChange: mode => callbacks.updateRepeatSeriesInlineCompletionMode?.(task.operonId, mode),
+					onCommit: payload => {
+						const normalizedPayload = Object.fromEntries(
+							Object.entries(payload).map(([key, value]) => [
+								key,
+								Array.isArray(value) ? value.join('; ') : value,
+							]),
+						);
+						if (callbacks.updateFields) {
+							void callbacks.updateFields(task.operonId, normalizedPayload);
+						} else {
+							for (const [key, value] of Object.entries(normalizedPayload)) {
+								void callbacks.updateField(task.operonId, key, value);
+							}
+						}
+						onCommit?.();
+					},
+				});
+				break;
+			}
 			case 'duration':
 			case 'totalDuration':
 			case 'totalEstimate':

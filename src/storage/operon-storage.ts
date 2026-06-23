@@ -167,6 +167,7 @@ function pickTaskCreationProfileStoreSettings(settings: OperonSettings): TaskCre
 		inlineTaskHeading: settings.inlineTaskHeading,
 		fileTaskParentInlineTargetMode: settings.fileTaskParentInlineTargetMode,
 		fileTaskParentFileTargetMode: settings.fileTaskParentFileTargetMode,
+		inlineToFileTaskMovePlainCheckboxes: settings.inlineToFileTaskMovePlainCheckboxes,
 		inlineTaskParentInlineTargetMode: settings.inlineTaskParentInlineTargetMode,
 		inlineTaskParentFileTargetMode: settings.inlineTaskParentFileTargetMode,
 		inlineTaskParentFileHeadingKeyword: settings.inlineTaskParentFileHeadingKeyword,

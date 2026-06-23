@@ -78,6 +78,7 @@ export interface LivePreviewCallbacks {
 	updateDependencyField?: (operonId: string, field: 'blocking' | 'blockedBy', value: string) => void;
 	getRepeatSeriesInlineCompletionMode?: (repeatSeriesId: string) => InlineRepeatCompletionMode;
 	updateRepeatSeriesInlineCompletionMode?: (operonId: string, mode: InlineRepeatCompletionMode) => void | Promise<void>;
+	getRepeatSkipDates?: (repeatSeriesId: string) => string[];
 	getProjectSerialDisplay?: (operonId: string, task?: IndexedTask) => ProjectSerialDisplay | null;
 }
 
@@ -316,6 +317,7 @@ class MetadataTailWidget extends WidgetType {
 			tasks,
 			undefined,
 			locationResolver,
+			{ repeatSkipDateResolver: this.callbacks.getRepeatSkipDates },
 		);
 		for (const entry of entries) {
 			const chip = createInlineTaskCompactChipElement(entry, 'operon-task-chip', { owner: row });
@@ -766,7 +768,9 @@ export function buildMetadataTailRenderSignature(
 		? getLocationPlaceIndex(callbacks.app, settings)
 		: null;
 	const locationResolver = locationIndex?.resolve;
-	const entries = buildInlineTaskCompactChipEntries(fieldValues, tags, settings, tasks, undefined, locationResolver)
+	const entries = buildInlineTaskCompactChipEntries(fieldValues, tags, settings, tasks, undefined, locationResolver, {
+		repeatSkipDateResolver: callbacks.getRepeatSkipDates,
+	})
 		.map(entry => [
 			entry.key,
 			entry.label,
@@ -999,6 +1003,42 @@ function attachLivePreviewChipAction(
 						},
 				});
 				break;
+			case 'repeat': {
+				const settings = callbacks.getSettings();
+				openTaskFieldPicker({
+					app: callbacks.app,
+					settings,
+					allTasks: callbacks.getAllTasks(),
+					canonicalKey: 'repeat',
+					anchor: pickerAnchor,
+					currentFieldValues: fieldValues,
+					currentTags: task.tags,
+					sourcePath: task.filePath,
+					retainInputFocus: true,
+					taskFormat: 'inline',
+					repeatInlineCompletionMode: callbacks.getRepeatSeriesInlineCompletionMode?.(fieldValues['repeatSeriesId'] ?? ''),
+					onRepeatInlineCompletionModeChange: mode => {
+						void callbacks.updateRepeatSeriesInlineCompletionMode?.(operonId, mode);
+					},
+					onCommit: payload => {
+						const normalizedPayload = Object.fromEntries(
+							Object.entries(payload).map(([key, value]) => [
+								key,
+								Array.isArray(value) ? value.join('; ') : value,
+							]),
+						);
+						if (callbacks.updateFields) {
+							void callbacks.updateFields(operonId, normalizedPayload, restoreCursor());
+						} else {
+							for (const [key, value] of Object.entries(normalizedPayload)) {
+								void callbacks.updateField(operonId, key, value, restoreCursor());
+							}
+						}
+						onCommit?.();
+					},
+				});
+				break;
+			}
 			case 'duration':
 			case 'totalDuration':
 			case 'totalEstimate':

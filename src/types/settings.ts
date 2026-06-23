@@ -625,6 +625,7 @@ export const INLINE_TASK_COMPACT_CHIP_ORDER = [
 	'dateCancelled',
 	'datetimeStart',
 	'datetimeEnd',
+	'repeat',
 	'assignees',
 	'contexts',
 	'location',
@@ -651,6 +652,7 @@ export const INLINE_TASK_COMPACT_FALLBACK_ICONS: Record<InlineTaskCompactChipKey
 	dateCancelled: 'calendar-x',
 	datetimeStart: 'between-horizontal-start',
 	datetimeEnd: 'between-horizontal-end',
+	repeat: 'repeat-2',
 	assignees: 'users',
 	contexts: 'map-pinned',
 	location: 'map-pin',
@@ -815,6 +817,7 @@ function buildDefaultInlineTaskCompactChipItems(): InlineTaskCompactChipItem[] {
 		{ key: 'dateDue', visible: true, iconOnly: true },
 		{ key: 'datetimeStart', visible: false, iconOnly: false },
 		{ key: 'datetimeEnd', visible: false, iconOnly: false },
+		{ key: 'repeat', visible: true, iconOnly: false },
 		{ key: 'assignees', visible: true, iconOnly: false },
 		{ key: 'contexts', visible: true, iconOnly: false },
 		{ key: 'location', visible: true, iconOnly: false },
@@ -897,6 +900,7 @@ function buildDefaultFilterTaskCompactChipItems(): InlineTaskCompactChipItem[] {
 		{ key: 'dateCancelled', visible: true, iconOnly: true },
 		{ key: 'datetimeStart', visible: false, iconOnly: false },
 		{ key: 'datetimeEnd', visible: false, iconOnly: false },
+		{ key: 'repeat', visible: true, iconOnly: false },
 		{ key: 'assignees', visible: true, iconOnly: false },
 		{ key: 'contexts', visible: true, iconOnly: false },
 		{ key: 'location', visible: true, iconOnly: false },
@@ -923,6 +927,7 @@ function buildDefaultTaskFinderCompactChipItems(): InlineTaskCompactChipItem[] {
 		{ key: 'dateCancelled', visible: false, iconOnly: false },
 		{ key: 'datetimeStart', visible: false, iconOnly: false },
 		{ key: 'datetimeEnd', visible: false, iconOnly: false },
+		{ key: 'repeat', visible: false, iconOnly: false },
 		{ key: 'assignees', visible: false, iconOnly: false },
 		{ key: 'contexts', visible: true, iconOnly: false },
 		{ key: 'location', visible: true, iconOnly: false },
@@ -949,6 +954,7 @@ function buildDefaultOverlayTaskCompactChipItems(): InlineTaskCompactChipItem[] 
 		{ key: 'dateCancelled', visible: false, iconOnly: false },
 		{ key: 'datetimeStart', visible: false, iconOnly: false },
 		{ key: 'datetimeEnd', visible: false, iconOnly: false },
+		{ key: 'repeat', visible: false, iconOnly: false },
 		{ key: 'assignees', visible: true, iconOnly: true },
 		{ key: 'contexts', visible: false, iconOnly: false },
 		{ key: 'location', visible: false, iconOnly: false },
@@ -1172,6 +1178,8 @@ export interface OperonSettings {
 	fileTaskParentInlineTargetMode: FileTaskParentInlineTargetMode;
 	/** Where New Operon Task writes file tasks when the selected parent is a file task. */
 	fileTaskParentFileTargetMode: FileTaskParentFileTargetMode;
+	/** If true, inline-to-file task conversion moves scoped plain checkboxes into the new file task. */
+	inlineToFileTaskMovePlainCheckboxes: boolean;
 	/** Where New Operon Task writes inline tasks by default. */
 	inlineTaskSaveMode: InlineTaskSaveMode;
 	/** Legacy daily-note toggle mirror for compatibility with older stores. */
@@ -1633,6 +1641,7 @@ export const DEFAULT_SETTINGS: OperonSettings = {
 	fileTaskArchiveOnlyFromFileTasksFolder: true,
 	fileTaskParentInlineTargetMode: 'same-folder',
 	fileTaskParentFileTargetMode: 'same-folder',
+	inlineToFileTaskMovePlainCheckboxes: true,
 	inlineTaskSaveMode: 'daily-notes',
 	inlineTaskUseDailyNote: true,
 	inlineTaskTargetFile: DEFAULT_INLINE_TASK_TARGET_FILE,

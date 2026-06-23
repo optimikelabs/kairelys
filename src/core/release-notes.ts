@@ -13,6 +13,29 @@ const RELEASE_NOTE_LIMIT = 5;
 
 export const OPERON_RELEASE_NOTES: OperonReleaseNote[] = [
 	{
+		version: '1.6.2',
+		date: '2026-06-23',
+		title: 'Recurring Tasks at a Glance',
+		showOnUpdate: true,
+		bannerUrl: 'operon-1-6-2-recurrence-chips',
+		body: `
+This is a small workflow polish release for recurring tasks and file-task conversion. Recurring work is easier to scan directly from task rows, inline-to-file conversion preserves more checklist context, and file-task wikilinks render more cleanly across Live Preview and Reading View.
+
+### New
+- Added a **Recurrence compact chip** for recurring tasks, showing the recurrence summary in inline and filter task rows with a cleaner next-occurrence tooltip when available.
+- Added **plain checkbox carryover for Convert to file**, so inline tasks can bring their scoped checkboxes into the new file task by default, with a File Task Conversion setting to keep the previous behavior when needed.
+
+### Improved
+- Improved **file task overlay** labels so nested wikilinks keep a lighter, consistent visual affordance without the heavy underline treatment.
+
+### Fixed
+- Fixed **Convert to file** in Live Preview so the new file-task link label refreshes immediately after conversion instead of appearing only after the next editor interaction.
+- Fixed **Calendar Task Pool** scrolling on Windows desktop so long task pools no longer get trapped at the top of the sidebar.
+- Fixed **file task overlays** so task titles that contain wikilinks render those inner links cleanly instead of letting nested wikilinks break the overlay label.
+- Fixed **Reading View file task overlays** so recovering a nested wikilink artifact replaces only the broken link text and preserves surrounding paragraph text.
+`.trim(),
+	},
+	{
 		version: '1.6.1',
 		date: '2026-06-21',
 		title: 'A Middle Ground for Mobile Calendar',

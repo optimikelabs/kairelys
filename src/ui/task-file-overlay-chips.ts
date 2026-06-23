@@ -34,6 +34,7 @@ interface OverlayChipRenderCallbacks {
 	sourcePath: string;
 	owner?: Node | null;
 	getProjectSerialDisplay?: (operonId: string, task?: IndexedTask) => ProjectSerialDisplay | null;
+	getRepeatSkipDates?: (repeatSeriesId: string) => string[];
 }
 
 export function getTaskFileOverlayChipSignature(
@@ -42,6 +43,7 @@ export function getTaskFileOverlayChipSignature(
 	settings: OperonSettings,
 	allTasks: IndexedTask[],
 	getProjectSerialDisplay?: (operonId: string, task?: IndexedTask) => ProjectSerialDisplay | null,
+	getRepeatSkipDates?: (repeatSeriesId: string) => string[],
 ): string {
 	const locationIndex = shouldResolveLocationCompactChips(settings, settings.overlayTaskCompactChips)
 		? getLocationPlaceIndex(app, settings)
@@ -53,6 +55,7 @@ export function getTaskFileOverlayChipSignature(
 		allTasks,
 		settings.overlayTaskCompactChips,
 		locationIndex?.resolve,
+		{ repeatSkipDateResolver: getRepeatSkipDates },
 	).map(entry => [
 		entry.key,
 		entry.label,
@@ -101,6 +104,7 @@ export function buildTaskFileOverlayChipContainer(
 		callbacks.getAllTasks(),
 		settings.overlayTaskCompactChips,
 		locationResolver,
+		{ repeatSkipDateResolver: callbacks.getRepeatSkipDates },
 	);
 	const projectSerialDisplay = callbacks.getProjectSerialDisplay?.(task.operonId, task) ?? null;
 	if (entries.length === 0 && !projectSerialDisplay) return null;

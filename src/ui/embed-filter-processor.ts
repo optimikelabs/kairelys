@@ -48,6 +48,7 @@ import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
 import { buildTaskWikilinkOverlaySettingsSignature } from './task-file-overlay-chips';
 import { isSpecialDynamicFilterSet } from '../core/dynamic-file-task-filter';
 import { getLocationPlaceIndex } from '../core/location-source-resolver';
+import type { InlineRepeatCompletionMode } from '../storage/repeat-series-store';
 
 function generateFilterSetId(): string {
     return 'fs_' + Math.random().toString(36).slice(2, 9);
@@ -70,6 +71,10 @@ export interface EmbedFilterDeps {
     updateFields?: (operonId: string, payload: Record<string, string>) => void;
     updateSubtasks?: (operonId: string, subtaskIds: string[]) => void;
     updateDependencyField?: (operonId: string, field: 'blocking' | 'blockedBy', value: string) => void;
+    getRepeatSkipDates?: (repeatSeriesId: string) => string[];
+    getRepeatSkipSignature?: () => string;
+    getRepeatSeriesInlineCompletionMode?: (repeatSeriesId: string) => InlineRepeatCompletionMode;
+    updateRepeatSeriesInlineCompletionMode?: (operonId: string, mode: InlineRepeatCompletionMode) => void | Promise<void>;
     requestSubtask?: (operonId: string) => void | Promise<void>;
     onContextualAction?: ContextualMenuActionHandler;
     pinnedCache?: PinnedCache;
@@ -275,6 +280,7 @@ export function renderFilterSurface(
         deps.pinnedCache?.getGeneration() ?? 0,
         deps.getTrackingSignature?.() ?? '',
         deps.getProjectSerialSignature?.() ?? '',
+        deps.getRepeatSkipSignature?.() ?? '',
         filterSet.id,
         instance.searchQuery.trim().toLocaleLowerCase(),
         JSON.stringify(filterSet),
@@ -325,6 +331,9 @@ export function renderFilterSurface(
         updateFields: deps.updateFields,
         updateSubtasks: deps.updateSubtasks,
         updateDependencyField: deps.updateDependencyField,
+        getRepeatSkipDates: deps.getRepeatSkipDates,
+        getRepeatSeriesInlineCompletionMode: deps.getRepeatSeriesInlineCompletionMode,
+        updateRepeatSeriesInlineCompletionMode: deps.updateRepeatSeriesInlineCompletionMode,
         requestSubtask: deps.requestSubtask,
         onContextualAction: deps.onContextualAction,
         isTaskPinned: deps.pinnedCache ? (taskId) => deps.pinnedCache?.isPinned(taskId) === true : undefined,

@@ -1,6 +1,8 @@
 import { setIcon } from 'obsidian';
 import { createOwnerElement } from '../core/dom-compat';
 import { getConfiguredKeyMappingIcon } from '../core/key-mapping-icons';
+import { calculateNextRepeatDate, parseRepeatRule, type RepeatRule } from '../core/repeat-rule';
+import { formatRepeatRuleSummaryI18n } from '../core/repeat-rule-i18n';
 import { splitTaskListValue } from '../core/task-field-patch';
 import { OperonSettings, InlineTaskCompactChipItem, InlineTaskCompactChipKey, INLINE_TASK_COMPACT_CHIP_ORDER, INLINE_TASK_COMPACT_FALLBACK_ICONS, KeyMapping } from '../types/settings';
 import { isInternalCanonicalKey } from '../types/keys';
@@ -31,6 +33,11 @@ export interface LocationChipMatch {
 }
 
 export type LocationChipResolver = (coordinateText: string) => LocationChipMatch | null;
+export type RepeatSkipDateResolver = (repeatSeriesId: string) => string[];
+
+export interface CompactChipEntryBuildOptions {
+	repeatSkipDateResolver?: RepeatSkipDateResolver;
+}
 
 export const COMPACT_VISIBLE_CHIP_KEYS = [
 	'priority',
@@ -41,6 +48,7 @@ export const COMPACT_VISIBLE_CHIP_KEYS = [
 	'dateCancelled',
 	'datetimeStart',
 	'datetimeEnd',
+	'repeat',
 	'totalDuration',
 	'totalEstimate',
 	'links',
@@ -115,6 +123,7 @@ export function buildInlineTaskCompactChipEntries(
 	allTasks: IndexedTask[] = [],
 	chipItems?: InlineTaskCompactChipItem[],
 	locationResolver?: LocationChipResolver,
+	options?: CompactChipEntryBuildOptions,
 ): InlineTaskCompactChipEntry[] {
 	const entries: InlineTaskCompactChipEntry[] = [];
 	const taskColor = normalizeTaskFieldColor(fieldValues['taskColor']);
@@ -203,6 +212,28 @@ export function buildInlineTaskCompactChipEntries(
 				const value = fieldValues[key]?.trim();
 				if (!value) break;
 				entries.push(createEntry(settings, key, formatCompactDatetimeTime(value, settings), item?.iconOnly === true));
+				break;
+			}
+			case 'repeat': {
+				const rawValue = fieldValues['repeat']?.trim();
+				if (!rawValue) break;
+				const rule = parseRepeatRule(rawValue);
+				const entry = createEntry(
+					settings,
+					key,
+					rule ? formatRepeatRuleSummaryI18n(rule) : rawValue,
+					item?.iconOnly === true,
+				);
+				entry.tooltipTitle = rule
+					? t('taskEditor', 'repeatChipNextOccurrenceTitle')
+					: t('taskEditor', 'repeatChipRuleTitle');
+				entry.tooltipContent = rule
+					? buildRepeatChipTooltipContent(rule, fieldValues, options?.repeatSkipDateResolver)
+					: [
+						rawValue,
+						t('taskEditor', 'repeatChipUnsupportedByPicker'),
+					].join('\n');
+				entries.push(entry);
 				break;
 			}
 			case 'assignees': {
@@ -322,6 +353,59 @@ export function buildInlineTaskCompactChipEntries(
 		}
 	}
 	return entries;
+}
+
+function buildRepeatChipTooltipContent(
+	rule: RepeatRule,
+	fieldValues: Record<string, string>,
+	repeatSkipDateResolver?: RepeatSkipDateResolver,
+): string | undefined {
+	const lines: string[] = [];
+	const repeatEnd = extractDatePart(fieldValues['datetimeRepeatEnd']);
+
+	if (rule.mode === 'done') {
+		lines.push(t('taskEditor', 'repeatChipNextWhenDone'));
+	} else if (rule.mode === 'count' && (rule.count ?? 0) <= 1) {
+		lines.push(t('taskEditor', 'repeatChipNoNextOccurrence'));
+	} else {
+		const anchorDate = resolveRepeatChipAnchorDate(fieldValues);
+		if (anchorDate) {
+			const nextDate = calculateNextRepeatDate(rule, {
+				anchorDate,
+				repeatEnd: fieldValues['datetimeRepeatEnd'],
+				skipDates: resolveRepeatSkipDates(fieldValues, repeatSkipDateResolver),
+			});
+			lines.push(nextDate
+				? t('taskEditor', 'repeatChipNextOccurrence', { date: nextDate })
+				: t('taskEditor', 'repeatChipNoNextOccurrence'));
+		}
+	}
+
+	if (repeatEnd) {
+		lines.push(t('taskEditor', 'repeatChipEndsOn', { date: repeatEnd }));
+	}
+
+	return lines.length > 0 ? lines.join('\n') : undefined;
+}
+
+function resolveRepeatChipAnchorDate(fieldValues: Record<string, string>): string {
+	return extractDatePart(fieldValues['repeatOccurrenceDate'])
+		|| extractDatePart(fieldValues['dateScheduled'])
+		|| extractDatePart(fieldValues['dateDue'])
+		|| extractDatePart(fieldValues['dateStarted'])
+		|| extractDatePart(fieldValues['datetimeStart'])
+		|| extractDatePart(fieldValues['datetimeEnd']);
+}
+
+function resolveRepeatSkipDates(
+	fieldValues: Record<string, string>,
+	repeatSkipDateResolver?: RepeatSkipDateResolver,
+): string[] {
+	const repeatSeriesId = fieldValues['repeatSeriesId']?.trim();
+	if (!repeatSeriesId || !repeatSkipDateResolver) return [];
+	return repeatSkipDateResolver(repeatSeriesId)
+		.map(extractDatePart)
+		.filter(Boolean);
 }
 
 function isBuiltInCompactChipKey(key: string): key is InlineTaskCompactChipKey {
@@ -564,6 +648,14 @@ function formatDuration(totalSeconds: number): string {
 	if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
 	if (hours > 0) return `${hours}h`;
 	return `${Math.max(1, minutes)}m`;
+}
+
+function extractDatePart(value: string | null | undefined): string {
+	if (!value) return '';
+	const trimmed = value.trim();
+	if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+	if (/^\d{4}-\d{2}-\d{2}T/.test(trimmed)) return trimmed.slice(0, 10);
+	return '';
 }
 
 function formatCompactDatetimeTime(value: string, settings: Pick<OperonSettings, 'timeFormat'>): string {

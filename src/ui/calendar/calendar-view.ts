@@ -628,6 +628,8 @@ export class CalendarView extends ItemView {
 	private state: CalendarLeafState | null = null;
 	private timedScrollEl: HTMLElement | null = null;
 	private surfaceScrollEl: HTMLElement | null = null;
+	private sidebarScrollEl: HTMLElement | null = null;
+	private sidebarTaskPoolListEl: HTMLElement | null = null;
 	private lastAppliedScrollSignature: string | null = null;
 	private nowIndicatorTimer: number | null = null;
 	private nowIndicatorEntries: Array<{
@@ -662,6 +664,9 @@ export class CalendarView extends ItemView {
 	private restoreScrollOnNextRender = false;
 	private restoreSurfaceScrollOnNextRender = false;
 	private lastSurfaceScrollTop = 0;
+	private restoreSidebarScrollOnNextRender = false;
+	private lastSidebarScrollTop = 0;
+	private lastSidebarTaskPoolScrollTop = 0;
 	private timedHorizontalGesture: TimedHorizontalGestureState = {
 		axisLock: null,
 		offsetPx: 0,
@@ -821,6 +826,7 @@ export class CalendarView extends ItemView {
 		}
 		if (this.renderFrame !== null) return;
 		this.captureActiveCalendarScrollForRender();
+		this.captureActiveCalendarSidebarScrollForRender();
 		this.preserveScrollOnNextRender = true;
 		this.renderFrame = window.requestAnimationFrame(() => {
 			this.renderFrame = null;
@@ -1011,6 +1017,7 @@ export class CalendarView extends ItemView {
 			});
 			this.scheduleOptimisticTaskPatchCleanup();
 			this.captureActiveCalendarScrollForRender();
+			this.captureActiveCalendarSidebarScrollForRender();
 			this.preserveScrollOnNextRender = true;
 			this.render();
 			return true;
@@ -1045,6 +1052,7 @@ export class CalendarView extends ItemView {
 		this.scheduleOptimisticTaskPatchCleanup();
 		if (this.shouldFullRenderMobileStatusPatch(patch)) {
 			this.captureActiveCalendarScrollForRender();
+			this.captureActiveCalendarSidebarScrollForRender();
 			this.preserveScrollOnNextRender = true;
 			this.render();
 			return {
@@ -1057,6 +1065,7 @@ export class CalendarView extends ItemView {
 		const domPatch = this.applyCalendarStatusDomPatch(taskId, patch);
 		if (domPatch.patchedCount === 0) {
 			this.captureActiveCalendarScrollForRender();
+			this.captureActiveCalendarSidebarScrollForRender();
 			this.preserveScrollOnNextRender = true;
 			this.render();
 			return {
@@ -1382,6 +1391,8 @@ export class CalendarView extends ItemView {
 		closeFloatingPanelsForRoot(container);
 		closeIconOnlyChipPreviewsForRoot(container);
 		this.surfaceScrollEl = null;
+		this.sidebarScrollEl = null;
+		this.sidebarTaskPoolListEl = null;
 		this.mobileTimeGridScrollEl = null;
 		this.allDayDropContext = null;
 		this.timedDropContext = null;
@@ -1422,8 +1433,12 @@ export class CalendarView extends ItemView {
 			: `${preset.id}|${queryAnchorDate}`;
 		const preserveScroll = this.restoreScrollOnNextRender
 			|| (!useMobileCalendar && this.preserveScrollOnNextRender && this.lastRenderPresetKey === renderPresetKey);
+		const restoreSidebarScroll = !useMobileCalendar
+			&& state.navigationMode === 'sidebar'
+			&& this.restoreSidebarScrollOnNextRender;
 		this.preserveScrollOnNextRender = false;
 		this.restoreScrollOnNextRender = false;
+		this.restoreSidebarScrollOnNextRender = false;
 		if (this.lastRenderPresetKey && this.lastRenderPresetKey !== renderPresetKey) {
 			this.expandedHiddenTimeKey = null;
 		}
@@ -1630,6 +1645,9 @@ export class CalendarView extends ItemView {
 		}
 		this.restoreSurfaceScrollOnNextRender = false;
 		this.bindLayoutRefresh(root);
+		if (restoreSidebarScroll) {
+			this.restoreCalendarSidebarScrollAfterRender(renderGeneration);
+		}
 		if (this.isTimeGridCompatibleSurface(preset) && preserveScroll) {
 			this.restoreScrollPosition(state, preset);
 		} else if (this.isTimeGridCompatibleSurface(preset)) {
@@ -1663,6 +1681,15 @@ export class CalendarView extends ItemView {
 			Math.round(container.clientWidth || container.getBoundingClientRect().width || ownerWindow.innerWidth),
 		);
 		return width <= settings.calendarMobileMaxWidthPx;
+	}
+
+	private shouldUseSidebarNativeScrollFallback(): boolean {
+		if (Platform.isMobile || Platform.isMobileApp || Platform.isPhone || Platform.isTablet) return false;
+		return Platform.isWin;
+	}
+
+	private isSidebarNativeScrollFallbackEnabled(element: HTMLElement): boolean {
+		return !!element.closest('.operon-calendar-root.is-sidebar-native-scroll-fallback');
 	}
 
 	private resolveMobileCalendarViewMode(
@@ -4617,6 +4644,7 @@ export class CalendarView extends ItemView {
 			return;
 		}
 		this.captureActiveCalendarScrollForRender();
+		this.captureActiveCalendarSidebarScrollForRender();
 		this.preserveScrollOnNextRender = true;
 		this.render();
 	}
@@ -6069,9 +6097,11 @@ export class CalendarView extends ItemView {
 		visibleDates: string[],
 	): HTMLElement {
 		root.addClass('is-sidebar-mode');
+		root.classList.toggle('is-sidebar-native-scroll-fallback', this.shouldUseSidebarNativeScrollFallback());
 		const layout = root.createDiv('operon-calendar-sidebar-layout');
 		layout.style.setProperty('--operon-calendar-sidebar-width', `${this.resolveSidebarWidthPx()}px`);
 		const sidebar = layout.createDiv('operon-calendar-sidebar');
+		this.sidebarScrollEl = sidebar;
 		const resizeHandle = layout.createDiv('operon-calendar-sidebar-resize-handle');
 		const surfaceScroll = layout.createDiv('operon-calendar-surface-scroll');
 		this.surfaceScrollEl = surfaceScroll;
@@ -6263,6 +6293,11 @@ export class CalendarView extends ItemView {
 
 		private bindSidebarSectionLayout(wrapper: HTMLElement): void {
 			this.sidebarSectionsLayoutCleanup?.();
+			if (this.isSidebarNativeScrollFallbackEnabled(wrapper)) {
+				this.resetSidebarSectionMaxHeights(wrapper);
+				this.sidebarSectionsLayoutCleanup = null;
+				return;
+			}
 			const generation = this.renderGeneration;
 			let frameScheduled = false;
 			const schedule = (): void => {
@@ -6283,6 +6318,10 @@ export class CalendarView extends ItemView {
 		}
 
 		private scheduleSidebarSectionLayoutRefresh(wrapper: HTMLElement): void {
+			if (this.isSidebarNativeScrollFallbackEnabled(wrapper)) {
+				this.resetSidebarSectionMaxHeights(wrapper);
+				return;
+			}
 			const generation = this.renderGeneration;
 			this.requestRenderAnimationFrame(generation, () => {
 				this.resetSidebarSectionMaxHeights(wrapper);
@@ -6703,6 +6742,7 @@ export class CalendarView extends ItemView {
 			};
 
 			const list = section.createDiv('operon-calendar-sidebar-task-pool-list operon-calendar-sidebar-section-scroll');
+			this.sidebarTaskPoolListEl = list;
 			const summary = section.createDiv('operon-calendar-sidebar-task-pool-summary');
 			const updateList = (): void => {
 				list.empty();
@@ -10746,6 +10786,43 @@ export class CalendarView extends ItemView {
 		this.restoreSurfaceScrollOnNextRender = true;
 	}
 
+	private captureActiveCalendarSidebarScrollForRender(): void {
+		const state = this.state;
+		if (!state || state.navigationMode !== 'sidebar') return;
+		let shouldRestore = false;
+		if (this.sidebarScrollEl?.isConnected) {
+			this.lastSidebarScrollTop = Math.max(0, Math.round(this.sidebarScrollEl.scrollTop));
+			shouldRestore = true;
+		}
+		if (this.sidebarTaskPoolListEl?.isConnected) {
+			this.lastSidebarTaskPoolScrollTop = Math.max(0, Math.round(this.sidebarTaskPoolListEl.scrollTop));
+			shouldRestore = true;
+		}
+		this.restoreSidebarScrollOnNextRender = shouldRestore;
+	}
+
+	private restoreCalendarSidebarScrollAfterRender(generation: number): void {
+		const sidebarScrollTop = this.lastSidebarScrollTop;
+		const taskPoolScrollTop = this.lastSidebarTaskPoolScrollTop;
+		const applyScroll = (): void => {
+			if (!this.isRenderGenerationActive(generation)) return;
+			this.applyCalendarSidebarScrollTop(this.sidebarScrollEl, sidebarScrollTop);
+			this.applyCalendarSidebarScrollTop(this.sidebarTaskPoolListEl, taskPoolScrollTop);
+		};
+		applyScroll();
+		this.requestRenderAnimationFrame(generation, () => {
+			applyScroll();
+			this.requestRenderAnimationFrame(generation, applyScroll);
+		});
+		this.setRenderTimeout(generation, applyScroll, 120);
+	}
+
+	private applyCalendarSidebarScrollTop(element: HTMLElement | null, scrollTop: number): void {
+		if (!element?.isConnected) return;
+		const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
+		element.scrollTop = Math.max(0, Math.min(maxScrollTop, scrollTop));
+	}
+
 	private captureMobileTimeGridScrollForRender(options: MobileTimeGridScrollPreserveOptions = {}): void {
 		if (!this.mobileTimeGridScrollEl || !this.mobileTimeGridScrollEl.isConnected) return;
 		this.lastMobileTimeGridScrollTop = Math.max(0, Math.round(this.mobileTimeGridScrollEl.scrollTop));
@@ -10950,6 +11027,7 @@ export class CalendarView extends ItemView {
 		if (changed) {
 			this.clearScheduledRender();
 			this.preserveScrollOnNextRender = false;
+			this.restoreSidebarScrollOnNextRender = false;
 			if (this.hasActiveCalendarDragInteraction()) {
 				this.pendingRenderAfterCalendarDrag = true;
 				return;

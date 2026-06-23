@@ -148,6 +148,11 @@ import {
 import { invalidateCustomFieldValueCandidateCache } from './src/ui/custom-field-surfaces';
 import { openTaskFieldPicker } from './src/ui/task-field-picker-dispatch';
 import { showPlainCheckboxPopover } from './src/ui/plain-checkbox-popover';
+import {
+	collectScopedPlainCheckboxMoveLines,
+	removePlainCheckboxMoveLinesFromContent,
+	type PlainCheckboxMoveLine,
+} from './src/core/plain-checkbox-lines';
 import type { ManualDatePickerOptions } from './src/ui/field-pickers/date-picker';
 import { applyFileTaskPropertyVisibility } from './src/ui/file-task-property-visibility';
 import { PinnedTasksDock } from './src/ui/pinned-tasks-dock';
@@ -253,6 +258,7 @@ import {
 } from './src/core/file-task-auto-parent';
 import {
 	createGlobalMarkdownRefreshScope,
+	createScopedMarkdownRefreshScope,
 	MarkdownRefreshScope,
 	mergeMarkdownRefreshScopes,
 	resolveStatusMarkdownRefreshScope,
@@ -900,6 +906,13 @@ export default class OperonPlugin extends Plugin {
 
 	private getProjectSerialSignature(): string {
 		return this.storage.projectSerials.getSignature();
+	}
+
+	private getRepeatSkipSignature(): string {
+		return JSON.stringify(this.storage.repeatSeries.getAllEntries().map(entry => [
+			entry.seriesId,
+			entry.skipDates,
+		]));
 	}
 
 	private async reconcileProjectSerials(options: { notifyCapacity?: boolean } = {}): Promise<void> {
@@ -1842,6 +1855,8 @@ export default class OperonPlugin extends Plugin {
 				(operonId, field, value) => {
 					void this.updateTaskDependencyFieldAndRefresh(operonId, field, value);
 				},
+				(repeatSeriesId) => this.storage.repeatSeries.getSkipDates(repeatSeriesId),
+				() => this.getRepeatSkipSignature(),
 				(repeatSeriesId) => this.getRepeatSeriesInlineCompletionMode(repeatSeriesId),
 				(operonId, mode) => {
 					void this.applyInlineRepeatCompletionModeIfRequested(this.indexer.getTask(operonId), mode);
@@ -5224,6 +5239,12 @@ export default class OperonPlugin extends Plugin {
 				updateDependencyField: (operonId: string, field: 'blocking' | 'blockedBy', value: string) => {
 					void this.updateTaskDependencyFieldAndRefresh(operonId, field, value);
 				},
+				getRepeatSkipDates: (repeatSeriesId: string) => this.storage.repeatSeries.getSkipDates(repeatSeriesId),
+				getRepeatSkipSignature: () => this.getRepeatSkipSignature(),
+				getRepeatSeriesInlineCompletionMode: (repeatSeriesId: string) => this.getRepeatSeriesInlineCompletionMode(repeatSeriesId),
+				updateRepeatSeriesInlineCompletionMode: (operonId: string, mode: InlineRepeatCompletionMode) => {
+					void this.applyInlineRepeatCompletionModeIfRequested(this.indexer.getTask(operonId), mode);
+				},
 				requestSubtask: (operonId: string) => {
 					void this.requestSubtaskForParentId(operonId);
 				},
@@ -5404,6 +5425,7 @@ export default class OperonPlugin extends Plugin {
 			updateRepeatSeriesInlineCompletionMode: (operonId: string, mode: InlineRepeatCompletionMode) => {
 				void this.applyInlineRepeatCompletionModeIfRequested(this.indexer.getTask(operonId), mode);
 			},
+			getRepeatSkipDates: (repeatSeriesId: string) => this.storage.repeatSeries.getSkipDates(repeatSeriesId),
 				updateField: (
 					operonId: string,
 					key: string,
@@ -5503,6 +5525,7 @@ export default class OperonPlugin extends Plugin {
 				requestSubtask: (operonId) => {
 					void this.requestSubtaskForParentId(operonId);
 				},
+				getRepeatSkipDates: (repeatSeriesId: string) => this.storage.repeatSeries.getSkipDates(repeatSeriesId),
 			}));
 			this.registerEditorExtension(operonDynamicFileTaskFilterLivePreviewExtension({
 				getFilePath: (editorView: EditorView) => this.getFilePathForEditorView(editorView),
@@ -5569,6 +5592,7 @@ export default class OperonPlugin extends Plugin {
 					requestSubtask: (operonId: string) => {
 						void this.requestSubtaskForParentId(operonId);
 					},
+					getRepeatSkipDates: (repeatSeriesId: string) => this.storage.repeatSeries.getSkipDates(repeatSeriesId),
 				};
 				const listItems = el.querySelectorAll<HTMLElement>('li.task-list-item');
 				const sectionTaskResolutions = new Map<string, ReadingSectionInlineTaskResolution>();
@@ -5721,6 +5745,7 @@ export default class OperonPlugin extends Plugin {
 					updateRepeatSeriesInlineCompletionMode: (operonId: string, mode: InlineRepeatCompletionMode) => {
 						void this.applyInlineRepeatCompletionModeIfRequested(this.indexer.getTask(operonId), mode);
 					},
+					getRepeatSkipDates: (repeatSeriesId: string) => this.storage.repeatSeries.getSkipDates(repeatSeriesId),
 				};
 
 					const nestedLists = Array.from(li.children).filter((child): child is HTMLElement =>
@@ -5739,7 +5764,9 @@ export default class OperonPlugin extends Plugin {
 							ctx.sourcePath,
 							renderChild,
 						).then(() => {
-							enhanceReadingTaskFileWikilinks(renderedDescription, ctx.sourcePath, linkOverlayCallbacks);
+							enhanceReadingTaskFileWikilinks(renderedDescription, ctx.sourcePath, linkOverlayCallbacks, {
+								sourceText: indexed.description || '(untitled)',
+							});
 						});
 
 							// Replace the task item content while preserving any nested lists.
@@ -5754,7 +5781,9 @@ export default class OperonPlugin extends Plugin {
 						}
 			}
 
-			enhanceReadingTaskFileWikilinks(el, ctx.sourcePath, linkOverlayCallbacks);
+			enhanceReadingTaskFileWikilinks(el, ctx.sourcePath, linkOverlayCallbacks, {
+				sourceText: rootSectionInfo?.text ?? '',
+			});
 			applyFileTaskPropertyVisibility(el, this.indexer.getFileTaskByPath(ctx.sourcePath) ?? null, this.settings.keyMappings);
 			this.scheduleDynamicFileTaskFilterReadingMount(ctx.sourcePath);
 		});
@@ -7015,6 +7044,14 @@ export default class OperonPlugin extends Plugin {
 		const win = getActiveWindow();
 		win.setTimeout(() => this.refreshMarkdownTaskSurfaces({ resetLivePreviewReveal: true }), 80);
 		win.setTimeout(() => this.refreshMarkdownTaskSurfaces({ resetLivePreviewReveal: true }), 220);
+	}
+
+	private scheduleInlineToFileTaskMarkdownRefresh(scope: MarkdownRefreshScope): void {
+		for (const delayMs of [80, 220]) {
+			setWindowTimeout(() => {
+				this.refreshMarkdownTaskSurfaces({ scope });
+			}, delayMs);
+		}
 	}
 
 	private refreshMarkdownTaskSurfaces(
@@ -10389,6 +10426,12 @@ export default class OperonPlugin extends Plugin {
 		const sanitized = this.sanitizeTaskFileName(initialDescription) || t('taskEditor', 'untitledTaskFile');
 		const filePath = this.formatConverter.getUniqueFilePath(folder, sanitized);
 		const needsTemplaterProcessing = this.fileTaskContentNeedsTemplaterProcessing(template, draft.content);
+		const rawPlainCheckboxLines = this.settings.inlineToFileTaskMovePlainCheckboxes
+			? await this.collectAttachedInlineTaskPlainCheckboxLines(file.path, draft.operonId, parsed.lineNumber)
+			: [];
+		const movedPlainCheckboxLines = this.normalizeMovedInlineTaskPlainCheckboxLines(
+			rawPlainCheckboxLines.map(line => line.rawLine),
+		);
 		await this.withInlineToFileTaskTransitionSafePass(
 			draft.operonId,
 			file.path,
@@ -10406,7 +10449,10 @@ export default class OperonPlugin extends Plugin {
 					selectedTemplate,
 					{ runMode: needsTemplaterProcessing ? 0 : 2 },
 				);
-				const resolvedContent = this.resolveOperonIdPlaceholdersInContent(renderedContent);
+				const resolvedContent = this.prependMovedPlainCheckboxLinesToFileTaskContent(
+					this.resolveOperonIdPlaceholdersInContent(renderedContent),
+					movedPlainCheckboxLines,
+				);
 				if (!this.isInlineToFileTaskTransitionContentValid(resolvedContent, draft.operonId)) {
 					const rolledBack = await this.rollbackCreatedFileTask(filePath);
 					if (!rolledBack) {
@@ -10425,6 +10471,7 @@ export default class OperonPlugin extends Plugin {
 					draft.operonId,
 					this.buildFileTaskWikilink(created),
 					parsed.lineNumber,
+					{ removePlainCheckboxLines: rawPlainCheckboxLines },
 				);
 				if (!replacedInline) {
 					const rolledBack = await this.rollbackCreatedFileTask(filePath);
@@ -10435,7 +10482,12 @@ export default class OperonPlugin extends Plugin {
 				}
 
 				await this.runInlineToFileTaskTransitionSafePass(file.path, created.path);
-				this.refreshViews();
+				const markdownScope = createScopedMarkdownRefreshScope([file.path], 'inline-to-file-conversion');
+				this.refreshViews({
+					reason: 'inline-to-file-conversion',
+					markdownScope,
+				});
+				this.scheduleInlineToFileTaskMarkdownRefresh(markdownScope);
 				this.showTaskNotice('inline-to-file', {
 					description: initialDescription,
 					fileBasename: created.basename,
@@ -11010,37 +11062,112 @@ export default class OperonPlugin extends Plugin {
 		operonId: string,
 		taskLine: string,
 		lineHint: number,
+		options: { removePlainCheckboxLines?: PlainCheckboxMoveLine[] } = {},
 	): Promise<boolean> {
 		const file = this.app.vault.getAbstractFileByPath(filePath);
 		if (!(file instanceof TFile)) return false;
 
 		const content = await this.app.vault.cachedRead(file);
-		const lines = content.split('\n');
+		let lines = content.split('\n');
 
-		let targetLine = -1;
-		if (lineHint >= 0 && lineHint < lines.length) {
-			const hinted = this.parseInlineTaskLine(lines[lineHint], lineHint, filePath);
-			if (hinted?.operonId === operonId) {
-				targetLine = lineHint;
-			}
-		}
-
-		if (targetLine === -1) {
-			for (let i = 0; i < lines.length; i++) {
-				const parsed = this.parseInlineTaskLine(lines[i], i, filePath);
-				if (parsed?.operonId === operonId) {
-					targetLine = i;
-					break;
-				}
-			}
-		}
-
+		const targetLine = this.findInlineTaskLineIndex(lines, filePath, operonId, lineHint);
 		if (targetLine === -1) return false;
+
+		const removePlainCheckboxLines = options.removePlainCheckboxLines ?? [];
+		if (removePlainCheckboxLines.length > 0) {
+			const contentWithoutPlainCheckboxLines = removePlainCheckboxMoveLinesFromContent(
+				content,
+				targetLine,
+				removePlainCheckboxLines,
+			);
+			if (contentWithoutPlainCheckboxLines === null) return false;
+			lines = contentWithoutPlainCheckboxLines.split('\n');
+		}
 
 		lines[targetLine] = taskLine;
 		this.markInternalTaskWrite(file.path);
 		await this.app.vault.modify(file, lines.join('\n'));
 		return true;
+	}
+
+	private findInlineTaskLineIndex(
+		lines: string[],
+		filePath: string,
+		operonId: string,
+		lineHint: number,
+	): number {
+		if (lineHint >= 0 && lineHint < lines.length) {
+			const hinted = this.parseInlineTaskLine(lines[lineHint], lineHint, filePath);
+			if (hinted?.operonId === operonId) {
+				return lineHint;
+			}
+		}
+
+		for (let i = 0; i < lines.length; i++) {
+			const parsed = this.parseInlineTaskLine(lines[i], i, filePath);
+			if (parsed?.operonId === operonId) {
+				return i;
+			}
+		}
+
+		return -1;
+	}
+
+	private async collectAttachedInlineTaskPlainCheckboxLines(
+		filePath: string,
+		operonId: string,
+		lineHint: number,
+	): Promise<PlainCheckboxMoveLine[]> {
+		const file = this.app.vault.getAbstractFileByPath(filePath);
+		if (!(file instanceof TFile)) return [];
+
+		const content = await this.app.vault.cachedRead(file);
+		const lines = content.split('\n');
+		const targetLine = this.findInlineTaskLineIndex(lines, filePath, operonId, lineHint);
+		if (targetLine === -1) return [];
+
+		return collectScopedPlainCheckboxMoveLines(
+			content,
+			file.path,
+			this.settings.keyMappings,
+			{ kind: 'inline', operonId },
+			targetLine,
+		);
+	}
+
+	private normalizeMovedInlineTaskPlainCheckboxLines(lines: string[]): string[] {
+		const commonIndent = this.getCommonLeadingWhitespace(lines);
+		if (!commonIndent) return [...lines];
+		return lines.map(line => line.startsWith(commonIndent) ? line.slice(commonIndent.length) : line);
+	}
+
+	private getCommonLeadingWhitespace(lines: string[]): string {
+		let commonIndent: string | null = null;
+		for (const line of lines) {
+			const match = /^(\s*)/.exec(line);
+			const indent = match?.[1] ?? '';
+			if (!indent) return '';
+			commonIndent = commonIndent === null ? indent : this.getCommonPrefix(commonIndent, indent);
+			if (!commonIndent) return '';
+		}
+		return commonIndent ?? '';
+	}
+
+	private getCommonPrefix(left: string, right: string): string {
+		let index = 0;
+		while (index < left.length && index < right.length && left[index] === right[index]) {
+			index += 1;
+		}
+		return left.slice(0, index);
+	}
+
+	private prependMovedPlainCheckboxLinesToFileTaskContent(content: string, lines: string[]): string {
+		if (lines.length === 0) return content;
+		const checkboxBlock = lines.join('\n');
+		const { frontmatter, body } = splitFrontmatterDocument(content);
+		const nextBody = body ? `${checkboxBlock}\n${body}` : checkboxBlock;
+		if (frontmatter === null) return nextBody;
+		return `---\n${frontmatter}\n---\n${nextBody}`;
 	}
 
 	private replaceInlineTaskLineInContent(
