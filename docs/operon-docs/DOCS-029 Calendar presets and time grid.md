@@ -12,7 +12,7 @@ tags:
   - plan
   - presets
   - time
-Updated: 2026-06-25T16:47:21
+Updated: 2026-06-27T19:46:16
 ---
 
 # Calendar presets and time grid
@@ -93,6 +93,15 @@ Each preset controls what is shown alongside your tasks:
 
 In the timed views, the **time grid scale** sets how much vertical space an hour takes. A larger scale spreads the hours out, which makes short blocks easier to see and grab. A smaller scale fits more of the day on screen at once. It is a quick comfort dial: stretch the grid when you are fitting detailed blocks, compress it when you want the whole day in view.
 
+## Presets on mobile
+
+On a phone, each mobile Calendar view, Agenda, Day, 2 Days, and 3 Days, opens with its **own chosen preset**. That is how a phone can keep a detail-heavy preset like the Time Tracker Grid on Day while using a lighter planning preset on 2 Days or 3 Days. See [[DOCS-096 Mobile Calendar|Mobile Calendar]].
+
+## Tips
+
+> [!tip] Turn a one-day grid into a daily command center
+> Time Grid and Time Tracker Grid work nicely as a focused single-day view. Set the grid to one day, then keep Calendar in a sidebar or a narrow pane, so today's plan and any running time session stay in sight while you work elsewhere in the vault.
+
 ## FAQ
 
 **What is the difference between a preset and the time grid scale?** A preset is a whole saved Calendar configuration, including its type. The time grid scale is one setting inside the timed views that controls hour height.
@@ -100,10 +109,6 @@ In the timed views, the **time grid scale** sets how much vertical space an hour
 **Which preset type should I start with?** Time Grid for day and week planning, Multi-Week for longer-range planning, and Time Tracker Grid when you want to compare planned against tracked time.
 
 **Can two presets show different tasks?** Yes. Filtering is part of a preset, so each can show its own slice.
-
-## Presets on mobile
-
-On a phone, each mobile Calendar view, Agenda, Day, 2 Days, and 3 Days, opens with its **own chosen preset**. That is how a phone can keep a detail-heavy preset like the Time Tracker Grid on Day while using a lighter planning preset on 2 Days or 3 Days. See [[DOCS-096 Mobile Calendar|Mobile Calendar]].
 
 ## Settings
 

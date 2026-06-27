@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packageId": "operon-docs",
-  "generatedAt": "2026-06-25T15:09:09.730Z",
+  "generatedAt": "2026-06-27T17:47:27.555Z",
   "source": {
     "branch": "main",
     "docsBasePath": "docs/operon-docs",
@@ -15,8 +15,8 @@
     },
     {
       "path": "DOCS-002 How to use these docs.md",
-      "sha256": "289c0c62953f6c670f933965f0e6e0516c054094367172f1abd3970714110b6d",
-      "bytes": 2574
+      "sha256": "06af83e1ffbec52a468cada6bdffcf6ce42879ea7eec2c788eae118b6ae66ec9",
+      "bytes": 3197
     },
     {
       "path": "DOCS-003 Getting started with Operon.md",
@@ -65,8 +65,8 @@
     },
     {
       "path": "DOCS-012 Inline task syntax.md",
-      "sha256": "78d869a8e43e01ac1d634d95117d187a0c16bf08c77b2177aa1b88ccf75586e4",
-      "bytes": 12773
+      "sha256": "b80393e86afa992da84e33ce8a04cce646ec18aa4ce946ab71dd585d8577658a",
+      "bytes": 13747
     },
     {
       "path": "DOCS-013 File tasks.md",
@@ -125,8 +125,8 @@
     },
     {
       "path": "DOCS-024 Task templates.md",
-      "sha256": "710368897faf176ac67c6a4fcf20b4bbf5cdd02f7bdb8e7803c2854618fb3f52",
-      "bytes": 4413
+      "sha256": "b7755660922d0033ed75abea8734fb58f3f65680bb5f696dff09d4dcc8674dd8",
+      "bytes": 5078
     },
     {
       "path": "DOCS-025 Filter View.md",
@@ -145,18 +145,18 @@
     },
     {
       "path": "DOCS-028 Calendar overview.md",
-      "sha256": "f2dc60c2af4f3d79cbf045cf775f740a01170475d58f5268440b33a670103a4e",
-      "bytes": 4208
+      "sha256": "ce861a2971b87da075a3b4f1d27d2898aa9116f5f98cf46657bbd2affd8c3ff5",
+      "bytes": 4759
     },
     {
       "path": "DOCS-029 Calendar presets and time grid.md",
-      "sha256": "16a554aa0bbe5a4247400ec04e93e7978ffa2ab57173625fe3dacb7760365e9d",
-      "bytes": 7105
+      "sha256": "10fc2be4190aeb3f73dd3a61a36a7407964e308530fa949283e2f31935721910",
+      "bytes": 7421
     },
     {
       "path": "DOCS-030 Kanban overview.md",
-      "sha256": "6434051dbb94cc14b621cf66dbba10609c63593ce0537b015f12699e67fcd670",
-      "bytes": 6316
+      "sha256": "4a6f9ff9df3646c90687177fbea46e0b0567be6cc7744f7cb57c8074291580eb",
+      "bytes": 6847
     },
     {
       "path": "DOCS-031 Kanban manual order.md",
@@ -260,8 +260,8 @@
     },
     {
       "path": "DOCS-051 Templater and QuickAdd workflows.md",
-      "sha256": "1fa7925b326f4e1cdb4970938b2da181a4cd3de04ce7f17da4e1f28e27932629",
-      "bytes": 3146
+      "sha256": "3fe7e81a9e0737db1d2e9fb29e442ae702adad73b9868e177e4c5358d4182e07",
+      "bytes": 3970
     },
     {
       "path": "DOCS-052 Completed task review.md",
@@ -310,8 +310,8 @@
     },
     {
       "path": "DOCS-061 operonId template variables.md",
-      "sha256": "4476d2accb1fb49095a8b4f20d14f0a7226775f439908444c9f50dac6759f0cc",
-      "bytes": 6831
+      "sha256": "ab912960274c20e698c04aaa6cd08299e1c076827a1271840ab5cb4162f4dd78",
+      "bytes": 10950
     },
     {
       "path": "DOCS-062 Field pickers overview.md",

@@ -10,7 +10,7 @@ tags:
   - operon
   - calendar
   - plan
-Updated: 2026-06-25T16:47:21
+Updated: 2026-06-27T19:46:16
 ---
 
 # Calendar overview
@@ -60,6 +60,13 @@ On a phone the Calendar runs as a compact, phone-first surface with its own view
 ## External calendars
 
 Operon can also show events from external calendar sources alongside your tasks, so your planning view reflects meetings and commitments too. Refresh them with **Update External Calendars**. See [[DOCS-048 External calendars|External calendars]].
+
+## Tips
+
+> [!tip] Treat Calendar as your planning surface
+> Operon clears Obsidian's duplicate native header from the main Calendar workspace on desktop, giving you back the height that matters when you are scanning a week or a month. The calendar's own toolbar and sidebar controls stay right where they are.
+>
+> To plan with room to think, open Calendar in its own window and let it fill the screen. On a multi-monitor setup, park it on a second display so your week or month stays in front of you while the rest of Obsidian stays on the main one.
 
 ## FAQ
 

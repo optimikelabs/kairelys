@@ -12,7 +12,7 @@ tags:
   - quickadd
   - capture
   - howto
-Updated: 2026-06-25T16:47:21
+Updated: 2026-06-27T14:05:00
 ---
 
 # Templater and QuickAdd workflows
@@ -25,22 +25,40 @@ Each tool does one job:
 
 - **Templater** fills dynamic content in a template (dates, prompts, computed values) when the note is made. Operon processes Templater syntax when it builds a [[DOCS-024 Task templates|file task template]], so a template can be both a Templater template and an Operon task.
 - **QuickAdd** decides where and when a note is created. You point a QuickAdd choice at a template and run it from a command or hotkey, so capture is one step from anywhere.
-- **Operon** ensures the result is a real task: the template carries the Operon fields, and `operonId` template variables become real ids when the task is generated.
+- **Operon** ensures the result is a real task: the template carries the Operon fields, `operonId` template variables become real ids, and task value variables such as `{{status}}`, `{{priority}}`, `{{dateScheduled}}`, and `{{datetime}}` become the values for the created task.
 
-The division is clean: QuickAdd launches, Templater fills, Operon makes it a task.
+The division is clean: QuickAdd launches, Templater fills its own syntax, Operon makes it a task and resolves Operon's `{{...}}` variables.
 
 ## A capture flow
 
 A common setup:
 
 1. Write a [[DOCS-024 Task templates|file task template]] with the Operon fields you always want, plus any Templater syntax for dates or prompts.
-2. Add `operonId` template variables if the template should generate linked subtasks. See [[DOCS-061 operonId template variables|operonId template variables]].
+2. Add Operon template variables if the template should generate linked subtasks or repeat task values such as status, priority, scheduled date, and creation time. See [[DOCS-061 operonId template variables|operonId template variables]].
 3. Create a QuickAdd choice that makes a note from that template.
 4. Run it from a hotkey whenever you want that kind of task. Operon builds it with correct fields and fresh ids.
 
 ## What is Operon's part and what is not
 
-To set expectations: Operon does not configure Templater or QuickAdd for you, and it has no settings for them. They are configured in their own plugins. What Operon contributes is processing Templater syntax in its file task templates and resolving `operonId` template variables. The rest is the two plugins doing what they already do.
+To set expectations: Operon does not configure Templater or QuickAdd for you, and it has no settings for them. They are configured in their own plugins. What Operon contributes is processing Templater syntax in its file task templates and resolving Operon template variables.
+
+That means one template can use both systems:
+
+```md
+---
+operonId: {{operonId}}
+Status: {{status}}
+Priority: {{priority}}
+datetimeCreated: {{datetime}}
+---
+
+# <% tp.file.title %>
+
+Operon status: {{status}}
+Operon priority: {{priority}}
+```
+
+Templater fills its `<% ... %>` commands. Operon fills `{{operonId}}`, `{{status}}`, `{{priority}}`, and `{{datetime}}`. If your default workflow status is `Project.Brainstorming` and default priority is `High`, the created task will contain those values instead of the template variables.
 
 ## FAQ
 
@@ -48,7 +66,7 @@ To set expectations: Operon does not configure Templater or QuickAdd for you, an
 
 **Does Operon depend on these?** No. They are optional. Operon's own [[DOCS-020 Task Creator|Task Creator]] and templates work without them.
 
-**How do subtasks get linked in a template?** Through `operonId` template variables, which reuse one id to wire `parentTask`. See [[DOCS-061 operonId template variables|operonId template variables]].
+**How do subtasks get linked in a template?** Through `operonId` template variables, which reuse one id to wire `parentTask`. The same page also covers task value variables such as `{{status}}`, `{{priority}}`, and `{{datetime}}`. See [[DOCS-061 operonId template variables|operonId template variables]].
 
 ## Settings
 

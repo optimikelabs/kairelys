@@ -11,7 +11,7 @@ tags:
   - taskmodel
   - inlinetask
   - taskproperties
-Updated: 2026-06-25T16:47:21
+Updated: 2026-06-27T14:05:00
 ---
 
 # Inline task syntax
@@ -145,6 +145,20 @@ A typical task with a status, priority, and due date:
 ```md
 - [ ] Review launch checklist {{operonId:: {{operonId}}}} {{status:: Project.InProgress}} {{priority:: A}} {{dateDue:: 2026-05-31}}
 ```
+
+A pasted snippet that lets Operon fill the default status, default priority, current date, and current datetime:
+
+```md
+- [ ] Follow up with reviewer {{operonId:: {{operonId}}}} {{status:: {{status}}}} {{priority:: {{priority}}}} {{dateScheduled:: {{date}}}} {{datetimeCreated:: {{datetime}}}} {{datetimeModified:: {{datetime}}}}
+```
+
+If your default status is `Project.Brainstorming`, your default priority is `High`, and the snippet is resolved at `2026-06-27T13:46:10`, the task becomes:
+
+```md
+- [ ] Follow up with reviewer {{operonId:: a1b2c3d}} {{status:: Project.Brainstorming}} {{priority:: High}} {{dateScheduled:: 2026-06-27}} {{datetimeCreated:: 2026-06-27T13:46:10}} {{datetimeModified:: 2026-06-27T13:46:10}}
+```
+
+Your real output uses your current Operon defaults and local time. See [[DOCS-061 operonId template variables|operonId template variables]] for the full variable list and the difference between raw pasted inline snippets and file task templates.
 
 A task with tags and a context, which stay as ordinary Markdown:
 

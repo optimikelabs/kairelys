@@ -11,12 +11,18 @@ tags:
   - start
   - navigation
   - agent
-Updated: 2026-06-25T16:47:21
+Updated: 2026-06-27T20:54:04
 ---
 
 # How to use these docs
 
 This folder is the complete user documentation for Operon. It is written to be read three ways: inside Obsidian, as a downloaded folder, or by an AI assistant. Pick whichever fits how you work.
+
+## Get these docs inside your vault
+
+Operon can download the official docs directly into your vault. Open **Settings → Operon → Core → General**, find **Operon Docs**, and choose **Download / update docs**. Operon writes the docs into `Operon/Docs` as normal Markdown files, so you can browse them with Obsidian links, search, graph view, or an AI assistant.
+
+If you want Operon to refresh the docs after plugin updates, enable **Automatically update Operon Docs** in the same section. Only managed `DOCS-*.md` files are overwritten. If you want to edit a docs page for your own notes, copy it somewhere else first.
 
 ## Read it inside Obsidian
 

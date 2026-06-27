@@ -10,7 +10,7 @@ tags:
   - operon
   - kanban
   - plan
-Updated: 2026-06-25T16:47:21
+Updated: 2026-06-27T19:46:16
 ---
 
 # Kanban overview
@@ -68,6 +68,13 @@ The important part: **these scopes filter the board on their own, with or withou
 However you filter, by text, by scope, or both, the Kanban stays a board. Matching cards remain in their status columns and swimlanes, in their normal order; the non-matching ones simply drop away. You never get a flat list of results: you get the same board showing fewer cards. That keeps the structure you are planning against intact while you focus on a slice of it.
 
 For exactly which fields are matched and how Task Finder ranks its own results, see [[DOCS-027 Task Finder|Task Finder]].
+
+## Tips
+
+> [!tip] Make Kanban your dedicated board
+> On the desktop app, Operon hides Obsidian's duplicate native header in the main Kanban workspace, so the columns have more vertical room to breathe. Nothing goes missing. Kanban's own toolbar still carries your presets, search, and settings.
+>
+> For serious planning, open the board in its own window and give it the full screen. If you work across two monitors, move that window to the second screen and keep the whole board in view while you work in your notes on the first.
 
 ## FAQ
 

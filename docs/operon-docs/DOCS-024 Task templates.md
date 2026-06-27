@@ -12,7 +12,7 @@ tags:
   - filetask
   - templates
   - capture
-Updated: 2026-06-25T16:47:21
+Updated: 2026-06-27T14:05:00
 ---
 
 # Task templates
@@ -47,7 +47,33 @@ This is separate from the alphabetic fallback above. The fallback is for convers
 
 Templates can contain Templater syntax. If the [Templater](https://github.com/SilentVoid13/Templater) plugin is installed, Operon processes that syntax when it builds the task, so a template can insert dates, prompts, and other dynamic content. If Templater is not available but a template uses its syntax, Operon tells you rather than writing raw syntax into your note. For the wider pattern of dynamic templates, see [[DOCS-051 Templater and QuickAdd workflows|Templater and QuickAdd workflows]].
 
-A template can also mint and reuse `operonId`s, so it generates real ids and wires subtasks to their parent automatically. See [[DOCS-061 operonId template variables|operonId template variables]].
+A template can also use Operon template variables. These are written as `{{...}}` tokens and can mint ids, reuse one parent id across subtasks, and fill values such as the final status, priority, scheduled date, due date, note, and creation time.
+
+For example, this template frontmatter:
+
+```md
+---
+operonId: {{operonId}}
+Status: {{status}}
+Priority: {{priority}}
+dateScheduled: {{dateScheduled}}
+datetimeCreated: {{datetime}}
+---
+```
+
+can become output like this when Operon creates the file task:
+
+```md
+---
+operonId: a1b2c3d
+Status: Project.Brainstorming
+Priority: High
+dateScheduled: 2026-06-27
+datetimeCreated: 2026-06-27T13:46:10
+---
+```
+
+Your actual status, priority, and dates come from the task being created and your Operon defaults. See [[DOCS-061 operonId template variables|operonId template variables]] for the full list and parent-child examples.
 
 ## FAQ
 
