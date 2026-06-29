@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packageId": "operon-docs",
-  "generatedAt": "2026-06-29T06:56:12.246Z",
+  "generatedAt": "2026-06-29T10:20:39.026Z",
   "source": {
     "branch": "main",
     "docsBasePath": "docs/operon-docs",
@@ -520,8 +520,8 @@
     },
     {
       "path": "DOCS-103 Task Wikilink Overlay.md",
-      "sha256": "d2ed04160a2276a2a67756bf431a198027264f8beca91c221eee91b797b11256",
-      "bytes": 7063
+      "sha256": "2ca1e24f77e892e504d639d56be84ee75062b6b21e9a75cf4007ee41cf119c31",
+      "bytes": 7367
     },
     {
       "path": "DOCS-104 Add Task Wikilink Overlay.md",

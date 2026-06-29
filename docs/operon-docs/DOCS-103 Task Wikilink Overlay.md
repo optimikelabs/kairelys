@@ -11,7 +11,7 @@ tags:
   - interface
   - wikilink
   - overlay
-Updated: 2026-06-28T19:12:23
+Updated: 2026-06-29T12:20:19
 ---
 
 # Task Wikilink Overlay
@@ -37,6 +37,8 @@ Still chasing the plumber about [[Home tasks#-k3m9p2q]] this week.
 Both render the same overlay controls. The inline form is what lets you link to a task that lives inside a note rather than in its own note. The `k3m9p2q` above stands for the task's real [[DOCS-015 Task identity and operonId|operonId]], which the [[DOCS-104 Add Task Wikilink Overlay|Add Task Wikilink Overlay]] command fills in for you.
 
 > **MEDIA-DOCS-103-1:** A file-task link and an inline `[[File#-operonId]]` link, side by side, each showing the overlay.
+
+![MEDIA-DOCS-103-1 - File and inline task wikilink overlays](https://raw.githubusercontent.com/hasanyilmaz/operon/main/docs/media/MEDIA-DOCS-103-1.png)
 
 ## Insert one
 
@@ -100,6 +102,8 @@ Terminal tasks (done or cancelled) show their state and drop the actions that no
 The overlay's chips and configurable actions are set in **Settings → Operon → Interface → Task Chips → Task Wikilink Overlay Chips**. There you choose which chips appear and their order, and toggle each configurable action: the checkbox action, the timer, pin, note, and subtask. The status and edit buttons remain part of the overlay. The chips follow the same rules as every other surface, covered in [[DOCS-041 Task chips display and behavior|Task chips: display and behavior]].
 
 > **MEDIA-DOCS-103-2:** The Task Wikilink Overlay Chips settings, with chip order and the action toggles.
+
+![MEDIA-DOCS-103-2 - Task Wikilink Overlay Chips settings](https://raw.githubusercontent.com/hasanyilmaz/operon/main/docs/media/MEDIA-DOCS-103-2.png)
 
 ## Links that stay current
 
