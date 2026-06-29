@@ -11,7 +11,7 @@ import { preserveInvalidJsonFile, shouldSkipStoreWrite, writeJsonSafely, type Re
 import { buildOperonPluginStoragePath } from './operon-storage-paths';
 
 const TASK_UI_PREFERENCES_FILE_NAME = 'task-ui-preferences.json';
-const TASK_UI_PREFERENCE_STORE_VERSION = 2;
+const TASK_UI_PREFERENCE_STORE_VERSION = 3;
 
 export type TaskUiPreferenceStoreSettings = Pick<
 	OperonSettings,
@@ -27,12 +27,12 @@ export type TaskUiPreferenceStoreSettings = Pick<
 	| 'taskFinderRememberLastScopes'
 	| 'taskFinderSelectedProjectId'
 	| 'taskFinderShortcuts'
-	| 'overlayTaskCompactChips'
-	| 'overlayTaskShowPlayAction'
-	| 'overlayTaskShowPinAction'
-	| 'overlayTaskShowNoteAction'
-	| 'overlayTaskShowSubtaskAction'
-	| 'overlayTaskShowPlainCheckboxAction'
+	| 'taskWikilinkOverlayCompactChips'
+	| 'taskWikilinkOverlayShowPlayAction'
+	| 'taskWikilinkOverlayShowPinAction'
+	| 'taskWikilinkOverlayShowNoteAction'
+	| 'taskWikilinkOverlayShowSubtaskAction'
+	| 'taskWikilinkOverlayShowPlainCheckboxAction'
 	| 'inlineTaskShowPlayAction'
 	| 'inlineTaskShowPinAction'
 	| 'inlineTaskShowSubtaskAction'
@@ -45,6 +45,15 @@ export type TaskUiPreferenceStoreSettings = Pick<
 interface TaskUiPreferenceStoreData extends TaskUiPreferenceStoreSettings {
 	version: number;
 }
+
+type LegacyTaskWikilinkOverlayPreferenceData = {
+	overlayTaskCompactChips?: unknown;
+	overlayTaskShowPlayAction?: unknown;
+	overlayTaskShowPinAction?: unknown;
+	overlayTaskShowNoteAction?: unknown;
+	overlayTaskShowSubtaskAction?: unknown;
+	overlayTaskShowPlainCheckboxAction?: unknown;
+};
 
 function cloneSettings(settings: TaskUiPreferenceStoreSettings): TaskUiPreferenceStoreSettings {
 	return {
@@ -60,12 +69,12 @@ function cloneSettings(settings: TaskUiPreferenceStoreSettings): TaskUiPreferenc
 		taskFinderRememberLastScopes: settings.taskFinderRememberLastScopes,
 		taskFinderSelectedProjectId: settings.taskFinderSelectedProjectId,
 		taskFinderShortcuts: settings.taskFinderShortcuts.map(item => ({ ...item })),
-		overlayTaskCompactChips: settings.overlayTaskCompactChips.map(item => ({ ...item })),
-		overlayTaskShowPlayAction: settings.overlayTaskShowPlayAction,
-		overlayTaskShowPinAction: settings.overlayTaskShowPinAction,
-		overlayTaskShowNoteAction: settings.overlayTaskShowNoteAction,
-		overlayTaskShowSubtaskAction: settings.overlayTaskShowSubtaskAction,
-		overlayTaskShowPlainCheckboxAction: settings.overlayTaskShowPlainCheckboxAction,
+		taskWikilinkOverlayCompactChips: settings.taskWikilinkOverlayCompactChips.map(item => ({ ...item })),
+		taskWikilinkOverlayShowPlayAction: settings.taskWikilinkOverlayShowPlayAction,
+		taskWikilinkOverlayShowPinAction: settings.taskWikilinkOverlayShowPinAction,
+		taskWikilinkOverlayShowNoteAction: settings.taskWikilinkOverlayShowNoteAction,
+		taskWikilinkOverlayShowSubtaskAction: settings.taskWikilinkOverlayShowSubtaskAction,
+		taskWikilinkOverlayShowPlainCheckboxAction: settings.taskWikilinkOverlayShowPlainCheckboxAction,
 		inlineTaskShowPlayAction: settings.inlineTaskShowPlayAction,
 		inlineTaskShowPinAction: settings.inlineTaskShowPinAction,
 		inlineTaskShowSubtaskAction: settings.inlineTaskShowSubtaskAction,
@@ -111,7 +120,7 @@ function readInlineExpandedTaskChips(
 }
 
 function readStoreData(
-	raw: Partial<TaskUiPreferenceStoreData> & { taskBarChips?: unknown },
+	raw: Partial<TaskUiPreferenceStoreData> & LegacyTaskWikilinkOverlayPreferenceData & { taskBarChips?: unknown },
 	fallback: TaskUiPreferenceStoreSettings,
 ): TaskUiPreferenceStoreSettings {
 	return {
@@ -138,12 +147,30 @@ function readStoreData(
 		taskFinderRememberLastScopes: readBoolean(raw.taskFinderRememberLastScopes, fallback.taskFinderRememberLastScopes),
 		taskFinderSelectedProjectId: readString(raw.taskFinderSelectedProjectId, fallback.taskFinderSelectedProjectId),
 		taskFinderShortcuts: readArray(raw.taskFinderShortcuts, fallback.taskFinderShortcuts),
-		overlayTaskCompactChips: readArray(raw.overlayTaskCompactChips, fallback.overlayTaskCompactChips),
-		overlayTaskShowPlayAction: readBoolean(raw.overlayTaskShowPlayAction, fallback.overlayTaskShowPlayAction),
-		overlayTaskShowPinAction: readBoolean(raw.overlayTaskShowPinAction, fallback.overlayTaskShowPinAction),
-		overlayTaskShowNoteAction: readBoolean(raw.overlayTaskShowNoteAction, fallback.overlayTaskShowNoteAction),
-		overlayTaskShowSubtaskAction: readBoolean(raw.overlayTaskShowSubtaskAction, fallback.overlayTaskShowSubtaskAction),
-		overlayTaskShowPlainCheckboxAction: readBoolean(raw.overlayTaskShowPlainCheckboxAction, fallback.overlayTaskShowPlainCheckboxAction),
+		taskWikilinkOverlayCompactChips: readArray(
+			raw.taskWikilinkOverlayCompactChips ?? raw.overlayTaskCompactChips,
+			fallback.taskWikilinkOverlayCompactChips,
+		),
+		taskWikilinkOverlayShowPlayAction: readBoolean(
+			raw.taskWikilinkOverlayShowPlayAction ?? raw.overlayTaskShowPlayAction,
+			fallback.taskWikilinkOverlayShowPlayAction,
+		),
+		taskWikilinkOverlayShowPinAction: readBoolean(
+			raw.taskWikilinkOverlayShowPinAction ?? raw.overlayTaskShowPinAction,
+			fallback.taskWikilinkOverlayShowPinAction,
+		),
+		taskWikilinkOverlayShowNoteAction: readBoolean(
+			raw.taskWikilinkOverlayShowNoteAction ?? raw.overlayTaskShowNoteAction,
+			fallback.taskWikilinkOverlayShowNoteAction,
+		),
+		taskWikilinkOverlayShowSubtaskAction: readBoolean(
+			raw.taskWikilinkOverlayShowSubtaskAction ?? raw.overlayTaskShowSubtaskAction,
+			fallback.taskWikilinkOverlayShowSubtaskAction,
+		),
+		taskWikilinkOverlayShowPlainCheckboxAction: readBoolean(
+			raw.taskWikilinkOverlayShowPlainCheckboxAction ?? raw.overlayTaskShowPlainCheckboxAction,
+			fallback.taskWikilinkOverlayShowPlainCheckboxAction,
+		),
 		inlineTaskShowPlayAction: readBoolean(raw.inlineTaskShowPlayAction, fallback.inlineTaskShowPlayAction),
 		inlineTaskShowPinAction: readBoolean(raw.inlineTaskShowPinAction, fallback.inlineTaskShowPinAction),
 		inlineTaskShowSubtaskAction: readBoolean(raw.inlineTaskShowSubtaskAction, fallback.inlineTaskShowSubtaskAction),

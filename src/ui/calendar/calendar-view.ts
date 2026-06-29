@@ -64,6 +64,7 @@ import {
 	getNextTaskColorSource,
 	getTaskColorSourceIcon,
 	getTaskColorSourceLabel,
+	normalizeTaskFieldColor,
 	normalizeTaskColorSource,
 	resolveTaskColorSource,
 } from '../../core/task-color-source';
@@ -78,6 +79,7 @@ import { bindTaskTitleLinkPreview } from '../compact-chip-link-preview';
 import { closeFloatingPanelsForRoot } from '../field-pickers/common';
 import { closeIconOnlyChipPreviewsForRoot } from '../icon-only-chip-preview';
 import { renderTaskDescriptionWikilinks } from '../task-description-wikilinks';
+import { isTaskSourceOpenModifierClick } from '../task-source-open-modifier';
 import { asHTMLElement, getOwnerBody, getOwnerDocument, getOwnerWindow } from '../../core/dom-compat';
 import { enginePerfLog, enginePerfNow } from '../../core/engine-perf';
 import {
@@ -600,6 +602,7 @@ export interface CalendarViewCallbacks {
 	onTimedItemDropToAllDay?: (taskId: string, selection: CalendarSlotSelection) => void | Promise<void>;
 	onAllDayItemDropToTimed?: (taskId: string, selection: CalendarSlotSelection, sourcePayload?: CalendarDropSourcePayload) => CalendarDropCallbackResult | Promise<CalendarDropCallbackResult>;
 	onItemAction?: ContextualMenuActionHandler;
+	onOpenTaskSource?: (taskId: string) => void | Promise<void>;
 	onStatusIconClick?: (taskId: string) => void | Promise<void>;
 	onOpenPresetSettings?: (presetId: string) => void | Promise<void>;
 	onSidebarTaskDropToTimed?: (taskId: string, selection: CalendarSlotSelection) => void | Promise<void>;
@@ -6909,48 +6912,46 @@ export class CalendarView extends ItemView {
 		): void {
 			container.dataset.operonId = task.operonId;
 			this.applyCalendarCheckboxClass(container, task.checkbox);
-			const priorityColor = this.resolveSidebarTaskPoolPriorityColor(task, this.getSettings());
-			if (priorityColor) {
-				container.style.setProperty('--operon-calendar-accent', priorityColor);
+			const taskColor = this.resolveSidebarTaskPoolTaskColor(task);
+			if (taskColor) {
+				container.style.setProperty('--operon-calendar-accent', taskColor);
 			} else {
-			container.style.removeProperty('--operon-calendar-accent');
-		}
-		container.tabIndex = 0;
-		const head = container.createDiv('operon-calendar-sidebar-task-pool-row-head');
-		const hoverTrigger = head.createSpan('operon-calendar-hover-menu-trigger');
-		this.renderSidebarTaskPoolStatusButton(hoverTrigger, task);
+				container.style.removeProperty('--operon-calendar-accent');
+			}
+			container.tabIndex = 0;
+			const head = container.createDiv('operon-calendar-sidebar-task-pool-row-head');
+			const hoverTrigger = head.createSpan('operon-calendar-hover-menu-trigger');
+			this.renderSidebarTaskPoolStatusButton(hoverTrigger, task);
 
-		const titleText = task.description || task.operonId;
-		const title = head.createSpan({
-			cls: 'operon-calendar-sidebar-task-pool-row-title',
-		});
-		const renderedWikilinks = renderTaskDescriptionWikilinks(title, {
-			app: this.app,
-			description: titleText,
-			sourcePath: task.primary.filePath,
-		});
-		if (!renderedWikilinks) {
-			title.textContent = titleText;
-		}
-		if (!renderedWikilinks && task.primary.format === 'yaml') {
-			bindTaskTitleLinkPreview(this.app, title, task.primary.filePath, task.primary.filePath);
-		}
+			const titleText = task.description || task.operonId;
+			const title = head.createSpan({
+				cls: 'operon-calendar-sidebar-task-pool-row-title',
+			});
+			const renderedWikilinks = renderTaskDescriptionWikilinks(title, {
+				app: this.app,
+				description: titleText,
+				sourcePath: task.primary.filePath,
+			});
+			if (!renderedWikilinks) {
+				title.textContent = titleText;
+			}
+			if (!renderedWikilinks && task.primary.format === 'yaml') {
+				bindTaskTitleLinkPreview(this.app, title, task.primary.filePath, task.primary.filePath);
+			}
 
-		this.renderSidebarTaskPoolDateIndicators(head, task, mode);
+			this.renderSidebarTaskPoolDateIndicators(head, task, mode);
 
-		this.bindSidebarTaskPoolHoverMenuTarget(hoverTrigger, task);
-		this.bindSidebarTaskPoolRowDrag(container, task, preset, visibleDates);
-		container.addEventListener('keydown', (event) => {
-			if (event.key !== 'Enter' && event.key !== ' ') return;
-			event.preventDefault();
-			void this.callbacks.onItemAction?.(task.operonId, 'openEditor');
-		});
+			this.bindSidebarTaskPoolHoverMenuTarget(hoverTrigger, task);
+			this.bindSidebarTaskPoolRowDrag(container, task, preset, visibleDates);
+			container.addEventListener('keydown', (event) => {
+				if (event.key !== 'Enter' && event.key !== ' ') return;
+				event.preventDefault();
+				void this.callbacks.onItemAction?.(task.operonId, 'openEditor');
+			});
 	}
 
-	private resolveSidebarTaskPoolPriorityColor(task: IndexedTask, settings: OperonSettings): string | null {
-		const priorityLabel = (task.fieldValues['priority'] ?? '').trim();
-		if (!priorityLabel) return null;
-		return settings.priorities.find(priority => priority.label === priorityLabel)?.color?.trim() || null;
+	private resolveSidebarTaskPoolTaskColor(task: IndexedTask): string | null {
+		return normalizeTaskFieldColor(task.fieldValues['taskColor']);
 	}
 
 	private renderSidebarTaskPoolDateIndicators(
@@ -7323,6 +7324,7 @@ export class CalendarView extends ItemView {
 			dragState = null;
 			if (reason !== 'commit') return;
 			if (!wasActivated) {
+				if (event && this.maybeOpenMaterializedTaskSourceFromEvent(event, task.operonId, true)) return;
 				void this.callbacks.onItemAction?.(task.operonId, 'openEditor');
 				return;
 			}
@@ -9107,7 +9109,7 @@ export class CalendarView extends ItemView {
 		itemEl.addEventListener('pointerdown', (event: PointerEvent) => {
 			if (event.button !== 0) return;
 			const target = asHTMLElement(event.target, itemEl);
-			if (target?.closest('a.internal-link')) return;
+			if (target?.closest('.operon-calendar-status-button, a.internal-link')) return;
 			const mode = target?.closest('.operon-calendar-all-day-resize-handle')
 				? 'resize-right'
 				: 'move';
@@ -9145,6 +9147,7 @@ export class CalendarView extends ItemView {
 				return;
 			}
 			if (!wasActivated) {
+				if (event && this.maybeOpenMaterializedTaskSourceFromEvent(event, placement.item.taskId, placement.item.origin === 'materialized')) return;
 				void this.callbacks.onItemAction?.(placement.item.taskId, 'openEditor');
 				return;
 			}
@@ -10399,6 +10402,20 @@ export class CalendarView extends ItemView {
 			&& item.startDate === item.endDate;
 	}
 
+	private maybeOpenMaterializedTaskSourceFromEvent(
+		event: MouseEvent | PointerEvent,
+		taskId: string,
+		isMaterialized: boolean,
+	): boolean {
+		if (!isMaterialized || !this.callbacks.onOpenTaskSource || !isTaskSourceOpenModifierClick(event)) return false;
+		event.preventDefault();
+		event.stopPropagation();
+		void Promise.resolve(this.callbacks.onOpenTaskSource(taskId)).catch(error => {
+			console.error('Operon: failed to open Calendar task source', error);
+		});
+		return true;
+	}
+
 	private bindPrimaryItemClick(container: HTMLElement, item: CalendarItem): void {
 		if (item.origin !== 'external' && !this.callbacks.onItemAction) return;
 		if (item.origin === 'external' && !this.callbacks.onExternalItemCreateTask) return;
@@ -10420,6 +10437,7 @@ export class CalendarView extends ItemView {
 				void this.callbacks.onExternalItemCreateTask?.(seed);
 				return;
 			}
+			if (this.maybeOpenMaterializedTaskSourceFromEvent(event, item.taskId, item.origin === 'materialized')) return;
 			void this.callbacks.onItemAction?.(item.taskId, 'openEditor');
 		});
 		container.addEventListener('keydown', (event) => {

@@ -78,6 +78,14 @@ export const TASK_FINDER_SCOPE_TIME_TRACKER: TaskFinderModalOptions['initialScop
 	includeFinished: false,
 };
 
+export const TASK_FINDER_SCOPE_TASK_WIKILINK_OVERLAY: TaskFinderModalOptions['initialScope'] = {
+	showRecentModified: false,
+	includeInline: true,
+	includeFile: true,
+	includeCancelled: false,
+	includeFinished: false,
+};
+
 export function openTaskFinder(
 	app: App,
 	indexer: OperonIndexer,

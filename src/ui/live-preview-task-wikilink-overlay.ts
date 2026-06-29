@@ -26,8 +26,8 @@ import {
 	computeTaskFileLinkProgressIndicator,
 	createTaskFileLinkPlainCheckboxProgressElement,
 	FileTaskLookup,
-	resolveTaskFileLink,
-	ResolvedTaskFileLink,
+	resolveTaskWikilinkOverlayLink,
+	ResolvedTaskWikilinkOverlayLink,
 	TaskFileLinkProgressIndicator,
 	TaskFileLinkVisuals,
 	buildTaskFileLinkProgressTooltip,
@@ -35,9 +35,9 @@ import {
 } from './task-file-wikilink-shared';
 import { bindOperonHoverTooltip } from './operon-hover-tooltip';
 import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
-import { buildTaskFileOverlayChipContainer, getTaskFileOverlayChipSignature } from './task-file-overlay-chips';
+import { buildTaskWikilinkOverlayChipContainer, getTaskWikilinkOverlayChipSignature } from './task-wikilink-overlay-chips';
 import { resolveSubtaskActionIcon, resolveSubtaskActionLabelKey } from '../core/subtask-action';
-import { scanTaskWikiLinksInLine } from './task-wikilink-scanner';
+import { scanTaskWikiLinksInLine, type TaskWikiLinkMatch } from './task-wikilink-scanner';
 import { bindTaskTitleLinkPreview } from './compact-chip-link-preview';
 import { isTaskDescriptionWikilinkEventTarget, renderTaskDescriptionWikilinks } from './task-description-wikilinks';
 
@@ -48,6 +48,7 @@ export interface LivePreviewTaskWikilinkCallbacks {
 	getPipelines: () => Pipeline[];
 	getAllTasks: () => IndexedTask[];
 	getFileTaskByPath: FileTaskLookup;
+	hasDuplicateOperonIdConflict?: (operonId: string) => boolean;
 	getDescendantTaskSummary: (operonId: string) => DescendantTaskSummary;
 	openTaskEditor: (operonId: string) => void;
 	cycleStatus: (operonId: string) => void;
@@ -70,6 +71,7 @@ class TaskWikilinkLeftWidget extends WidgetType {
 		private readonly task: IndexedTask,
 		private readonly visuals: TaskFileLinkVisuals,
 		private readonly callbacks: LivePreviewTaskWikilinkCallbacks,
+		private readonly remountKey: number,
 	) {
 		super();
 		this.renderSignature = buildTaskWikilinkLeftRenderSignature(task, visuals, callbacks);
@@ -113,6 +115,7 @@ class TaskWikilinkLeftWidget extends WidgetType {
 
 	eq(other: TaskWikilinkLeftWidget): boolean {
 		return this.task.operonId === other.task.operonId
+			&& this.remountKey === other.remountKey
 			&& this.renderSignature === other.renderSignature;
 	}
 }
@@ -128,11 +131,12 @@ class TaskWikilinkTrailingWidget extends WidgetType {
 		private readonly visuals: TaskFileLinkVisuals,
 		private readonly progress: TaskFileLinkProgressIndicator,
 		private readonly callbacks: LivePreviewTaskWikilinkCallbacks,
+		private readonly remountKey: number,
 	) {
 		super();
 		this.pinnedSnapshot = callbacks.isTaskPinned?.(task.operonId) === true;
 		this.trackingSnapshot = callbacks.isTaskTracking?.(task.operonId) === true;
-		this.chipSignature = getTaskFileOverlayChipSignature(
+		this.chipSignature = getTaskWikilinkOverlayChipSignature(
 			task,
 			callbacks.app,
 			callbacks.getSettings(),
@@ -166,7 +170,7 @@ class TaskWikilinkTrailingWidget extends WidgetType {
 		}
 
 		const settings = this.callbacks.getSettings();
-		if (settings.overlayTaskShowPlainCheckboxAction) {
+		if (settings.taskWikilinkOverlayShowPlainCheckboxAction) {
 			const plainCheckboxProgressEl = createTaskFileLinkPlainCheckboxProgressElement(
 				computeTaskFileLinkPlainCheckboxIndicator(this.task),
 				wrap,
@@ -183,7 +187,7 @@ class TaskWikilinkTrailingWidget extends WidgetType {
 			}
 		}
 
-		const chipRow = buildTaskFileOverlayChipContainer(this.task, {
+		const chipRow = buildTaskWikilinkOverlayChipContainer(this.task, {
 			app: this.callbacks.app,
 			getSettings: this.callbacks.getSettings,
 			getAllTasks: this.callbacks.getAllTasks,
@@ -197,7 +201,7 @@ class TaskWikilinkTrailingWidget extends WidgetType {
 		}
 
 		const isTerminal = this.visuals.labelState !== 'default';
-		if (!isTerminal && settings.overlayTaskShowPlayAction && this.callbacks.toggleTimer && this.task.checkbox === 'open') {
+		if (!isTerminal && settings.taskWikilinkOverlayShowPlayAction && this.callbacks.toggleTimer && this.task.checkbox === 'open') {
 			const playButton = createOwnerElement(wrap, 'button');
 			playButton.type = 'button';
 			playButton.className = 'operon-live-preview-edit operon-live-preview-action operon-task-wikilink-overlay-action operon-task-chip-action';
@@ -212,7 +216,7 @@ class TaskWikilinkTrailingWidget extends WidgetType {
 			wrap.appendChild(playButton);
 		}
 
-		if (!isTerminal && settings.overlayTaskShowPinAction && this.callbacks.onContextualAction) {
+		if (!isTerminal && settings.taskWikilinkOverlayShowPinAction && this.callbacks.onContextualAction) {
 			const pinButton = createOwnerElement(wrap, 'button');
 			pinButton.type = 'button';
 			pinButton.className = 'operon-live-preview-edit operon-live-preview-action operon-task-wikilink-overlay-action operon-task-chip-action';
@@ -228,7 +232,7 @@ class TaskWikilinkTrailingWidget extends WidgetType {
 		}
 
 		const noteValue = this.task.fieldValues['note']?.trim();
-		if (settings.overlayTaskShowNoteAction && noteValue) {
+		if (settings.taskWikilinkOverlayShowNoteAction && noteValue) {
 			const noteIndicator = createOwnerElement(wrap, 'span');
 			noteIndicator.className = 'operon-live-preview-edit operon-live-preview-action operon-task-wikilink-overlay-action operon-task-wikilink-overlay-standard-action operon-task-wikilink-note-neutral operon-task-chip-action';
 			noteIndicator.setCssProps({
@@ -246,7 +250,7 @@ class TaskWikilinkTrailingWidget extends WidgetType {
 			wrap.appendChild(noteIndicator);
 		}
 
-		if (!isTerminal && settings.overlayTaskShowSubtaskAction && this.callbacks.requestSubtask) {
+		if (!isTerminal && settings.taskWikilinkOverlayShowSubtaskAction && this.callbacks.requestSubtask) {
 			const subtaskLabel = t('buttons', resolveSubtaskActionLabelKey(this.task));
 			const subtaskButton = createOwnerElement(wrap, 'button');
 			subtaskButton.type = 'button';
@@ -300,6 +304,7 @@ class TaskWikilinkTrailingWidget extends WidgetType {
 
 	eq(other: TaskWikilinkTrailingWidget): boolean {
 		return this.task.operonId === other.task.operonId
+			&& this.remountKey === other.remountKey
 			&& this.renderSignature === other.renderSignature;
 	}
 }
@@ -308,9 +313,10 @@ class TaskWikilinkLabelWidget extends WidgetType {
 	private readonly renderSignature: string;
 
 	constructor(
-		private readonly resolved: ResolvedTaskFileLink,
+		private readonly resolved: ResolvedTaskWikilinkOverlayLink,
 		private readonly visuals: TaskFileLinkVisuals,
 		private readonly callbacks: LivePreviewTaskWikilinkCallbacks,
+		private readonly remountKey: number,
 	) {
 		super();
 		this.renderSignature = buildTaskWikilinkLabelRenderSignature(resolved, visuals, callbacks);
@@ -329,6 +335,7 @@ class TaskWikilinkLabelWidget extends WidgetType {
 
 		const alias = this.resolved.alias?.trim();
 		const description = this.resolved.task.description.trim();
+		const fallbackText = alias || description || this.resolved.rawLinktext;
 		const rendered = !alias && description
 			? renderTaskDescriptionWikilinks(label, {
 				app: this.callbacks.app,
@@ -338,9 +345,8 @@ class TaskWikilinkLabelWidget extends WidgetType {
 				linkClassName: 'operon-task-wikilink-label-description-link',
 			})
 			: false;
-		if (!rendered) {
-			label.textContent = alias || description || this.resolved.rawLinktext;
-		}
+		if (!rendered) label.textContent = fallbackText;
+		scheduleTaskWikilinkLabelTextFallback(label, fallbackText);
 
 		bindTaskTitleLinkPreview(this.callbacks.app, label, this.resolved.resolvedFile.path, sourcePath);
 		label.addEventListener('mousedown', (event) => {
@@ -365,6 +371,7 @@ class TaskWikilinkLabelWidget extends WidgetType {
 
 	eq(other: TaskWikilinkLabelWidget): boolean {
 		return this.resolved.task.operonId === other.resolved.task.operonId
+			&& this.remountKey === other.remountKey
 			&& this.renderSignature === other.renderSignature;
 	}
 }
@@ -377,6 +384,7 @@ export function operonLivePreviewTaskWikilinkOverlayExtension(
 		private lastLivePreview = false;
 		private lastSelectionOverlaySignature = '';
 		private forceRevealFilePaths = new Set<string>();
+		private remountKey = 0;
 
 		constructor(view: EditorView) {
 			this.lastLivePreview = this.isLivePreview(view);
@@ -404,6 +412,9 @@ export function operonLivePreviewTaskWikilinkOverlayExtension(
 				? this.updateSelectionOverlaySignature(update.view)
 				: false;
 
+			if (modeChanged || hasRefresh || hasForceReveal || update.docChanged) {
+				this.remountKey++;
+			}
 			if (modeChanged || hasRefresh || hasForceReveal || update.docChanged || selectionOverlayChanged) {
 				this.rebuild(update.view);
 			}
@@ -454,13 +465,17 @@ export function operonLivePreviewTaskWikilinkOverlayExtension(
 				if (matches.length === 0) continue;
 
 				for (const match of matches) {
-					const from = line.from + match.from;
+					const from = getTaskWikilinkOverlaySourceFrom(line.from, line.text, match);
 					const to = line.from + match.to;
-					const resolved = resolveTaskFileLink(
+					const resolved = resolveTaskWikilinkOverlayLink(
 						callbacks.app,
 						sourcePath,
 						match.linktext,
-						callbacks.getFileTaskByPath,
+						{
+							getFileTaskByPath: callbacks.getFileTaskByPath,
+							getAllTasks: callbacks.getAllTasks,
+							hasDuplicateOperonIdConflict: callbacks.hasDuplicateOperonIdConflict,
+						},
 						match.alias,
 					);
 					if (!resolved) continue;
@@ -489,22 +504,28 @@ export function operonLivePreviewTaskWikilinkOverlayExtension(
 						from,
 						from,
 						Decoration.widget({
-							widget: new TaskWikilinkLeftWidget(resolved.task, visuals, callbacks),
-							side: -1,
+							widget: new TaskWikilinkLeftWidget(resolved.task, visuals, callbacks, this.remountKey),
+							side: -2,
 						}),
 					);
 					decorations.add(
 						from,
 						to,
-						Decoration.replace({
-							widget: new TaskWikilinkLabelWidget(resolved, visuals, callbacks),
+						Decoration.replace({}),
+					);
+					decorations.add(
+						to,
+						to,
+						Decoration.widget({
+							widget: new TaskWikilinkLabelWidget(resolved, visuals, callbacks, this.remountKey),
+							side: -1,
 						}),
 					);
 					decorations.add(
 						to,
 						to,
 						Decoration.widget({
-							widget: new TaskWikilinkTrailingWidget(resolved.task, visuals, progress, callbacks),
+							widget: new TaskWikilinkTrailingWidget(resolved.task, visuals, progress, callbacks, this.remountKey),
 							side: 1,
 						}),
 					);
@@ -537,7 +558,7 @@ export function operonLivePreviewTaskWikilinkOverlayExtension(
 			for (let lineNumber = fromLine.number; lineNumber <= toLine.number; lineNumber++) {
 				const line = view.state.doc.line(lineNumber);
 				for (const match of scanTaskWikiLinksInLine(line.text, { includeEmbeds: true })) {
-					const from = line.from + match.from;
+					const from = getTaskWikilinkOverlaySourceFrom(line.from, line.text, match);
 					const to = line.from + match.to;
 					const overlaps = selection.from === selection.to
 						? selection.from > from && selection.from < to
@@ -554,6 +575,14 @@ export function operonLivePreviewTaskWikilinkOverlayExtension(
 	});
 
 	return plugin;
+}
+
+export function getTaskWikilinkOverlaySourceFrom(
+	lineFrom: number,
+	lineText: string,
+	match: Pick<TaskWikiLinkMatch, 'from'>,
+): number {
+	return lineFrom + (match.from > 0 && lineText[match.from - 1] === '!' ? match.from - 1 : match.from);
 }
 
 function collectTaskWikilinkForceRevealFilePaths(update: ViewUpdate): string[] {
@@ -620,13 +649,13 @@ export function buildTaskWikilinkTrailingRenderSignature(
 		fieldValues: task.fieldValues,
 		checkbox: task.checkbox,
 		language: settings.language,
-		overlayTaskShowPlayAction: settings.overlayTaskShowPlayAction,
-		overlayTaskShowPinAction: settings.overlayTaskShowPinAction,
-		overlayTaskShowNoteAction: settings.overlayTaskShowNoteAction,
-		overlayTaskShowSubtaskAction: settings.overlayTaskShowSubtaskAction,
-		overlayTaskShowPlainCheckboxAction: settings.overlayTaskShowPlainCheckboxAction,
+		taskWikilinkOverlayShowPlayAction: settings.taskWikilinkOverlayShowPlayAction,
+		taskWikilinkOverlayShowPinAction: settings.taskWikilinkOverlayShowPinAction,
+		taskWikilinkOverlayShowNoteAction: settings.taskWikilinkOverlayShowNoteAction,
+		taskWikilinkOverlayShowSubtaskAction: settings.taskWikilinkOverlayShowSubtaskAction,
+		taskWikilinkOverlayShowPlainCheckboxAction: settings.taskWikilinkOverlayShowPlainCheckboxAction,
 		keyMappings: settings.keyMappings,
-		overlayTaskCompactChips: settings.overlayTaskCompactChips,
+		taskWikilinkOverlayCompactChips: settings.taskWikilinkOverlayCompactChips,
 		visuals,
 		progress,
 		plainCheckboxProgress: computeTaskFileLinkPlainCheckboxIndicator(task),
@@ -638,7 +667,7 @@ export function buildTaskWikilinkTrailingRenderSignature(
 }
 
 export function buildTaskWikilinkLabelRenderSignature(
-	resolved: ResolvedTaskFileLink,
+	resolved: ResolvedTaskWikilinkOverlayLink,
 	visuals: TaskFileLinkVisuals,
 	callbacks: LivePreviewTaskWikilinkCallbacks,
 ): string {
@@ -661,6 +690,21 @@ function applyTaskFileLinkLabelState(label: HTMLElement, visuals: TaskFileLinkVi
 	} else if (visuals.labelState === 'cancelled') {
 		label.classList.add('operon-task-cancelled');
 	}
+}
+
+function scheduleTaskWikilinkLabelTextFallback(label: HTMLElement, fallbackText: string): void {
+	ensureTaskWikilinkLabelText(label, fallbackText);
+	const win = label.ownerDocument.defaultView;
+	if (!win) return;
+	win.requestAnimationFrame(() => ensureTaskWikilinkLabelText(label, fallbackText));
+	win.setTimeout(() => ensureTaskWikilinkLabelText(label, fallbackText), 80);
+}
+
+function ensureTaskWikilinkLabelText(label: HTMLElement, fallbackText: string): void {
+	const fallback = fallbackText.trim();
+	if (!fallback) return;
+	if ((label.textContent ?? '').trim()) return;
+	label.textContent = fallback;
 }
 
 function stableStringify(value: unknown): string {

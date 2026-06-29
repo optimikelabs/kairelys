@@ -93,7 +93,18 @@ import {
 	TASK_FINDER_SCOPE_CALENDAR_TRACKED_SESSION,
 	TASK_FINDER_SCOPE_CONVERT_FILE_TASK_TO_INLINE,
 	TASK_FINDER_SCOPE_KANBAN_PLACE,
+	TASK_FINDER_SCOPE_TASK_WIKILINK_OVERLAY,
 } from './src/ui/task-finder-integrations';
+import {
+	buildTaskWikilinkOverlayLink,
+	insertTaskWikilinkOverlayLink,
+} from './src/ui/task-wikilink-overlay-insertion';
+import {
+	rewriteTaskWikilinkOverlayLinksInContent,
+	type TaskWikilinkOverlayRewriteReplacement,
+	type TaskWikilinkOverlayRewriteResult,
+	type TaskWikilinkOverlayRewriteTarget,
+} from './src/ui/task-wikilink-overlay-link-maintenance';
 import {
 	operonLivePreviewConcealExtension,
 	operonIndexRefreshEffect,
@@ -1503,6 +1514,32 @@ export default class OperonPlugin extends Plugin {
 		);
 	}
 
+	private openTaskWikilinkOverlayFinder(editor: Editor, view: MarkdownView): void {
+		if (!view.file) {
+			new Notice(t('notifications', 'noActiveFile'));
+			return;
+		}
+
+		openTaskFinder(
+			this.app,
+			this.indexer,
+			() => this.settings,
+			(_operonId, task) => {
+				const wikilink = this.buildTaskWikilinkOverlayTarget(task);
+				if (!wikilink) {
+					new Notice(t('notifications', 'taskWikilinkOverlayInsertFailed'));
+					return;
+				}
+				insertTaskWikilinkOverlayLink(editor, wikilink);
+				new Notice(t('notifications', 'taskWikilinkOverlayInserted'));
+			},
+			{
+				initialScope: TASK_FINDER_SCOPE_TASK_WIKILINK_OVERLAY,
+				getProjectSerialDisplay: (operonId: string) => this.getProjectSerialDisplayForTask(operonId),
+			},
+		);
+	}
+
 	onload(): void {
 		runAsyncAction('plugin load failed', () => this.loadPlugin());
 	}
@@ -1858,6 +1895,7 @@ export default class OperonPlugin extends Plugin {
 	 */
 	private registerViews(): void {
 		const openEditorForId = (operonId: string) => this.openEditorForId(operonId);
+		const openTaskSourceInNewTab = (operonId: string) => this.openMaterializedTaskSourceInNewTab(operonId);
 
 		// Pinned Tasks dock (floating, not a sidebar view).
 		// Initialize dock as a child Component for proper lifecycle.
@@ -1867,6 +1905,7 @@ export default class OperonPlugin extends Plugin {
 			this.timeTracker,
 			{
 					openTaskEditor: openEditorForId,
+					openTaskSource: openTaskSourceInNewTab,
 						cycleStatus: (operonId) => {
 							runAsyncAction('pinned dock status cycle failed', () => this.cycleTaskStatusById(operonId));
 						},
@@ -1890,6 +1929,7 @@ export default class OperonPlugin extends Plugin {
 					this.timeTracker,
 					{
 						openTaskEditor: openEditorForId,
+						openTaskSource: openTaskSourceInNewTab,
 						cycleStatus: (operonId) => this.cycleTaskStatusById(operonId),
 						onContextualAction: (taskId, actionId, context, invocation) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
 						hasSubtasks: (taskId) => this.indexer.secondary.getChildIds(taskId).size > 0,
@@ -2051,6 +2091,7 @@ export default class OperonPlugin extends Plugin {
 					onAllDayScheduledResizeRight: (taskId, selection) => this.handleCalendarScheduledResizeRight(taskId, selection),
 					onAllDayItemDropToTimed: (taskId, selection, sourcePayload) => this.handleCalendarAllDayDropToTimed(taskId, selection, sourcePayload),
 					onItemAction: (taskId, actionId, context, invocation) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
+					onOpenTaskSource: openTaskSourceInNewTab,
 					onStatusIconClick: (taskId) => this.handleCalendarStatusIconClick(taskId),
 					onSidebarTaskDropToTimed: (taskId, selection) => this.handleCalendarSidebarTaskDrop(leaf, taskId, selection),
 					onSidebarTaskDropToAllDay: (taskId, selection) => this.handleCalendarSidebarTaskDrop(leaf, taskId, selection),
@@ -2134,6 +2175,7 @@ export default class OperonPlugin extends Plugin {
 					onCardDrop: (context) => this.handleKanbanCardDrop(leaf, context),
 					onCellAction: (context) => this.handleKanbanCellAction(leaf, context),
 					onItemAction: (taskId, actionId, context, invocation) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
+					onOpenTaskSource: openTaskSourceInNewTab,
 					onStatusIconClick: (taskId) => this.handleCalendarStatusIconClick(taskId),
 					onOpenPresetSettings: (presetId) => {
 						const preset = this.settings.kanbanPresets.find(entry => entry.id === presetId) ?? null;
@@ -2173,6 +2215,24 @@ export default class OperonPlugin extends Plugin {
 				}
 			});
 		}
+
+	private openMaterializedTaskSourceInNewTab(taskId: string): void {
+		const task = this.indexer.getTask(taskId);
+		if (!task) return;
+		const file = this.app.vault.getAbstractFileByPath(task.primary.filePath);
+		if (!(file instanceof TFile)) return;
+		runAsyncAction('task source open in new tab failed', async () => {
+			const leaf = this.app.workspace.getLeaf('tab');
+			await leaf.openFile(file);
+			await this.app.workspace.revealLeaf(leaf);
+			if (task.primary.format !== 'inline') return;
+			const editor = getCursorEditorFromView(leaf.view);
+			if (!editor) return;
+			const cursor = { line: task.primary.lineNumber, ch: 0 };
+			editor.setCursor(cursor);
+			editor.scrollIntoView?.({ from: cursor, to: cursor }, true);
+		});
+	}
 
 	private openTaskFile(task: IndexedTask | IndexedTaskInstance): void {
 		runAsyncAction('task file open failed', () => this.app.workspace.openLinkText(task.primary.filePath, '', false));
@@ -5162,6 +5222,17 @@ export default class OperonPlugin extends Plugin {
 		return `[[${this.escapeFileTaskWikilinkTarget(file.basename)}]]`;
 	}
 
+	private buildTaskWikilinkOverlayTarget(task: IndexedTask): string | null {
+		const sourceFile = this.app.vault.getAbstractFileByPath(task.primary.filePath);
+		if (!(sourceFile instanceof TFile)) return null;
+
+		return buildTaskWikilinkOverlayLink(
+			task,
+			sourceFile.basename,
+			target => this.escapeFileTaskWikilinkTarget(target),
+		);
+	}
+
 	private escapeFileTaskWikilinkTarget(target: string): string {
 		return target
 			.replace(/%/gu, '%25')
@@ -5614,6 +5685,7 @@ export default class OperonPlugin extends Plugin {
 			getPipelines: () => this.settings.pipelines,
 			getAllTasks: () => this.indexer.getAllTasks(),
 			getFileTaskByPath: (filePath: string) => this.indexer.getFileTaskByPath(filePath),
+			hasDuplicateOperonIdConflict: (operonId: string) => this.indexer.hasDuplicateOperonIdConflict(operonId),
 			getDescendantTaskSummary: (operonId: string) => this.indexer.getDescendantTaskSummary(operonId),
 			getProjectSerialDisplay: (operonId: string) => this.getProjectSerialDisplayForTask(operonId),
 			openTaskEditor: (operonId: string) => this.openEditorForId(operonId),
@@ -5676,36 +5748,37 @@ export default class OperonPlugin extends Plugin {
 				getPipelines: () => this.settings.pipelines,
 				getAllTasks: () => this.indexer.getAllTasks(),
 				getFileTaskByPath: (filePath: string) => this.indexer.getFileTaskByPath(filePath),
+				hasDuplicateOperonIdConflict: (operonId: string) => this.indexer.hasDuplicateOperonIdConflict(operonId),
 				getDescendantTaskSummary: (operonId: string) => this.indexer.getDescendantTaskSummary(operonId),
 				getProjectSerialDisplay: (operonId: string, task?: IndexedTask) => this.getReadingProjectSerialDisplayForTask(operonId, task),
 				openTaskEditor: (operonId: string) => this.openEditorForId(operonId),
 				cycleStatus: (operonId: string) => { void this.cycleTaskStatusById(operonId); },
-					onContextualAction: (
-						taskId: string,
-						actionId: ContextualMenuActionId,
-						context?: ContextualMenuContext,
-						invocation?: ContextualMenuActionInvocation,
-					) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
-					isTaskPinned: (taskId: string) => this.pinnedCache?.isPinned(taskId) === true,
-					hasSubtasks: (taskId: string) => this.indexer.secondary.getChildIds(taskId).size > 0,
-					isTaskTracking: (taskId: string) => this.timeTracker.isTimerRunning(taskId),
-					toggleTimer: async (taskId: string) => {
-						await this.toggleTimerForTask(taskId, 'command');
-					},
-					requestSubtask: (operonId: string) => {
-						void this.requestSubtaskForParentId(operonId);
-					},
-					getRepeatSkipDates: (repeatSeriesId: string) => this.storage.repeatSeries.getSkipDates(repeatSeriesId),
-				};
-				const listItems = el.querySelectorAll<HTMLElement>('li.task-list-item');
-				const sectionTaskResolutions = new Map<string, ReadingSectionInlineTaskResolution>();
-				const sectionCursors = new Map<string, number>();
+				onContextualAction: (
+					taskId: string,
+					actionId: ContextualMenuActionId,
+					context?: ContextualMenuContext,
+					invocation?: ContextualMenuActionInvocation,
+				) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
+				isTaskPinned: (taskId: string) => this.pinnedCache?.isPinned(taskId) === true,
+				hasSubtasks: (taskId: string) => this.indexer.secondary.getChildIds(taskId).size > 0,
+				isTaskTracking: (taskId: string) => this.timeTracker.isTimerRunning(taskId),
+				toggleTimer: async (taskId: string) => {
+					await this.toggleTimerForTask(taskId, 'command');
+				},
+				requestSubtask: (operonId: string) => {
+					void this.requestSubtaskForParentId(operonId);
+				},
+				getRepeatSkipDates: (repeatSeriesId: string) => this.storage.repeatSeries.getSkipDates(repeatSeriesId),
+			};
+			const listItems = el.querySelectorAll<HTMLElement>('li.task-list-item');
+			const sectionTaskResolutions = new Map<string, ReadingSectionInlineTaskResolution>();
+			const sectionCursors = new Map<string, number>();
 
-				for (const li of Array.from(listItems)) {
-					if (this.isRenderedCodeElement(li)) continue;
+			for (const li of Array.from(listItems)) {
+				if (this.isRenderedCodeElement(li)) continue;
 
-					const sectionInfo = ctx.getSectionInfo(li);
-					if (sectionInfo && this.isFencedMarkdownSection(sectionInfo)) continue;
+				const sectionInfo = ctx.getSectionInfo(li);
+				if (sectionInfo && this.isFencedMarkdownSection(sectionInfo)) continue;
 
 					let resolvedTask: ReadingResolvedTask | null = null;
 					let resolvedBy: 'source-line' | 'rendered-id' | 'section-cursor' | null = null;
@@ -6752,6 +6825,17 @@ export default class OperonPlugin extends Plugin {
 	private async handleIndexedTasksChanged(changes: IndexedTaskDelta[]): Promise<void> {
 		this.showRawTaskCreationNotices(changes);
 		await this.applyDailyNoteInlineTaskDefaultsForNewTasks(changes);
+		const movedInlineTaskIds = this.collectMovedInlineTaskWikilinkOverlayIds(changes);
+		if (movedInlineTaskIds.size > 0) {
+			try {
+				await this.repairTaskWikilinkOverlayLinks({
+					operonIds: movedInlineTaskIds,
+					showNotice: false,
+				});
+			} catch (error) {
+				console.warn('Operon: failed to repair moved inline Task Wikilink Overlay links', error);
+			}
+		}
 
 		const aggregateChanges = changes.filter(change => this.shouldRefreshAggregateForIndexedChange(change));
 		if (aggregateChanges.length > 0) {
@@ -6780,6 +6864,210 @@ export default class OperonPlugin extends Plugin {
 		for (const change of changes) {
 			this.fileTaskArchiver?.scheduleForIndexedChange(change.before, change.after);
 		}
+	}
+
+	private collectMovedInlineTaskWikilinkOverlayIds(changes: IndexedTaskDelta[]): Set<string> {
+		const movedIds = new Set<string>();
+		for (const change of changes) {
+			const before = change.before;
+			const after = change.after;
+			if (!before || !after) continue;
+			if (before.primary.format !== 'inline') continue;
+			if (after.primary.format !== 'inline') continue;
+			if (before.primary.filePath === after.primary.filePath) continue;
+			movedIds.add(after.operonId);
+		}
+		return movedIds;
+	}
+
+	private async handleRepairTaskWikilinkOverlayLinksCommand(): Promise<void> {
+		try {
+			await this.repairTaskWikilinkOverlayLinks({ showNotice: true });
+		} catch (error) {
+			console.error('Operon: failed to repair Task Wikilink Overlay links', error);
+			new Notice(t('notifications', 'taskWikilinkOverlayLinksRepairFailed'));
+		}
+	}
+
+	private async repairTaskWikilinkOverlayLinks(options: {
+		operonIds?: ReadonlySet<string>;
+		showNotice: boolean;
+	}): Promise<{ updatedFileCount: number; updatedLinkCount: number }> {
+		const targetsByOperonId = this.buildTaskWikilinkOverlayRewriteTargets(options.operonIds);
+		if (targetsByOperonId.size === 0) {
+			if (options.showNotice) {
+				new Notice(t('notifications', 'taskWikilinkOverlayLinksRepairNoop'));
+			}
+			return { updatedFileCount: 0, updatedLinkCount: 0 };
+		}
+
+		const touchedFilePaths: string[] = [];
+		let updatedLinkCount = 0;
+		for (const file of this.app.vault.getMarkdownFiles()) {
+			const rewrite = await this.rewriteTaskWikilinkOverlayLinksInFile(file, targetsByOperonId);
+			if (!rewrite || rewrite.rewrittenLinkCount === 0) continue;
+			touchedFilePaths.push(file.path);
+			updatedLinkCount += rewrite.rewrittenLinkCount;
+		}
+
+		if (touchedFilePaths.length > 0) {
+			await this.indexer.reindexFilesBatch(touchedFilePaths, { notify: false });
+			const markdownScope = createScopedMarkdownRefreshScope(touchedFilePaths, 'task-wikilink-overlay-link-repair');
+			this.refreshViews({
+				reason: 'task-wikilink-overlay-link-repair',
+				markdownScope,
+			});
+			this.scheduleTaskWikilinkOverlayRepairMarkdownRefresh(markdownScope);
+		}
+
+		if (options.showNotice) {
+			const noticeKey = updatedLinkCount > 0
+				? 'taskWikilinkOverlayLinksRepaired'
+				: 'taskWikilinkOverlayLinksRepairNoop';
+			new Notice(t('notifications', noticeKey, {
+				links: String(updatedLinkCount),
+				files: String(touchedFilePaths.length),
+			}));
+		}
+
+		return {
+			updatedFileCount: touchedFilePaths.length,
+			updatedLinkCount,
+		};
+	}
+
+	private scheduleTaskWikilinkOverlayRepairMarkdownRefresh(scope: MarkdownRefreshScope): void {
+		for (const delayMs of [80, 220]) {
+			setWindowTimeout(() => {
+				this.refreshMarkdownTaskSurfaces({
+					scope,
+					forceReadingViewRerender: true,
+				});
+			}, delayMs);
+		}
+	}
+
+	private buildTaskWikilinkOverlayRewriteTargets(
+		operonIds?: ReadonlySet<string>,
+	): Map<string, TaskWikilinkOverlayRewriteTarget> {
+		const grouped = new Map<string, IndexedTask[]>();
+		for (const task of this.indexer.getAllTasks()) {
+			if (task.primary.format !== 'inline') continue;
+			if (operonIds && !operonIds.has(task.operonId)) continue;
+			const group = grouped.get(task.operonId) ?? [];
+			group.push(task);
+			grouped.set(task.operonId, group);
+		}
+
+		const targets = new Map<string, TaskWikilinkOverlayRewriteTarget>();
+		for (const [operonId, tasks] of grouped) {
+			if (tasks.length !== 1) continue;
+			if (this.indexer.hasDuplicateOperonIdConflict(operonId)) continue;
+			const task = tasks[0];
+			if (!task) continue;
+			const file = this.app.vault.getAbstractFileByPath(task.primary.filePath);
+			if (!(file instanceof TFile)) continue;
+			targets.set(operonId, {
+				operonId,
+				filePath: file.path,
+				basename: file.basename,
+			});
+		}
+		return targets;
+	}
+
+	private async rewriteTaskWikilinkOverlayLinksInFile(
+		file: TFile,
+		targetsByOperonId: ReadonlyMap<string, TaskWikilinkOverlayRewriteTarget>,
+	): Promise<TaskWikilinkOverlayRewriteResult | null> {
+		const openView = this.getMarkdownViewForPath(file.path);
+		if (openView) {
+			return await this.rewriteTaskWikilinkOverlayLinksInOpenEditor(openView, targetsByOperonId);
+		}
+
+		const content = await this.app.vault.cachedRead(file);
+		const rewrite = rewriteTaskWikilinkOverlayLinksInContent(content, {
+			targetsByOperonId,
+			escapeTarget: target => this.escapeFileTaskWikilinkTarget(target),
+		});
+		if (rewrite.rewrittenLinkCount === 0) return null;
+
+		this.markInternalTaskWrite(file.path);
+		await this.app.vault.modify(file, rewrite.content);
+		return rewrite;
+	}
+
+	private async rewriteTaskWikilinkOverlayLinksInOpenEditor(
+		view: MarkdownView,
+		targetsByOperonId: ReadonlyMap<string, TaskWikilinkOverlayRewriteTarget>,
+	): Promise<TaskWikilinkOverlayRewriteResult | null> {
+		const filePath = view.file?.path ?? '';
+		if (!filePath) return null;
+
+		const editor = view.editor;
+		const content = editor.getValue();
+		const rewrite = rewriteTaskWikilinkOverlayLinksInContent(content, {
+			targetsByOperonId,
+			escapeTarget: target => this.escapeFileTaskWikilinkTarget(target),
+		});
+		if (rewrite.rewrittenLinkCount === 0) return null;
+
+		const changes = this.buildTaskWikilinkOverlayRepairEditorChanges(content, rewrite.replacements);
+		try {
+			this.markInternalTaskWrite(filePath);
+			editor.transaction({ changes }, 'operon-task-wikilink-overlay-repair');
+		} catch (error) {
+			console.warn('Operon: Task Wikilink Overlay editor repair transaction failed', error);
+			return null;
+		}
+
+		if (editor.getValue() !== rewrite.content) {
+			console.warn('Operon: Task Wikilink Overlay editor repair did not apply all changes');
+			return null;
+		}
+
+		await this.persistMarkdownViewBuffer(view);
+		return rewrite;
+	}
+
+	private buildTaskWikilinkOverlayRepairEditorChanges(
+		content: string,
+		replacements: readonly TaskWikilinkOverlayRewriteReplacement[],
+	): BulkSelectionLineChange[] {
+		const lineStartOffsets = this.getLineStartOffsets(content);
+		return replacements.map(replacement => ({
+			from: this.offsetToEditorPosition(replacement.from, lineStartOffsets),
+			to: this.offsetToEditorPosition(replacement.to, lineStartOffsets),
+			text: replacement.text,
+		}));
+	}
+
+	private getLineStartOffsets(content: string): number[] {
+		const offsets = [0];
+		for (let i = 0; i < content.length; i++) {
+			if (content[i] === '\n') offsets.push(i + 1);
+		}
+		return offsets;
+	}
+
+	private offsetToEditorPosition(offset: number, lineStartOffsets: readonly number[]): EditorPosition {
+		let low = 0;
+		let high = lineStartOffsets.length - 1;
+		while (low <= high) {
+			const mid = Math.floor((low + high) / 2);
+			const start = lineStartOffsets[mid] ?? 0;
+			const nextStart = lineStartOffsets[mid + 1] ?? Number.POSITIVE_INFINITY;
+			if (offset < start) {
+				high = mid - 1;
+			} else if (offset >= nextStart) {
+				low = mid + 1;
+			} else {
+				return { line: mid, ch: offset - start };
+			}
+		}
+		const lastLine = Math.max(0, lineStartOffsets.length - 1);
+		const lastStart = lineStartOffsets[lastLine] ?? 0;
+		return { line: lastLine, ch: Math.max(0, offset - lastStart) };
 	}
 
 	private async applyDailyNoteInlineTaskDefaultsForNewTasks(changes: IndexedTaskDelta[]): Promise<void> {
@@ -12870,6 +13158,25 @@ export default class OperonPlugin extends Plugin {
 					},
 					editor,
 					view,
+				);
+			},
+		});
+
+		this.addCommand({
+			id: 'add-task-wikilink-overlay',
+			name: t('commands', 'addTaskWikilinkOverlay'),
+			editorCallback: (editor: Editor, view: MarkdownView) => {
+				this.openTaskWikilinkOverlayFinder(editor, view);
+			},
+		});
+
+		this.addCommand({
+			id: 'repair-task-wikilink-overlay-links',
+			name: t('commands', 'repairTaskWikilinkOverlayLinks'),
+			callback: () => {
+				runAsyncAction(
+					'repair Task Wikilink Overlay links failed',
+					() => this.handleRepairTaskWikilinkOverlayLinksCommand(),
 				);
 			},
 		});

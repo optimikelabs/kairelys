@@ -16,7 +16,7 @@ import { Pipeline } from '../types/pipeline';
 import type { ContextualMenuActionHandler } from '../core/contextual-menu-engine';
 import { bindOperonHoverTooltip } from './operon-hover-tooltip';
 import { WindowTimeoutHandle, clearWindowTimeout, createOwnerElement, getActiveWindow, getOwnerBody, getOwnerWindow, setWindowTimeout } from '../core/dom-compat';
-import { buildTaskWikilinkOverlaySettingsSignature } from './task-file-overlay-chips';
+import { buildTaskWikilinkOverlaySettingsSignature } from './task-wikilink-overlay-chips';
 import { openSettingsIconPickerModal } from './settings/settings-icon-picker-modal';
 import { normalizeTaskIconValue } from '../core/task-icon-value';
 import {

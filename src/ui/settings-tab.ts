@@ -271,7 +271,7 @@ type TaskChipsSettingsPageId =
 	| 'inlineTaskChips'
 	| 'taskFinderChips'
 	| 'filterTaskChips'
-	| 'fileTaskOverlayChips';
+	| 'taskWikilinkOverlayChips';
 
 type TaskChipsSettingsPageMeta = {
 	titleKey: string;
@@ -291,7 +291,7 @@ const TASK_CHIPS_SETTINGS_PAGE_ORDER: readonly TaskChipsSettingsPageId[] = [
 	'inlineTaskChips',
 	'taskFinderChips',
 	'filterTaskChips',
-	'fileTaskOverlayChips',
+	'taskWikilinkOverlayChips',
 ];
 
 const TASK_CHIPS_SETTINGS_PAGE_META: Record<TaskChipsSettingsPageId, TaskChipsSettingsPageMeta> = {
@@ -311,9 +311,9 @@ const TASK_CHIPS_SETTINGS_PAGE_META: Record<TaskChipsSettingsPageId, TaskChipsSe
 		titleKey: 'filterTaskIconsSection',
 		descKey: 'filterTaskIconsSectionDesc',
 	},
-	fileTaskOverlayChips: {
-		titleKey: 'overlayTaskIconsSection',
-		descKey: 'overlayTaskIconsSectionDesc',
+	taskWikilinkOverlayChips: {
+		titleKey: 'taskWikilinkOverlayIconsSection',
+		descKey: 'taskWikilinkOverlayIconsSectionDesc',
 	},
 };
 
@@ -2245,6 +2245,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 			{ value: 'es', label: t('settings', 'languageSpanish') },
 			{ value: 'zh-CN', label: t('settings', 'languageChineseSimplified') },
 			{ value: 'zh-TW', label: t('settings', 'languageChineseTraditional') },
+			{ value: 'ja', label: t('settings', 'languageJapanese') },
 		];
 		const collator = new Intl.Collator(getCurrentLang(), { sensitivity: 'base' });
 		languageOptions.sort((left, right) =>
@@ -4333,8 +4334,8 @@ export class OperonSettingsTab extends PluginSettingTab {
 			this.renderTaskFinderCompactChipSettingsSection(this.renderTaskChipsGroupedSection(containerEl, title, sectionOptions));
 		} else if (pageId === 'filterTaskChips') {
 			this.renderFilterTaskCardsSection(containerEl, sectionOptions);
-		} else if (pageId === 'fileTaskOverlayChips') {
-			this.renderOverlayTaskCompactChipSettingsSection(this.renderTaskChipsGroupedSection(containerEl, title, sectionOptions));
+		} else if (pageId === 'taskWikilinkOverlayChips') {
+			this.renderTaskWikilinkOverlayCompactChipSettingsSection(this.renderTaskChipsGroupedSection(containerEl, title, sectionOptions));
 		}
 	}
 
@@ -4806,7 +4807,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 					...this.settings.inlineTaskCompactChips,
 					...this.settings.taskFinderCompactChips,
 					...this.settings.filterTaskCompactChips,
-					...this.settings.overlayTaskCompactChips,
+					...this.settings.taskWikilinkOverlayCompactChips,
 				];
 		const matches = entries.filter(entry => entry.key === mapping.canonicalKey);
 		if (matches.length > 0) return matches.some(entry => entry.visible);
@@ -4862,8 +4863,8 @@ export class OperonSettingsTab extends PluginSettingTab {
 				visible,
 				() => ({ key: mapping.canonicalKey, visible, iconOnly: false }),
 			);
-			this.settings.overlayTaskCompactChips = this.setSurfaceEntryVisibility(
-				this.settings.overlayTaskCompactChips,
+			this.settings.taskWikilinkOverlayCompactChips = this.setSurfaceEntryVisibility(
+				this.settings.taskWikilinkOverlayCompactChips,
 				mapping.canonicalKey,
 				visible,
 				() => ({ key: mapping.canonicalKey, visible, iconOnly: false }),
@@ -5094,21 +5095,21 @@ export class OperonSettingsTab extends PluginSettingTab {
 		});
 	}
 
-	private renderOverlayTaskCompactChipSettingsSection(containerEl: HTMLElement): void {
+	private renderTaskWikilinkOverlayCompactChipSettingsSection(containerEl: HTMLElement): void {
 		renderCompactChipSettingsSection({
 			layout: 'row-list',
 			containerEl,
-			description: t('settings', 'overlayTaskIconsSectionDesc'),
-			descriptionSearchTargetId: 'ui.fileTaskOverlayChips',
-			toggleTitle: t('settings', 'overlayTaskIconsToggleTitle'),
-			iconOnlyTitle: t('settings', 'overlayTaskIconsDisplayModeTitle'),
-			reorderTitle: t('settings', 'overlayTaskIconsReorder'),
-			moveUpLabel: t('settings', 'overlayTaskIconsMoveUp'),
-			moveDownLabel: t('settings', 'overlayTaskIconsMoveDown'),
-			getItems: () => this.getRenderableSurfaceItems(this.settings.overlayTaskCompactChips, 'chips'),
+			description: t('settings', 'taskWikilinkOverlayIconsSectionDesc'),
+			descriptionSearchTargetId: 'ui.taskWikilinkOverlayChips',
+			toggleTitle: t('settings', 'taskWikilinkOverlayIconsToggleTitle'),
+			iconOnlyTitle: t('settings', 'taskWikilinkOverlayIconsDisplayModeTitle'),
+			reorderTitle: t('settings', 'taskWikilinkOverlayIconsReorder'),
+			moveUpLabel: t('settings', 'taskWikilinkOverlayIconsMoveUp'),
+			moveDownLabel: t('settings', 'taskWikilinkOverlayIconsMoveDown'),
+			getItems: () => this.getRenderableSurfaceItems(this.settings.taskWikilinkOverlayCompactChips, 'chips'),
 			setItems: items => {
-				this.settings.overlayTaskCompactChips = this.mergeRenderableSurfaceItems(
-					this.settings.overlayTaskCompactChips,
+				this.settings.taskWikilinkOverlayCompactChips = this.mergeRenderableSurfaceItems(
+					this.settings.taskWikilinkOverlayCompactChips,
 					items,
 					'chips',
 				);
@@ -5117,54 +5118,54 @@ export class OperonSettingsTab extends PluginSettingTab {
 			getIcon: key => this.getInlineTaskCompactChipIcon(key),
 			getCanonicalLabel: key => `{{${key}:: }}`,
 			iconOnlyButtonLabel: t('settings', 'compactChipIconOnly'),
-			actionTogglesTitle: t('settings', 'overlayTaskActionsSection'),
+			actionTogglesTitle: t('settings', 'taskWikilinkOverlayActionsSection'),
 			getVisibilityToggleLabel: label => t('settings', 'compactChipVisibilityToggle', { label }),
 			getIconOnlyToggleLabel: label => t('settings', 'compactChipIconOnlyToggle', { label }),
 			save: () => this.saveSettings(),
 			getActionToggles: () => [
 				{
-					visible: this.settings.overlayTaskShowPlayAction,
+					visible: this.settings.taskWikilinkOverlayShowPlayAction,
 					icon: 'play',
 					label: t('settings', 'inlineTaskPlayAction'),
 					onToggle: async () => {
-						this.settings.overlayTaskShowPlayAction = !this.settings.overlayTaskShowPlayAction;
+						this.settings.taskWikilinkOverlayShowPlayAction = !this.settings.taskWikilinkOverlayShowPlayAction;
 						await this.saveSettings();
 					},
 				},
 				{
-					visible: this.settings.overlayTaskShowPinAction,
+					visible: this.settings.taskWikilinkOverlayShowPinAction,
 					icon: 'pin',
 					label: t('settings', 'inlineTaskPinAction'),
 					onToggle: async () => {
-						this.settings.overlayTaskShowPinAction = !this.settings.overlayTaskShowPinAction;
+						this.settings.taskWikilinkOverlayShowPinAction = !this.settings.taskWikilinkOverlayShowPinAction;
 						await this.saveSettings();
 					},
 				},
 				{
-					visible: this.settings.overlayTaskShowNoteAction,
+					visible: this.settings.taskWikilinkOverlayShowNoteAction,
 					icon: 'notebook-pen',
 					label: t('settings', 'inlineTaskNoteAction'),
 					onToggle: async () => {
-						this.settings.overlayTaskShowNoteAction = !this.settings.overlayTaskShowNoteAction;
+						this.settings.taskWikilinkOverlayShowNoteAction = !this.settings.taskWikilinkOverlayShowNoteAction;
 						await this.saveSettings();
 					},
 				},
 				{
-					visible: this.settings.overlayTaskShowSubtaskAction,
+					visible: this.settings.taskWikilinkOverlayShowSubtaskAction,
 					icon: 'list-plus',
 					label: t('settings', 'inlineTaskSubtaskAction'),
 					onToggle: async () => {
-						this.settings.overlayTaskShowSubtaskAction = !this.settings.overlayTaskShowSubtaskAction;
+						this.settings.taskWikilinkOverlayShowSubtaskAction = !this.settings.taskWikilinkOverlayShowSubtaskAction;
 						await this.saveSettings();
 					},
 				},
 				{
-					visible: this.settings.overlayTaskShowPlainCheckboxAction,
+					visible: this.settings.taskWikilinkOverlayShowPlainCheckboxAction,
 					icon: 'layout-list',
-					label: t('settings', 'overlayTaskOpenCheckboxAction'),
-					searchTargetId: 'ui.overlayTaskShowPlainCheckboxAction',
+					label: t('settings', 'taskWikilinkOverlayOpenCheckboxAction'),
+					searchTargetId: 'ui.taskWikilinkOverlayShowPlainCheckboxAction',
 					onToggle: async () => {
-						this.settings.overlayTaskShowPlainCheckboxAction = !this.settings.overlayTaskShowPlainCheckboxAction;
+						this.settings.taskWikilinkOverlayShowPlainCheckboxAction = !this.settings.taskWikilinkOverlayShowPlainCheckboxAction;
 						await this.saveSettings();
 					},
 				},
@@ -8510,7 +8511,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 				inlineTaskCompactChips: this.settings.inlineTaskCompactChips,
 				taskFinderCompactChips: this.settings.taskFinderCompactChips,
 				filterTaskCompactChips: this.settings.filterTaskCompactChips,
-				overlayTaskCompactChips: this.settings.overlayTaskCompactChips,
+				taskWikilinkOverlayCompactChips: this.settings.taskWikilinkOverlayCompactChips,
 			},
 		});
 		const usageByCanonical = new Map(customUsageSummaries.map(usage => [usage.canonicalKey, usage] as const));

@@ -15,8 +15,8 @@ import {
 	computeTaskFileLinkProgressIndicator,
 	createTaskFileLinkPlainCheckboxProgressElement,
 	FileTaskLookup,
-	resolveTaskFileLink,
-	ResolvedTaskFileLink,
+	resolveTaskWikilinkOverlayLink,
+	ResolvedTaskWikilinkOverlayLink,
 	TaskFileLinkProgressIndicator,
 	TaskFileLinkVisuals,
 	buildTaskFileLinkProgressTooltip,
@@ -24,7 +24,7 @@ import {
 } from './task-file-wikilink-shared';
 import { bindOperonHoverTooltip } from './operon-hover-tooltip';
 import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
-import { buildTaskFileOverlayChipContainer } from './task-file-overlay-chips';
+import { buildTaskWikilinkOverlayChipContainer } from './task-wikilink-overlay-chips';
 import { resolveSubtaskActionIcon, resolveSubtaskActionLabelKey } from '../core/subtask-action';
 import { bindTaskTitleLinkPreview } from './compact-chip-link-preview';
 import { isTaskDescriptionWikilinkEventTarget, renderTaskDescriptionWikilinks } from './task-description-wikilinks';
@@ -36,6 +36,7 @@ interface ReadingTaskFileWikilinkCallbacks {
 	getPipelines: () => Pipeline[];
 	getAllTasks: () => IndexedTask[];
 	getFileTaskByPath: FileTaskLookup;
+	hasDuplicateOperonIdConflict?: (operonId: string) => boolean;
 	getDescendantTaskSummary: (operonId: string) => DescendantTaskSummary;
 	openTaskEditor: (operonId: string) => void;
 	cycleStatus: (operonId: string) => void;
@@ -170,6 +171,9 @@ export function enhanceReadingTaskFileWikilinks(
 
 		parent.insertBefore(wrapper, anchor);
 		const labelEl = createTaskFileLinkLabel(anchor, resolved, visuals, callbacks);
+		if (labelEl !== anchor) {
+			anchor.remove();
+		}
 		wrapper.appendChild(leftButton);
 		wrapper.appendChild(labelEl);
 		const progressEl = createProgressElement(progress, wrapper, visuals.hoverColor);
@@ -177,7 +181,7 @@ export function enhanceReadingTaskFileWikilinks(
 			wrapper.appendChild(progressEl);
 		}
 		const settings = callbacks.getSettings();
-		if (settings.overlayTaskShowPlainCheckboxAction) {
+		if (settings.taskWikilinkOverlayShowPlainCheckboxAction) {
 			const plainCheckboxProgressEl = createTaskFileLinkPlainCheckboxProgressElement(
 				computeTaskFileLinkPlainCheckboxIndicator(resolved.task),
 				wrapper,
@@ -193,7 +197,7 @@ export function enhanceReadingTaskFileWikilinks(
 				wrapper.appendChild(plainCheckboxProgressEl);
 			}
 		}
-		const chipRow = buildTaskFileOverlayChipContainer(resolved.task, {
+		const chipRow = buildTaskWikilinkOverlayChipContainer(resolved.task, {
 			app: callbacks.app,
 			getSettings: callbacks.getSettings,
 			getAllTasks: callbacks.getAllTasks,
@@ -206,7 +210,7 @@ export function enhanceReadingTaskFileWikilinks(
 			wrapper.appendChild(chipRow);
 		}
 		const isTerminal = visuals.labelState !== 'default';
-		if (!isTerminal && settings.overlayTaskShowPlayAction && callbacks.toggleTimer && resolved.task.checkbox === 'open') {
+		if (!isTerminal && settings.taskWikilinkOverlayShowPlayAction && callbacks.toggleTimer && resolved.task.checkbox === 'open') {
 			const isTracking = callbacks.isTaskTracking?.(resolved.task.operonId) === true;
 			const playButton = createActionButton(
 				'operon-live-preview-edit operon-live-preview-action operon-task-wikilink-overlay-action operon-task-chip-action',
@@ -222,7 +226,7 @@ export function enhanceReadingTaskFileWikilinks(
 			);
 			wrapper.appendChild(playButton);
 		}
-		if (!isTerminal && settings.overlayTaskShowPinAction && callbacks.onContextualAction) {
+		if (!isTerminal && settings.taskWikilinkOverlayShowPinAction && callbacks.onContextualAction) {
 			const isPinned = callbacks.isTaskPinned?.(resolved.task.operonId) === true;
 			const pinButton = createActionButton(
 				'operon-live-preview-edit operon-live-preview-action operon-task-wikilink-overlay-action operon-task-chip-action',
@@ -239,7 +243,7 @@ export function enhanceReadingTaskFileWikilinks(
 			wrapper.appendChild(pinButton);
 		}
 		const noteValue = resolved.task.fieldValues['note']?.trim();
-		if (settings.overlayTaskShowNoteAction && noteValue) {
+		if (settings.taskWikilinkOverlayShowNoteAction && noteValue) {
 			const noteIndicator = createOwnerElement(wrapper, 'span');
 			noteIndicator.className = 'operon-live-preview-edit operon-live-preview-action operon-task-wikilink-overlay-action operon-task-wikilink-overlay-standard-action operon-task-wikilink-note-neutral operon-task-chip-action';
 			noteIndicator.setCssProps({
@@ -256,7 +260,7 @@ export function enhanceReadingTaskFileWikilinks(
 			});
 			wrapper.appendChild(noteIndicator);
 		}
-		if (!isTerminal && settings.overlayTaskShowSubtaskAction && callbacks.requestSubtask) {
+		if (!isTerminal && settings.taskWikilinkOverlayShowSubtaskAction && callbacks.requestSubtask) {
 			const subtaskLabel = t('buttons', resolveSubtaskActionLabelKey(resolved.task));
 			const subtaskButton = createActionButton(
 				'operon-live-preview-edit operon-live-preview-action operon-task-wikilink-overlay-action operon-task-chip-action',
@@ -295,12 +299,16 @@ function resolveReadingTaskFileLink(
 	rawLinktext: string,
 	callbacks: ReadingTaskFileWikilinkCallbacks,
 	alias: string | null,
-): ResolvedTaskFileLink | null {
-	const resolved = resolveTaskFileLink(
+): ResolvedTaskWikilinkOverlayLink | null {
+	const resolved = resolveTaskWikilinkOverlayLink(
 		app,
 		sourcePath,
 		rawLinktext,
-		callbacks.getFileTaskByPath,
+		{
+			getFileTaskByPath: callbacks.getFileTaskByPath,
+			getAllTasks: callbacks.getAllTasks,
+			hasDuplicateOperonIdConflict: callbacks.hasDuplicateOperonIdConflict,
+		},
 		alias,
 	);
 	if (resolved) return resolved;
@@ -314,7 +322,7 @@ function resolveIndexedTaskFileLink(
 	rawLinktext: string,
 	callbacks: ReadingTaskFileWikilinkCallbacks,
 	alias: string | null,
-): ResolvedTaskFileLink | null {
+): ResolvedTaskWikilinkOverlayLink | null {
 	const trimmed = rawLinktext.trim();
 	if (!trimmed) return null;
 
@@ -344,6 +352,7 @@ function resolveIndexedTaskFileLink(
 		alias,
 		path,
 		subpath,
+		targetKind: 'file',
 	};
 }
 
@@ -353,7 +362,7 @@ function resolveIndexedNestedTaskFileLinkFromAnchor(
 	anchor: HTMLAnchorElement,
 	anchorLinktext: string,
 	callbacks: ReadingTaskFileWikilinkCallbacks,
-): ResolvedTaskFileLink | null {
+): ResolvedTaskWikilinkOverlayLink | null {
 	const label = anchor.textContent?.trim() ?? '';
 	if (!label.includes('[[') && !anchorLinktext.includes('[[')) return null;
 
@@ -378,6 +387,7 @@ function resolveIndexedNestedTaskFileLinkFromAnchor(
 		alias: null,
 		path: rawLinktext,
 		subpath: '',
+		targetKind: 'file',
 	};
 }
 
@@ -653,7 +663,7 @@ function innerSourceMatchMatchesAnchor(
 	if (!label) return false;
 
 	const defaultLabel = getDefaultWikiLinkLabel(innerMatch.linktext);
-	return !!defaultLabel && isWikiLinkLabelVariant(defaultLabel, label);
+	return !!defaultLabel && isRenderedDefaultWikiLinkLabel(innerMatch.linktext, label);
 }
 
 function getResolvedLinkPath(app: App, linktext: string, sourcePath: string): string | null {
@@ -669,8 +679,7 @@ function isLikelyAnchorForSourceMatch(anchor: HTMLAnchorElement, linktext: strin
 	if (!label) return false;
 
 	const defaultLabel = getDefaultWikiLinkLabel(linktext);
-	if (!defaultLabel) return false;
-	return isWikiLinkLabelVariant(defaultLabel, label);
+	return !!defaultLabel && isRenderedDefaultWikiLinkLabel(linktext, label);
 }
 
 function getAnchorAlias(anchor: HTMLAnchorElement, linktext: string): string | null {
@@ -678,8 +687,8 @@ function getAnchorAlias(anchor: HTMLAnchorElement, linktext: string): string | n
 	if (!label) return null;
 
 	const defaultLabel = getDefaultWikiLinkLabel(linktext);
-	if (!defaultLabel || label === defaultLabel) return null;
-	if (isWikiLinkLabelVariant(defaultLabel, label)) return null;
+	if (!defaultLabel) return null;
+	if (isRenderedDefaultWikiLinkLabel(linktext, label)) return null;
 	return label;
 }
 
@@ -694,6 +703,24 @@ function getDefaultWikiLinkLabel(linktext: string): string {
 
 function isWikiLinkLabelVariant(defaultLabel: string, label: string): boolean {
 	return getWikiLinkLabelVariants(defaultLabel).includes(label);
+}
+
+function isRenderedDefaultWikiLinkLabel(linktext: string, label: string): boolean {
+	const defaultLabel = getDefaultWikiLinkLabel(linktext);
+	if (!defaultLabel) return false;
+	if (isWikiLinkLabelVariant(defaultLabel, label)) return true;
+
+	const subpathLabel = getDefaultWikiLinkSubpathLabel(linktext, defaultLabel);
+	return !!subpathLabel && isWikiLinkLabelVariant(subpathLabel, label);
+}
+
+function getDefaultWikiLinkSubpathLabel(linktext: string, defaultLabel: string): string | null {
+	try {
+		const subpath = parseLinktext(linktext.trim()).subpath.replace(/^#/u, '').trim();
+		return subpath ? `${defaultLabel} > ${subpath}` : null;
+	} catch {
+		return null;
+	}
 }
 
 function findWikiLinkLabelVariantRanges(defaultLabel: string, text: string): Array<{ from: number; to: number }> {
@@ -875,7 +902,7 @@ function appendPlainTextElement(element: HTMLElement, text: string): void {
 
 function createTaskFileLinkLabel(
 	anchor: HTMLAnchorElement,
-	resolved: ResolvedTaskFileLink,
+	resolved: ResolvedTaskWikilinkOverlayLink,
 	visuals: TaskFileLinkVisuals,
 	callbacks: ReadingTaskFileWikilinkCallbacks,
 ): HTMLElement {
@@ -899,10 +926,7 @@ function createTaskFileLinkLabel(
 		containerClassName: 'operon-task-wikilink-label-markdown',
 		linkClassName: 'operon-task-wikilink-label-description-link',
 	});
-	if (!rendered) {
-		prepareTaskFileLinkAnchor(anchor, resolved, visuals, callbacks);
-		return anchor;
-	}
+	if (!rendered || !elementHasChildren(label)) label.textContent = description || resolved.rawLinktext;
 
 	label.classList.add('internal-link', 'operon-task-wikilink-anchor', 'operon-task-wikilink-label');
 	label.dataset.operonTaskWikilinkEnhanced = 'true';
@@ -925,13 +949,12 @@ function createTaskFileLinkLabel(
 		void callbacks.app.workspace.openLinkText(resolved.resolvedFile.path, resolved.sourcePath, false);
 	});
 
-	anchor.remove();
 	return label;
 }
 
 function prepareTaskFileLinkAnchor(
 	anchor: HTMLAnchorElement,
-	resolved: ResolvedTaskFileLink,
+	resolved: ResolvedTaskWikilinkOverlayLink,
 	visuals: TaskFileLinkVisuals,
 	callbacks: ReadingTaskFileWikilinkCallbacks,
 ): void {
@@ -950,6 +973,11 @@ function prepareTaskFileLinkAnchor(
 		event.stopPropagation();
 		void callbacks.app.workspace.openLinkText(resolved.resolvedFile.path, resolved.sourcePath, false);
 	});
+}
+
+function elementHasChildren(element: HTMLElement): boolean {
+	const children = (element as HTMLElement & { children?: { length: number } }).children;
+	return typeof children?.length === 'number' ? children.length > 0 : element.childNodes.length > 0;
 }
 
 function applyTaskFileLinkLabelState(label: HTMLElement, visuals: TaskFileLinkVisuals): void {

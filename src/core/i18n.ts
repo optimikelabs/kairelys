@@ -1,7 +1,7 @@
 /**
  * Internationalization (i18n) module for Operon.
  * Multilingual support: English (default), Turkish, German, French, Spanish,
- * Simplified Chinese, and Traditional Chinese.
+ * Simplified Chinese, Traditional Chinese, and Japanese.
  *
  * Spec Section 25:
  * - JSON locale files at i18n/locales/
@@ -19,12 +19,13 @@ import fr from '../../i18n/locales/fr.json';
 import es from '../../i18n/locales/es.json';
 import zhCN from '../../i18n/locales/zh-CN.json';
 import zhTW from '../../i18n/locales/zh-TW.json';
+import ja from '../../i18n/locales/ja.json';
 
 /** All available locale data, keyed by language code */
-const LOCALES: Record<string, LocaleData> = { en, tr, de, fr, es, 'zh-CN': zhCN, 'zh-TW': zhTW };
+const LOCALES: Record<string, LocaleData> = { en, tr, de, fr, es, 'zh-CN': zhCN, 'zh-TW': zhTW, ja };
 
 /** Supported language codes */
-export type LangCode = 'en' | 'tr' | 'de' | 'fr' | 'es' | 'zh-CN' | 'zh-TW';
+export type LangCode = 'en' | 'tr' | 'de' | 'fr' | 'es' | 'zh-CN' | 'zh-TW' | 'ja';
 
 /**
  * Maps an Obsidian/browser locale string to a supported LangCode.

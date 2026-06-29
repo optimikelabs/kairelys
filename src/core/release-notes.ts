@@ -13,6 +13,42 @@ const RELEASE_NOTE_LIMIT = 5;
 
 export const OPERON_RELEASE_NOTES: OperonReleaseNote[] = [
 	{
+		version: '1.8.0',
+		date: '2026-06-29',
+		title: 'Task Wikilink Overlay',
+		showOnUpdate: true,
+		bannerUrl: 'operon-1-8-0-task-wikilink-overlay.png',
+		body: `
+Inline and file-task wikilinks now share the same overlay controls, Task Finder can insert task links directly, source-opening behaves more like a browser across planning views, and Japanese localization opens Operon to another language workflow.
+
+### New
+- Added an **Add Task Wikilink Overlay** command that opens Task Finder and inserts a task link at the cursor, using normal file-task links for file tasks and \`[[File#-operonId]]\` links for inline tasks.
+- Extended **Task Wikilink Overlay** to render inline task links written as \`[[File#-operonId]]\`, including embedded \`![[File#-operonId]]\` links, so Task Finder-inserted inline links can use the same overlay controls as file-task links.
+- Added browser-style modifier-click source opening for materialized tasks in **Calendar**, **Kanban**, and **Pinned Tasks**: Cmd-click on macOS or Ctrl-click on Windows/Linux opens the task source in a new Obsidian tab while normal clicks still open Task Editor.
+- Added **Japanese localization**, including Settings language selection, translated UI strings, Japanese date parsing, repeat summaries, calendar wording, task editing labels, and filter surfaces.
+
+### Improved
+- Improved **Calendar Task Pool** task rows with neutral default cards and task-color hover emphasis, reducing visual noise while keeping priority context available on interaction.
+- Improved **Calendar Task Pool** status icons with pinned-style spacing, making the icon border feel less cramped while keeping the compact sidebar layout.
+
+### Changed
+- Renamed **File Task Overlay** settings to **Task Wikilink Overlay**, while migrating existing overlay chip and action preferences to the new setting names.
+
+### Updated Docs
+**New Docs**
+- [[DOCS-103 Task Wikilink Overlay|Task Wikilink Overlay]]
+- [[DOCS-104 Add Task Wikilink Overlay|Add Task Wikilink Overlay]]
+
+**Updated Docs**
+- [[DOCS-032 Pinned Task Dock|Pinned Task Dock]]
+- [[DOCS-030 Kanban overview|Kanban overview]]
+- [[DOCS-028 Calendar overview|Calendar overview]]
+- [[DOCS-093 How to migrate from TaskNotes|How to migrate from TaskNotes]]
+- [[DOCS-080 FAQ for TaskNotes users|FAQ for TaskNotes users]]
+- And 7 more updated docs.
+`.trim(),
+	},
+	{
 		version: '1.7.1',
 		date: '2026-06-28',
 		title: 'Smoother Repeatable Workflows',

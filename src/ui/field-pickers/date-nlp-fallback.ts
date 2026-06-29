@@ -215,6 +215,32 @@ const STRINGS: Record<DatePickerLang, DatePickerStrings> = {
 		nextWeekdayLabel: name => `下${name}`,
 		lastWeekdayLabel: name => `上${name}`,
 	},
+	ja: {
+		searchPlaceholder: '日付を入力（例: 来週火曜日）',
+		clear: 'クリア',
+		apply: '適用',
+		manualDate: '日付を選択',
+		parsedFrom: input => `「${input}」から解析`,
+		quickSuggestions: '候補',
+		today: '今日',
+		tomorrow: '明日',
+		yesterday: '昨日',
+		thisWeek: '今週',
+		nextWeek: '来週',
+		lastWeek: '先週',
+		thisWeekend: '今週末',
+		nextWeekend: '来週末',
+		lastWeekend: '先週末',
+		daysAgo: count => `${count}日前`,
+		daysFromNow: count => `${count}日後`,
+		weeksAgo: count => `${count}週間前`,
+		weeksFromNow: count => `${count}週間後`,
+		monthsAgo: count => `${count}ヶ月前`,
+		monthsFromNow: count => `${count}ヶ月後`,
+		weekdayNames: ['日曜日', '月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日'],
+		nextWeekdayLabel: name => `来週${name}`,
+		lastWeekdayLabel: name => `先週${name}`,
+	},
 };
 
 const ENGLISH_PHRASES: Record<string, (reference: Date) => Date> = {
@@ -382,6 +408,34 @@ const CHINESE_WEEKDAY_CHARS: Record<string, number> = {
 	'一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '日': 0, '天': 0,
 };
 
+// Japanese relative-date phrases. Japanese is spaceless, so matching is whole-string
+// equality. Kanji forms plus the most common kana spellings (きょう/あした/…).
+const JAPANESE_PHRASES: Record<string, (reference: Date) => Date> = {
+	'今日': reference => cloneDate(reference),
+	'きょう': reference => cloneDate(reference),
+	'本日': reference => cloneDate(reference),
+	'明日': reference => addDays(reference, 1),
+	'あした': reference => addDays(reference, 1),
+	'あす': reference => addDays(reference, 1),
+	'明後日': reference => addDays(reference, 2),
+	'あさって': reference => addDays(reference, 2),
+	'昨日': reference => addDays(reference, -1),
+	'きのう': reference => addDays(reference, -1),
+	'一昨日': reference => addDays(reference, -2),
+	'おととい': reference => addDays(reference, -2),
+	'今週': reference => startOfWeek(reference),
+	'来週': reference => addDays(startOfWeek(reference), 7),
+	'先週': reference => addDays(startOfWeek(reference), -7),
+	'今週末': reference => saturdayOfWeek(reference),
+	'来週末': reference => addDays(saturdayOfWeek(reference), 7),
+	'先週末': reference => addDays(saturdayOfWeek(reference), -7),
+};
+
+// Weekday day-characters → JS getDay() index (0 = Sunday). 日 means Sunday (日曜日).
+const JAPANESE_WEEKDAY_CHARS: Record<string, number> = {
+	'日': 0, '月': 1, '火': 2, '水': 3, '木': 4, '金': 5, '土': 6,
+};
+
 const MONTH_ALIASES: Record<DatePickerLang, MonthAlias[]> = {
 	en: [
 		{ month: 1, aliases: ['january', 'jan'] },
@@ -483,6 +537,22 @@ const MONTH_ALIASES: Record<DatePickerLang, MonthAlias[]> = {
 		{ month: 11, aliases: ['十一月'] },
 		{ month: 12, aliases: ['十二月'] },
 	],
+	// Japanese month-day input is parsed by the dedicated Japanese path (digits + 月/日),
+	// so these aliases exist mainly to satisfy the Record type.
+	ja: [
+		{ month: 1, aliases: ['1月'] },
+		{ month: 2, aliases: ['2月'] },
+		{ month: 3, aliases: ['3月'] },
+		{ month: 4, aliases: ['4月'] },
+		{ month: 5, aliases: ['5月'] },
+		{ month: 6, aliases: ['6月'] },
+		{ month: 7, aliases: ['7月'] },
+		{ month: 8, aliases: ['8月'] },
+		{ month: 9, aliases: ['9月'] },
+		{ month: 10, aliases: ['10月'] },
+		{ month: 11, aliases: ['11月'] },
+		{ month: 12, aliases: ['12月'] },
+	],
 };
 
 export function getDatePickerStrings(language: DatePickerLang): DatePickerStrings {
@@ -546,6 +616,18 @@ export function parseFallbackDateCandidates(input: string, context: DateParseCon
 		const chinese = parseChineseCandidates(normalized, strings, context, reference);
 		if (chinese.length > 0) {
 			return sortCandidatesByReference(dedupeDateCandidates(chinese), reference);
+		}
+		const absolute = parseAbsoluteDate(normalized, context);
+		if (absolute) return [absolute];
+		return [];
+	}
+
+	// Japanese is likewise spaceless and orders dates month→day, so it uses a
+	// dedicated parser instead of the Latin-script numeric/day-month regexes.
+	if (context.language === 'ja') {
+		const japanese = parseJapaneseCandidates(normalized, strings, context, reference);
+		if (japanese.length > 0) {
+			return sortCandidatesByReference(dedupeDateCandidates(japanese), reference);
 		}
 		const absolute = parseAbsoluteDate(normalized, context);
 		if (absolute) return [absolute];
@@ -653,6 +735,99 @@ function parseChineseCandidates(
 
 	// Day only: 15日 / 15号 → this month or next month within the open window.
 	const dayMatch = /^(\d{1,2})[日号號]$/.exec(input);
+	if (dayMatch) {
+		const day = Number(dayMatch[1]);
+		const refMonth = reference.getMonth() + 1;
+		const refYear = reference.getFullYear();
+		const thisMonth = chineseDateInWindow(refMonth, day, input, strings, context, reference);
+		const nextMonth = refMonth === 12
+			? chineseDateInWindow(1, day, input, strings, context, reference, refYear + 1)
+			: chineseDateInWindow(refMonth + 1, day, input, strings, context, reference);
+		return dedupeDateCandidates([...thisMonth, ...nextMonth]);
+	}
+
+	return candidates;
+}
+
+function parseJapaneseCandidates(
+	input: string,
+	strings: DatePickerStrings,
+	context: DateParseContext,
+	reference: Date,
+): DateParseCandidate[] {
+	const candidates: DateParseCandidate[] = [];
+	const pushNlpDate = (date: Date, confidence = 0.96): void => {
+		candidates.push({
+			isoDate: toIsoDate(date),
+			primaryLabel: formatLongDate(date, context.language),
+			secondaryLabel: strings.parsedFrom(input),
+			source: 'fallback',
+			confidence,
+			kind: 'nlp',
+		});
+	};
+
+	// Whole-string relative phrase: 今日 / 明日 / 来週 / 今週末 …
+	const phrase = JAPANESE_PHRASES[input];
+	if (phrase) {
+		pushNlpDate(phrase(reference));
+		return candidates;
+	}
+
+	// Weekday: optional 来週/先週/今週 (+ optional の) prefix + day char + 曜(日) (来週火曜日, 金曜日, 今週の月曜).
+	const weekdayMatch = /^(来週|先週|今週)?の?([日月火水木金土])曜日?$/.exec(input);
+	if (weekdayMatch) {
+		const weekday = JAPANESE_WEEKDAY_CHARS[weekdayMatch[2]];
+		if (weekday !== undefined) {
+			const prefix = weekdayMatch[1] ?? '';
+			if (prefix === '') {
+				pushNlpDate(nextWeekday(reference, weekday));
+			} else if (prefix === '来週') {
+				pushNlpDate(addDays(weekdayInCurrentWeek(reference, weekday), 7));
+			} else if (prefix === '先週') {
+				pushNlpDate(addDays(weekdayInCurrentWeek(reference, weekday), -7));
+			} else {
+				pushNlpDate(weekdayInCurrentWeek(reference, weekday));
+			}
+			return candidates;
+		}
+	}
+
+	// Numeric relative: number + unit + optional direction (3日後, 2週間前, 1ヶ月後, 5週間).
+	// 後 → future, 前 → past, no direction → both, mirroring the Latin path.
+	// 日 only counts as a duration when an explicit direction is present; bare 5日
+	// is reserved as the day-of-month marker (5日 = the 5th).
+	const relativeMatch = /^(\d{1,3})(ヶ月|ケ月|カ月|か月|週間|週|日)(後|前)?$/.exec(input);
+	if (relativeMatch) {
+		const amount = Number(relativeMatch[1]);
+		const unit = relativeMatch[2];
+		const direction = relativeMatch[3] ?? '';
+		const isMonth = unit === 'ヶ月' || unit === 'ケ月' || unit === 'カ月' || unit === 'か月';
+		const isDay = unit === '日';
+		// Bare 日 without a direction is a day-of-month, not "N days" — fall through.
+		if (!(isDay && direction === '') && Number.isFinite(amount) && amount > 0) {
+			const wantFuture = direction === '' || direction === '後';
+			const wantPast = direction === '' || direction === '前';
+			const shift = (sign: number): Date =>
+				isMonth ? addMonths(reference, sign * amount)
+				: isDay ? addDays(reference, sign * amount)
+				: addDays(reference, sign * amount * 7);
+			const futureLabel = isMonth ? strings.monthsFromNow(amount) : isDay ? strings.daysFromNow(amount) : strings.weeksFromNow(amount);
+			const pastLabel = isMonth ? strings.monthsAgo(amount) : isDay ? strings.daysAgo(amount) : strings.weeksAgo(amount);
+			if (wantFuture) candidates.push(buildRelativeCandidate(futureLabel, shift(1), context));
+			if (wantPast) candidates.push(buildRelativeCandidate(pastLabel, shift(-1), context));
+			return candidates;
+		}
+	}
+
+	// Month + day: 3月15日 / 3月15 → this year or next year within the open window.
+	const monthDayMatch = /^(\d{1,2})月(\d{1,2})日?$/.exec(input);
+	if (monthDayMatch) {
+		return chineseDateInWindow(Number(monthDayMatch[1]), Number(monthDayMatch[2]), input, strings, context, reference);
+	}
+
+	// Day only: 15日 → this month or next month within the open window.
+	const dayMatch = /^(\d{1,2})日$/.exec(input);
 	if (dayMatch) {
 		const day = Number(dayMatch[1]);
 		const refMonth = reference.getMonth() + 1;
@@ -1053,6 +1228,7 @@ function datePickerLocaleTag(language: DatePickerLang): string {
 	if (language === 'es') return 'es-ES';
 	if (language === 'zh-CN') return 'zh-CN';
 	if (language === 'zh-TW') return 'zh-TW';
+	if (language === 'ja') return 'ja-JP';
 	return 'en-US';
 }
 

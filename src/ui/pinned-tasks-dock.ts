@@ -18,9 +18,11 @@ import { resolveTaskColorSourceForTask } from '../core/task-color-source';
 import { WindowTimeoutHandle, clearWindowTimeout, createOwnerElement, getOwnerBody, getOwnerDocument, getOwnerWindow, setWindowTimeout } from '../core/dom-compat';
 import { asyncHandler } from '../core/async-action';
 import { getPinnedTasksForDisplay } from '../core/pinned-task-query';
+import { isTaskSourceOpenModifierClick } from './task-source-open-modifier';
 
 export interface PinnedDockCallbacks {
 	openTaskEditor: (operonId: string) => void;
+	openTaskSource?: (operonId: string) => void | Promise<void>;
 	cycleStatus: (operonId: string) => void;
 	onContextualAction?: ContextualMenuActionHandler;
 	hasSubtasks?: (taskId: string) => boolean;
@@ -194,7 +196,15 @@ export class PinnedTasksDock extends Component {
 
 		for (const task of pinnedTasks) {
 			const card = strip.createDiv('operon-pinned-card');
-			card.addEventListener('click', () => {
+			card.addEventListener('click', (event) => {
+				if (isTaskSourceOpenModifierClick(event) && this.callbacks.openTaskSource) {
+					event.preventDefault();
+					event.stopPropagation();
+					void Promise.resolve(this.callbacks.openTaskSource(task.operonId)).catch(error => {
+						console.error('Operon: failed to open pinned task source', error);
+					});
+					return;
+				}
 				this.callbacks.openTaskEditor(task.operonId);
 			});
 
@@ -234,7 +244,7 @@ export class PinnedTasksDock extends Component {
 					});
 				}
 
-				// Description — click navigates to task source
+				// Description — card click opens Task Editor unless a source-open modifier is held
 				card.createSpan({
 					cls: 'operon-pinned-desc',
 					text: task.description || t('pinnedTasks', 'untitledTask'),

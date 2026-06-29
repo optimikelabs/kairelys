@@ -27,7 +27,7 @@ import {
 import { t } from '../core/i18n';
 import { createProjectSerialChipElement } from './project-serial-chip';
 
-interface OverlayChipRenderCallbacks {
+interface TaskWikilinkOverlayChipRenderCallbacks {
 	app: App;
 	getSettings: () => OperonSettings;
 	getAllTasks: () => IndexedTask[];
@@ -37,7 +37,7 @@ interface OverlayChipRenderCallbacks {
 	getRepeatSkipDates?: (repeatSeriesId: string) => string[];
 }
 
-export function getTaskFileOverlayChipSignature(
+export function getTaskWikilinkOverlayChipSignature(
 	task: IndexedTask,
 	app: App,
 	settings: OperonSettings,
@@ -45,7 +45,7 @@ export function getTaskFileOverlayChipSignature(
 	getProjectSerialDisplay?: (operonId: string, task?: IndexedTask) => ProjectSerialDisplay | null,
 	getRepeatSkipDates?: (repeatSeriesId: string) => string[],
 ): string {
-	const locationIndex = shouldResolveLocationCompactChips(settings, settings.overlayTaskCompactChips)
+	const locationIndex = shouldResolveLocationCompactChips(settings, settings.taskWikilinkOverlayCompactChips)
 		? getLocationPlaceIndex(app, settings)
 		: null;
 	const entrySignature = buildInlineTaskCompactChipEntries(
@@ -53,7 +53,7 @@ export function getTaskFileOverlayChipSignature(
 		task.tags,
 		settings,
 		allTasks,
-		settings.overlayTaskCompactChips,
+		settings.taskWikilinkOverlayCompactChips,
 		locationIndex?.resolve,
 		{ repeatSkipDateResolver: getRepeatSkipDates },
 	).map(entry => [
@@ -80,21 +80,21 @@ export function getTaskFileOverlayChipSignature(
 
 export function buildTaskWikilinkOverlaySettingsSignature(settings: OperonSettings): string {
 	return JSON.stringify({
-		overlayTaskCompactChips: settings.overlayTaskCompactChips,
-		overlayTaskShowPlayAction: settings.overlayTaskShowPlayAction,
-		overlayTaskShowPinAction: settings.overlayTaskShowPinAction,
-		overlayTaskShowNoteAction: settings.overlayTaskShowNoteAction,
-		overlayTaskShowSubtaskAction: settings.overlayTaskShowSubtaskAction,
-		overlayTaskShowPlainCheckboxAction: settings.overlayTaskShowPlainCheckboxAction,
+		taskWikilinkOverlayCompactChips: settings.taskWikilinkOverlayCompactChips,
+		taskWikilinkOverlayShowPlayAction: settings.taskWikilinkOverlayShowPlayAction,
+		taskWikilinkOverlayShowPinAction: settings.taskWikilinkOverlayShowPinAction,
+		taskWikilinkOverlayShowNoteAction: settings.taskWikilinkOverlayShowNoteAction,
+		taskWikilinkOverlayShowSubtaskAction: settings.taskWikilinkOverlayShowSubtaskAction,
+		taskWikilinkOverlayShowPlainCheckboxAction: settings.taskWikilinkOverlayShowPlainCheckboxAction,
 	});
 }
 
-export function buildTaskFileOverlayChipContainer(
+export function buildTaskWikilinkOverlayChipContainer(
 	task: IndexedTask,
-	callbacks: OverlayChipRenderCallbacks,
+	callbacks: TaskWikilinkOverlayChipRenderCallbacks,
 ): HTMLElement | null {
 	const settings = callbacks.getSettings();
-	const locationResolver = shouldResolveLocationCompactChips(settings, settings.overlayTaskCompactChips)
+	const locationResolver = shouldResolveLocationCompactChips(settings, settings.taskWikilinkOverlayCompactChips)
 		? getLocationPlaceIndex(callbacks.app, settings).resolve
 		: undefined;
 	const entries = buildInlineTaskCompactChipEntries(
@@ -102,7 +102,7 @@ export function buildTaskFileOverlayChipContainer(
 		task.tags,
 		settings,
 		callbacks.getAllTasks(),
-		settings.overlayTaskCompactChips,
+		settings.taskWikilinkOverlayCompactChips,
 		locationResolver,
 		{ repeatSkipDateResolver: callbacks.getRepeatSkipDates },
 	);
@@ -183,7 +183,7 @@ function isOverlayChipInteractive(entry: InlineTaskCompactChipEntry): boolean {
 function attachOverlayChipAction(
 	chip: HTMLElement,
 	entry: InlineTaskCompactChipEntry,
-	callbacks: OverlayChipRenderCallbacks,
+	callbacks: TaskWikilinkOverlayChipRenderCallbacks,
 	task: IndexedTask,
 	onCommit?: () => void,
 ): void {

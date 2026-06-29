@@ -568,9 +568,10 @@ export class OperonIndexer {
 		for (const operonId of affectedOperonIds) {
 			this.reconcileOperonId(operonId);
 		}
-		this.applySecondaryDeltas(beforeById, affectedOperonIds);
+		const deltas = this.applySecondaryDeltas(beforeById, affectedOperonIds);
 		this.generation += 1;
 		await this.persistIndex({ perfContext: { source: 'file-rename' } });
+		this.notifyTaskChanges(deltas);
 
 		// Notify views immediately so filter/editor show updated path
 		this.onIndexUpdated?.();

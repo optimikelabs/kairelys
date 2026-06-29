@@ -45,7 +45,7 @@ import { asyncHandler, runAsyncAction } from '../core/async-action';
 import { closeFloatingPanelsForRoot } from './field-pickers/common';
 import { closeIconOnlyChipPreviewsForRoot } from './icon-only-chip-preview';
 import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
-import { buildTaskWikilinkOverlaySettingsSignature } from './task-file-overlay-chips';
+import { buildTaskWikilinkOverlaySettingsSignature } from './task-wikilink-overlay-chips';
 import { isSpecialDynamicFilterSet } from '../core/dynamic-file-task-filter';
 import { getLocationPlaceIndex } from '../core/location-source-resolver';
 import type { InlineRepeatCompletionMode } from '../storage/repeat-series-store';
@@ -267,7 +267,7 @@ export function renderFilterSurface(
     const searchSelectionEnd = activeInput?.selectionEnd ?? null;
 
     const includeLocationIndexSignature = shouldResolveLocationCompactChips(deps.settings, deps.settings.filterTaskCompactChips)
-        || shouldResolveLocationCompactChips(deps.settings, deps.settings.overlayTaskCompactChips);
+        || shouldResolveLocationCompactChips(deps.settings, deps.settings.taskWikilinkOverlayCompactChips);
     const filterActionSettingsSignature = JSON.stringify([
         deps.settings.filterTaskShowPlayAction,
         deps.settings.filterTaskShowPinAction,

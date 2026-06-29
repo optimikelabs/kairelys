@@ -65,7 +65,7 @@ import {
 
 export const CURRENT_SETTINGS_VERSION = 100;
 export const CURRENT_TASK_STATS_BACKFILL_VERSION = 2;
-export const SUPPORTED_LANGUAGE_OPTIONS = ['auto', 'en', 'tr', 'de', 'fr', 'es', 'zh-CN', 'zh-TW'] as const;
+export const SUPPORTED_LANGUAGE_OPTIONS = ['auto', 'en', 'tr', 'de', 'fr', 'es', 'zh-CN', 'zh-TW', 'ja'] as const;
 export type OperonLanguage = typeof SUPPORTED_LANGUAGE_OPTIONS[number];
 export const DEFAULT_CHILD_TASK_INHERITANCE_FIELDS = ['status', 'priority', 'taskIcon', 'taskColor'] as const;
 export const CHILD_TASK_INHERITANCE_TAGS_KEY = 'tags';
@@ -940,7 +940,7 @@ function buildDefaultTaskFinderCompactChipItems(): InlineTaskCompactChipItem[] {
 	];
 }
 
-function buildDefaultOverlayTaskCompactChipItems(): InlineTaskCompactChipItem[] {
+function buildDefaultTaskWikilinkOverlayCompactChipItems(): InlineTaskCompactChipItem[] {
 	return [
 		{ key: 'priority', visible: false, iconOnly: false },
 		{ key: 'status', visible: false, iconOnly: false },
@@ -1242,18 +1242,18 @@ export interface OperonSettings {
 	taskFinderRecentModifiedDays: number;
 	/** Number of Task Finder result rows visible before the list scrolls. */
 	taskFinderVisibleResultCount: number;
-	/** Ordered, user-customizable compact chips used by file task overlay mode. */
-	overlayTaskCompactChips: InlineTaskCompactChipItem[];
-	/** Whether file task overlay rows show the right-side timer action when the task is actionable. */
-	overlayTaskShowPlayAction: boolean;
-	/** Whether file task overlay rows show the right-side pin action when the task is actionable. */
-	overlayTaskShowPinAction: boolean;
-	/** Whether file task overlay rows show the note indicator when the task has a note. */
-	overlayTaskShowNoteAction: boolean;
-	/** Whether file task overlay rows show the right-side add subtask action. */
-	overlayTaskShowSubtaskAction: boolean;
-	/** Whether file task overlay rows show the plain checkbox editor action. */
-	overlayTaskShowPlainCheckboxAction: boolean;
+	/** Ordered, user-customizable compact chips used by Task Wikilink Overlay mode. */
+	taskWikilinkOverlayCompactChips: InlineTaskCompactChipItem[];
+	/** Whether Task Wikilink Overlay rows show the right-side timer action when the task is actionable. */
+	taskWikilinkOverlayShowPlayAction: boolean;
+	/** Whether Task Wikilink Overlay rows show the right-side pin action when the task is actionable. */
+	taskWikilinkOverlayShowPinAction: boolean;
+	/** Whether Task Wikilink Overlay rows show the note indicator when the task has a note. */
+	taskWikilinkOverlayShowNoteAction: boolean;
+	/** Whether Task Wikilink Overlay rows show the right-side add subtask action. */
+	taskWikilinkOverlayShowSubtaskAction: boolean;
+	/** Whether Task Wikilink Overlay rows show the plain checkbox editor action. */
+	taskWikilinkOverlayShowPlainCheckboxAction: boolean;
 	/** Whether the compact inline row shows the right-side timer action when the task is actionable. */
 	inlineTaskShowPlayAction: boolean;
 	/** Whether the compact inline row shows the right-side pin action when the task is actionable. */
@@ -1681,12 +1681,12 @@ export const DEFAULT_SETTINGS: OperonSettings = {
 	taskFinderShowRecentModifiedOnOpen: true,
 	taskFinderRecentModifiedDays: 3,
 	taskFinderVisibleResultCount: 5,
-	overlayTaskCompactChips: buildDefaultOverlayTaskCompactChipItems(),
-	overlayTaskShowPlayAction: false,
-	overlayTaskShowPinAction: false,
-	overlayTaskShowNoteAction: true,
-	overlayTaskShowSubtaskAction: false,
-	overlayTaskShowPlainCheckboxAction: true,
+	taskWikilinkOverlayCompactChips: buildDefaultTaskWikilinkOverlayCompactChipItems(),
+	taskWikilinkOverlayShowPlayAction: false,
+	taskWikilinkOverlayShowPinAction: false,
+	taskWikilinkOverlayShowNoteAction: true,
+	taskWikilinkOverlayShowSubtaskAction: false,
+	taskWikilinkOverlayShowPlainCheckboxAction: true,
 	inlineTaskShowPlayAction: true,
 	inlineTaskShowPinAction: false,
 	inlineTaskShowSubtaskAction: true,
@@ -3001,6 +3001,12 @@ function normalizeAllowedNumber(value: number, allowed: readonly number[], fallb
 	return allowed.includes(value) ? value : fallback;
 }
 
+function readAliasedBoolean(canonical: unknown, legacy: unknown, fallback: boolean): boolean {
+	if (typeof canonical === 'boolean') return canonical;
+	if (typeof legacy === 'boolean') return legacy;
+	return fallback;
+}
+
 function normalizeTaskStatsBackfillVersion(raw: unknown): number {
 	if (typeof raw !== 'number' || !Number.isFinite(raw)) {
 		return DEFAULT_SETTINGS.taskStatsBackfillVersion;
@@ -3338,22 +3344,35 @@ export function migrateSettings(raw: unknown): OperonSettings {
 		out.taskFinderSelectedProjectId = '';
 	}
 	out.taskFinderShortcuts = normalizeTaskFinderShortcuts(src.taskFinderShortcuts);
-	out.overlayTaskCompactChips = normalizeOverlayTaskCompactChips(src.overlayTaskCompactChips);
-	out.overlayTaskShowPlayAction = typeof src.overlayTaskShowPlayAction === 'boolean'
-		? src.overlayTaskShowPlayAction
-		: DEFAULT_SETTINGS.overlayTaskShowPlayAction;
-	out.overlayTaskShowPinAction = typeof src.overlayTaskShowPinAction === 'boolean'
-		? src.overlayTaskShowPinAction
-		: DEFAULT_SETTINGS.overlayTaskShowPinAction;
-	out.overlayTaskShowNoteAction = typeof src.overlayTaskShowNoteAction === 'boolean'
-		? src.overlayTaskShowNoteAction
-		: DEFAULT_SETTINGS.overlayTaskShowNoteAction;
-	out.overlayTaskShowSubtaskAction = typeof src.overlayTaskShowSubtaskAction === 'boolean'
-		? src.overlayTaskShowSubtaskAction
-		: DEFAULT_SETTINGS.overlayTaskShowSubtaskAction;
-	out.overlayTaskShowPlainCheckboxAction = typeof src.overlayTaskShowPlainCheckboxAction === 'boolean'
-		? src.overlayTaskShowPlainCheckboxAction
-		: DEFAULT_SETTINGS.overlayTaskShowPlainCheckboxAction;
+	const legacyTaskWikilinkOverlaySource = src;
+	const taskWikilinkOverlayCompactChipsSource = src.taskWikilinkOverlayCompactChips
+		?? legacyTaskWikilinkOverlaySource.overlayTaskCompactChips;
+	out.taskWikilinkOverlayCompactChips = normalizeTaskWikilinkOverlayCompactChips(taskWikilinkOverlayCompactChipsSource);
+	out.taskWikilinkOverlayShowPlayAction = readAliasedBoolean(
+		src.taskWikilinkOverlayShowPlayAction,
+		legacyTaskWikilinkOverlaySource.overlayTaskShowPlayAction,
+		DEFAULT_SETTINGS.taskWikilinkOverlayShowPlayAction,
+	);
+	out.taskWikilinkOverlayShowPinAction = readAliasedBoolean(
+		src.taskWikilinkOverlayShowPinAction,
+		legacyTaskWikilinkOverlaySource.overlayTaskShowPinAction,
+		DEFAULT_SETTINGS.taskWikilinkOverlayShowPinAction,
+	);
+	out.taskWikilinkOverlayShowNoteAction = readAliasedBoolean(
+		src.taskWikilinkOverlayShowNoteAction,
+		legacyTaskWikilinkOverlaySource.overlayTaskShowNoteAction,
+		DEFAULT_SETTINGS.taskWikilinkOverlayShowNoteAction,
+	);
+	out.taskWikilinkOverlayShowSubtaskAction = readAliasedBoolean(
+		src.taskWikilinkOverlayShowSubtaskAction,
+		legacyTaskWikilinkOverlaySource.overlayTaskShowSubtaskAction,
+		DEFAULT_SETTINGS.taskWikilinkOverlayShowSubtaskAction,
+	);
+	out.taskWikilinkOverlayShowPlainCheckboxAction = readAliasedBoolean(
+		src.taskWikilinkOverlayShowPlainCheckboxAction,
+		legacyTaskWikilinkOverlaySource.overlayTaskShowPlainCheckboxAction,
+		DEFAULT_SETTINGS.taskWikilinkOverlayShowPlainCheckboxAction,
+	);
 	out.inlineTaskShowPlayAction = typeof src.inlineTaskShowPlayAction === 'boolean'
 		? src.inlineTaskShowPlayAction
 		: DEFAULT_SETTINGS.inlineTaskShowPlayAction;
@@ -3772,7 +3791,11 @@ function normalizeSurfaceOrderingSettings(out: OperonSettings, src: Record<strin
 	out.inlineTaskCompactChips = normalizeInlineTaskCompactChips(src.inlineTaskCompactChips, out.keyMappings);
 	out.filterTaskCompactChips = normalizeFilterTaskCompactChips(src, out.keyMappings);
 	out.taskFinderCompactChips = normalizeTaskFinderCompactChips(src.taskFinderCompactChips, out.keyMappings);
-	out.overlayTaskCompactChips = normalizeOverlayTaskCompactChips(src.overlayTaskCompactChips, out.keyMappings);
+	const legacyTaskWikilinkOverlaySource = src;
+	out.taskWikilinkOverlayCompactChips = normalizeTaskWikilinkOverlayCompactChips(
+		src.taskWikilinkOverlayCompactChips ?? legacyTaskWikilinkOverlaySource.overlayTaskCompactChips,
+		out.keyMappings,
+	);
 }
 
 export function normalizeSettingsProjectSerialScopes(raw: unknown): ProjectSerialScope[] {
@@ -4075,8 +4098,8 @@ function normalizeTaskFinderShortcuts(raw: unknown): TaskFinderShortcutItem[] {
 	});
 }
 
-function normalizeOverlayTaskCompactChips(raw: unknown, keyMappings?: readonly KeyMapping[]): InlineTaskCompactChipItem[] {
-	const defaults = buildDefaultOverlayTaskCompactChipItems();
+function normalizeTaskWikilinkOverlayCompactChips(raw: unknown, keyMappings?: readonly KeyMapping[]): InlineTaskCompactChipItem[] {
+	const defaults = buildDefaultTaskWikilinkOverlayCompactChipItems();
 	return normalizeCompactChipItems(raw, defaults, keyMappings);
 }
 

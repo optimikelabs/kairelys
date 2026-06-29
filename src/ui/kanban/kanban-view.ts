@@ -71,6 +71,7 @@ import { bindOperonHoverTooltip } from '../operon-hover-tooltip';
 import { setAccessibleLabelWithoutTooltip } from '../accessibility-label';
 import { bindTaskTitleLinkPreview } from '../compact-chip-link-preview';
 import { renderTaskDescriptionWikilinks } from '../task-description-wikilinks';
+import { isTaskSourceOpenModifierClick } from '../task-source-open-modifier';
 import {
 	applyTaskSearchBoxShortcutCommand,
 	cloneTaskSearchBoxScopeState,
@@ -1297,6 +1298,13 @@ export class KanbanView extends ItemView {
 			const taskId = card?.dataset.operonTaskId;
 			if (!card || !taskId || !boardEl.contains(card)) return;
 			event.stopPropagation();
+			if (isTaskSourceOpenModifierClick(event) && this.callbacks.onOpenTaskSource) {
+				event.preventDefault();
+				void Promise.resolve(this.callbacks.onOpenTaskSource(taskId)).catch(error => {
+					console.error('Operon: failed to open Kanban task source', error);
+				});
+				return;
+			}
 			void this.callbacks.onItemAction?.(taskId, 'openEditor');
 		});
 

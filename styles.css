@@ -16661,8 +16661,16 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-filter-
 
 .cm-content .operon-task-wikilink-live-mark:hover,
 .cm-content .operon-task-wikilink-live-mark:hover *,
+.cm-content .operon-task-wikilink-label:hover,
+.cm-content .operon-task-wikilink-label:focus-visible,
+.cm-content .operon-task-wikilink-label:hover *,
+.cm-content .operon-task-wikilink-label:focus-visible *,
 .markdown-source-view.mod-cm6 .operon-task-wikilink-live-mark:hover,
-.markdown-source-view.mod-cm6 .operon-task-wikilink-live-mark:hover * {
+.markdown-source-view.mod-cm6 .operon-task-wikilink-live-mark:hover *,
+.markdown-source-view.mod-cm6 .operon-task-wikilink-label:hover,
+.markdown-source-view.mod-cm6 .operon-task-wikilink-label:focus-visible,
+.markdown-source-view.mod-cm6 .operon-task-wikilink-label:hover *,
+.markdown-source-view.mod-cm6 .operon-task-wikilink-label:focus-visible * {
 	color: var(--operon-task-wikilink-hover, var(--interactive-accent));
 }
 
@@ -16697,13 +16705,17 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-filter-
 }
 
 .operon-task-wikilink-reading .operon-task-wikilink-anchor.operon-task-done,
-.cm-content .operon-task-wikilink-live-mark.operon-task-done {
+.cm-content .operon-task-wikilink-live-mark.operon-task-done,
+.cm-content .operon-task-wikilink-label.operon-task-done,
+.markdown-source-view.mod-cm6 .operon-task-wikilink-label.operon-task-done {
 	text-decoration: line-through;
 	opacity: 0.6;
 }
 
 .operon-task-wikilink-reading .operon-task-wikilink-anchor.operon-task-cancelled,
-.cm-content .operon-task-wikilink-live-mark.operon-task-cancelled {
+.cm-content .operon-task-wikilink-live-mark.operon-task-cancelled,
+.cm-content .operon-task-wikilink-label.operon-task-cancelled,
+.markdown-source-view.mod-cm6 .operon-task-wikilink-label.operon-task-cancelled {
 	text-decoration: line-through;
 	opacity: 0.4;
 }
@@ -17464,20 +17476,29 @@ body .operon-calendar-root.is-sidebar-mode .operon-calendar-sidebar .operon-cale
 }
 
 .operon-calendar-sidebar-task-pool-row {
+	--operon-calendar-sidebar-task-pool-row-accent: var(--operon-calendar-accent, var(--interactive-accent));
 	position: relative;
 	display: flex;
 	align-items: center;
 	min-width: 0;
 	padding: 7px 9px;
 	border-radius: 8px;
-	border: 1px solid color-mix(in srgb, var(--operon-calendar-accent, var(--background-modifier-border)) 20%, var(--background-modifier-border));
-	background: color-mix(in srgb, var(--operon-calendar-accent, transparent) 8%, var(--background-primary));
+	border: 1px solid color-mix(in srgb, var(--background-modifier-border) 84%, transparent);
+	background: transparent;
 	cursor: grab;
+	transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
 
 .operon-calendar-sidebar-task-pool-row.is-dragging {
 	cursor: grabbing;
 	opacity: 0.82;
+}
+
+.operon-calendar-sidebar-task-pool-row:hover,
+.operon-calendar-sidebar-task-pool-row:focus-visible,
+.operon-calendar-sidebar-task-pool-row:focus-within {
+	border-color: color-mix(in srgb, var(--operon-calendar-sidebar-task-pool-row-accent) 78%, var(--background-modifier-border));
+	background: color-mix(in srgb, var(--operon-calendar-sidebar-task-pool-row-accent) 8%, transparent);
 }
 
 .operon-calendar-sidebar-task-pool-row:focus-visible {
@@ -17509,11 +17530,16 @@ body .operon-calendar-root.is-sidebar-mode .operon-calendar-sidebar .operon-cale
 
 .operon-calendar-sidebar-task-pool-status {
 	margin: 0;
-	width: 22px;
-	height: 22px;
-	min-width: 22px;
-	border-radius: 7px;
-	font-size: 15px;
+	width: 28px;
+	height: 28px;
+	min-width: 28px;
+	border-radius: 6px;
+	font-size: 16px;
+}
+
+.operon-calendar-sidebar-task-pool-status svg {
+	width: 16px;
+	height: 16px;
 }
 
 .operon-calendar-sidebar-task-pool-row-title {
@@ -21579,19 +21605,22 @@ body.operon-calendar-touch-drag-active {
 }
 
 .operon-calendar-sidebar-task-pool-status.operon-calendar-status-button.is-compact {
-	width: 22px;
-	height: 22px;
-	min-width: 22px;
+	width: 28px;
+	height: 28px;
+	min-width: 28px;
+	border-width: 1px;
 	border-color: color-mix(in srgb, currentColor 42%, var(--background-modifier-border));
-	border-radius: 7px;
+	border-radius: 6px;
 	background: transparent;
-	font-size: 15px;
+	box-sizing: border-box;
+	font-size: 16px;
 }
 
 .operon-calendar-sidebar-task-pool-status.operon-calendar-status-button.is-compact:hover,
 .operon-calendar-sidebar-task-pool-status.operon-calendar-status-button.is-compact:focus-visible {
 	background: color-mix(in srgb, currentColor 10%, transparent);
 	border-color: currentColor;
+	box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 18%, transparent);
 	outline: none;
 }
 

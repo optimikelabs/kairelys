@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Validation
 
+## [1.8.0] - 2026-06-29
+
+Inline and file-task wikilinks now share the same overlay controls, Task Finder can insert task links directly, source-opening behaves more like a browser across planning views, and Japanese localization opens Operon to another language workflow.
+
+### New
+- Added an **Add Task Wikilink Overlay** command that opens Task Finder and inserts a task link at the cursor, using normal file-task links for file tasks and `[[File#-operonId]]` links for inline tasks.
+- Extended **Task Wikilink Overlay** to render inline task links written as `[[File#-operonId]]`, including embedded `![[File#-operonId]]` links, so Task Finder-inserted inline links can use the same overlay controls as file-task links.
+- Added browser-style modifier-click source opening for materialized tasks in **Calendar**, **Kanban**, and **Pinned Tasks**: Cmd-click on macOS or Ctrl-click on Windows/Linux opens the task source in a new Obsidian tab while normal clicks still open Task Editor.
+- Added **Japanese localization**, including Settings language selection, translated UI strings, Japanese date parsing, repeat summaries, calendar wording, task editing labels, and filter surfaces.
+
+### Improved
+- Improved **Calendar Task Pool** task rows with neutral default cards and task-color hover emphasis, reducing visual noise while keeping priority context available on interaction.
+- Improved **Calendar Task Pool** status icons with pinned-style spacing, making the icon border feel less cramped while keeping the compact sidebar layout.
+
+### Changed
+- Renamed **File Task Overlay** settings to **Task Wikilink Overlay**, while migrating existing overlay chip and action preferences to the new setting names.
+
+### Validation
+- Local validation passed `npm run check:local`, including strict linting, production build, release guard, and 1016/1016 Phase 5 regression checks.
+
 ## [1.7.1] - 2026-06-28
 
 This release smooths a few busy edges after 1.7.0. Template variables are more useful for repeatable task creation, planning views have more room on desktop, docs auto-update timing is clearer, and inline task rows recover more cleanly after edits.

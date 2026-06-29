@@ -37,7 +37,7 @@ import type { ProjectSerialDisplay } from '../core/project-serials';
 import { closeFloatingPanelsForRoot } from './field-pickers/common';
 import { closeIconOnlyChipPreviewsForRoot } from './icon-only-chip-preview';
 import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
-import { buildTaskWikilinkOverlaySettingsSignature } from './task-file-overlay-chips';
+import { buildTaskWikilinkOverlaySettingsSignature } from './task-wikilink-overlay-chips';
 import { getNormalFilterSets } from '../core/dynamic-file-task-filter';
 import { getLocationPlaceIndex } from '../core/location-source-resolver';
 import { enginePerfLog, enginePerfNow } from '../core/engine-perf';
@@ -963,7 +963,7 @@ export class FilterView extends ItemView {
 		]);
 		const overlaySettingsSignature = buildTaskWikilinkOverlaySettingsSignature(this.settings);
 		const includeLocationIndexSignature = shouldResolveLocationCompactChips(this.settings, this.settings.filterTaskCompactChips)
-			|| shouldResolveLocationCompactChips(this.settings, this.settings.overlayTaskCompactChips);
+			|| shouldResolveLocationCompactChips(this.settings, this.settings.taskWikilinkOverlayCompactChips);
 		const locationIndexSignature = includeLocationIndexSignature
 			? getLocationPlaceIndex(this.app, this.settings).getSignature()
 			: '';

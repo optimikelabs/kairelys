@@ -12,11 +12,13 @@ import { findStatusDef } from '../types/pipeline';
 import { OperonSettings, resolveTaskDisplayIcon } from '../types/settings';
 import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
 import { bindTaskContextualHoverMenu } from './contextual-hover-menu';
+import { isTaskSourceOpenModifierClick } from './task-source-open-modifier';
 
 export const PINNED_TASKS_SIDEBAR_VIEW_TYPE = 'operon-pinned-tasks-sidebar';
 
 export interface PinnedTasksSidebarCallbacks {
 	openTaskEditor: (operonId: string) => void;
+	openTaskSource?: (operonId: string) => void | Promise<void>;
 	cycleStatus: (operonId: string) => void | Promise<void>;
 	onContextualAction?: ContextualMenuActionHandler;
 	hasSubtasks?: (taskId: string) => boolean;
@@ -102,7 +104,15 @@ export class PinnedTasksSidebarView extends ItemView {
 
 	private renderTaskRow(container: HTMLElement, task: IndexedTask): void {
 		const row = container.createDiv('operon-pinned-sidebar-row');
-		row.addEventListener('click', () => {
+		row.addEventListener('click', (event) => {
+			if (isTaskSourceOpenModifierClick(event) && this.callbacks.openTaskSource) {
+				event.preventDefault();
+				event.stopPropagation();
+				void Promise.resolve(this.callbacks.openTaskSource(task.operonId)).catch(error => {
+					console.error('Operon: failed to open pinned sidebar task source', error);
+				});
+				return;
+			}
 			this.callbacks.openTaskEditor(task.operonId);
 		});
 

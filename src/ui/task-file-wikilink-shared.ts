@@ -10,7 +10,9 @@ import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
 import { computePlainCheckboxProgressIndicator, PlainCheckboxProgressIndicator } from './plain-checkbox-progress';
 import { bindPlainCheckboxPopoverTrigger } from './plain-checkbox-popover';
 
-export interface ResolvedTaskFileLink {
+export type TaskWikilinkOverlayTargetKind = 'file' | 'inline';
+
+export interface ResolvedTaskWikilinkOverlayLink {
 	task: IndexedTask;
 	resolvedFile: TFile;
 	sourcePath: string;
@@ -18,7 +20,10 @@ export interface ResolvedTaskFileLink {
 	alias: string | null;
 	path: string;
 	subpath: string;
+	targetKind: TaskWikilinkOverlayTargetKind;
 }
+
+export type ResolvedTaskFileLink = ResolvedTaskWikilinkOverlayLink;
 
 export interface TaskFileLinkVisuals {
 	hoverColor: string;
@@ -28,6 +33,11 @@ export interface TaskFileLinkVisuals {
 }
 
 export type FileTaskLookup = (filePath: string) => IndexedTask | undefined;
+export interface TaskWikilinkOverlayLookup {
+	getFileTaskByPath: FileTaskLookup;
+	getAllTasks: () => readonly IndexedTask[];
+	hasDuplicateOperonIdConflict?: (operonId: string) => boolean;
+}
 export type TaskFileLinkLabelState = 'default' | 'done' | 'cancelled';
 
 export type TaskFileLinkProgressIndicator =
@@ -70,33 +80,71 @@ export function resolveTaskFileLink(
 	getFileTaskByPath: FileTaskLookup,
 	alias: string | null = null,
 ): ResolvedTaskFileLink | null {
+	return resolveTaskWikilinkOverlayLink(app, sourcePath, rawLinktext, {
+		getFileTaskByPath,
+		getAllTasks: () => [],
+	}, alias);
+}
+
+export function resolveTaskWikilinkOverlayLink(
+	app: App,
+	sourcePath: string,
+	rawLinktext: string,
+	lookups: TaskWikilinkOverlayLookup,
+	alias: string | null = null,
+): ResolvedTaskWikilinkOverlayLink | null {
 	const trimmed = rawLinktext.trim();
 	if (!trimmed) return null;
 
 	const { path, subpath } = parseLinktext(trimmed);
-	if (!path || subpath) return null;
+	if (!path) return null;
 
 	const resolvedFile = app.metadataCache.getFirstLinkpathDest(path, sourcePath);
-	const resolvedTarget = resolveTaskFileLinkTarget(resolvedFile, getFileTaskByPath);
+	if (subpath) {
+		const operonId = parseInlineTaskWikilinkSubpath(subpath);
+		if (!operonId) return null;
+		if (lookups.hasDuplicateOperonIdConflict?.(operonId)) return null;
+		const allTasks = lookups.getAllTasks();
+		if (!(resolvedFile instanceof TFile)) {
+			const fallbackFile = resolveTaskFileLinkFileFromVault(app, path);
+			const fallbackTarget = fallbackFile instanceof TFile
+				? resolveInlineTaskWikilinkTarget(fallbackFile, operonId, allTasks)
+				: null;
+			const staleTarget = fallbackTarget ?? resolveUniqueInlineTaskWikilinkTargetById(app, operonId, allTasks);
+			return staleTarget
+				? buildResolvedTaskWikilinkOverlayLink(staleTarget, sourcePath, trimmed, alias, path, subpath, 'inline')
+				: null;
+		}
+		const resolvedTarget = resolveInlineTaskWikilinkTarget(resolvedFile, operonId, allTasks);
+		const staleTarget = resolvedTarget ?? resolveUniqueInlineTaskWikilinkTargetById(app, operonId, allTasks);
+		return resolvedTarget
+			? buildResolvedTaskWikilinkOverlayLink(resolvedTarget, sourcePath, trimmed, alias, path, subpath, 'inline')
+			: staleTarget
+				? buildResolvedTaskWikilinkOverlayLink(staleTarget, sourcePath, trimmed, alias, path, subpath, 'inline')
+				: null;
+	}
+
+	const resolvedTarget = resolveTaskFileLinkTarget(resolvedFile, lookups.getFileTaskByPath);
 	if (resolvedTarget) {
-		return buildResolvedTaskFileLink(resolvedTarget, sourcePath, trimmed, alias, path, subpath);
+		return buildResolvedTaskWikilinkOverlayLink(resolvedTarget, sourcePath, trimmed, alias, path, subpath, 'file');
 	}
 	if (resolvedFile instanceof TFile) return null;
 
-	const fallbackTarget = resolveTaskFileLinkTargetFromVault(app, path, getFileTaskByPath);
+	const fallbackTarget = resolveTaskFileLinkTargetFromVault(app, path, lookups.getFileTaskByPath);
 	if (!fallbackTarget) return null;
 
-	return buildResolvedTaskFileLink(fallbackTarget, sourcePath, trimmed, alias, path, subpath);
+	return buildResolvedTaskWikilinkOverlayLink(fallbackTarget, sourcePath, trimmed, alias, path, subpath, 'file');
 }
 
-function buildResolvedTaskFileLink(
+function buildResolvedTaskWikilinkOverlayLink(
 	target: { resolvedFile: TFile; task: IndexedTask },
 	sourcePath: string,
 	rawLinktext: string,
 	alias: string | null,
 	path: string,
 	subpath: string,
-): ResolvedTaskFileLink {
+	targetKind: TaskWikilinkOverlayTargetKind,
+): ResolvedTaskWikilinkOverlayLink {
 	return {
 		task: target.task,
 		resolvedFile: target.resolvedFile,
@@ -105,6 +153,7 @@ function buildResolvedTaskFileLink(
 		alias,
 		path,
 		subpath,
+		targetKind,
 	};
 }
 
@@ -124,6 +173,60 @@ function resolveTaskFileLinkTargetFromVault(
 ): { resolvedFile: TFile; task: IndexedTask } | null {
 	const resolvedFile = resolveTaskFileLinkFileFromVault(app, linkPath);
 	return resolveTaskFileLinkTarget(resolvedFile, getFileTaskByPath);
+}
+
+function resolveInlineTaskWikilinkTarget(
+	resolvedFile: TFile,
+	operonId: string,
+	allTasks: readonly IndexedTask[],
+): { resolvedFile: TFile; task: IndexedTask } | null {
+	const normalizedId = operonId.trim();
+	if (!normalizedId) return null;
+
+	const matches = allTasks.filter(task => task.operonId === normalizedId);
+	if (matches.length !== 1) return null;
+
+	const task = matches[0];
+	if (!task || task.primary.format !== 'inline') return null;
+	if (normalizeTaskFilePathForComparison(task.primary.filePath) !== normalizeTaskFilePathForComparison(resolvedFile.path)) {
+		return null;
+	}
+
+	return { resolvedFile, task };
+}
+
+function resolveUniqueInlineTaskWikilinkTargetById(
+	app: App,
+	operonId: string,
+	allTasks: readonly IndexedTask[],
+): { resolvedFile: TFile; task: IndexedTask } | null {
+	const normalizedId = operonId.trim();
+	if (!normalizedId) return null;
+
+	const matches = allTasks.filter(task =>
+		task.operonId === normalizedId
+		&& task.primary.format === 'inline',
+	);
+	if (matches.length !== 1) return null;
+
+	const task = matches[0];
+	if (!task) return null;
+	const resolvedFile = app.vault.getAbstractFileByPath(task.primary.filePath);
+	return resolvedFile instanceof TFile ? { resolvedFile, task } : null;
+}
+
+function parseInlineTaskWikilinkSubpath(subpath: string): string | null {
+	const normalized = normalizeTaskWikilinkSubpath(subpath);
+	if (!normalized.startsWith('-')) return null;
+	const operonId = normalized.slice(1).trim();
+	return operonId || null;
+}
+
+function normalizeTaskWikilinkSubpath(subpath: string): string {
+	return subpath
+		.trim()
+		.replace(/^#/u, '')
+		.trim();
 }
 
 function resolveTaskFileLinkFileFromVault(app: App, linkPath: string): TFile | null {

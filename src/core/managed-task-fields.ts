@@ -39,7 +39,7 @@ interface CustomFieldUsageSurfaceOptions {
 	inlineTaskCompactChips?: readonly InlineTaskCompactChipItem[];
 	taskFinderCompactChips?: readonly InlineTaskCompactChipItem[];
 	filterTaskCompactChips?: readonly InlineTaskCompactChipItem[];
-	overlayTaskCompactChips?: readonly InlineTaskCompactChipItem[];
+	taskWikilinkOverlayCompactChips?: readonly InlineTaskCompactChipItem[];
 }
 
 export function getManagedCustomKeyMapping(
@@ -311,7 +311,7 @@ function getActiveCustomFieldSurfaceKeys(
 			surfaces?.inlineTaskCompactChips,
 			surfaces?.taskFinderCompactChips,
 			surfaces?.filterTaskCompactChips,
-			surfaces?.overlayTaskCompactChips,
+			surfaces?.taskWikilinkOverlayCompactChips,
 		],
 		mapping.showInChips === true,
 	)) activeSurfaces.push('chips');

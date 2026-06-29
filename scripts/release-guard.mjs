@@ -181,6 +181,7 @@ function compareLocaleFiles() {
 		Spanish: flattenStringLeaves(readJson('i18n/locales/es.json')),
 		'Chinese Simplified': flattenStringLeaves(readJson('i18n/locales/zh-CN.json')),
 		'Chinese Traditional': flattenStringLeaves(readJson('i18n/locales/zh-TW.json')),
+		Japanese: flattenStringLeaves(readJson('i18n/locales/ja.json')),
 	};
 
 	for (const [label, locale] of Object.entries(translations)) {
