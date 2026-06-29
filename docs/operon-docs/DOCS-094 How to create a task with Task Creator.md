@@ -25,7 +25,7 @@ The [[DOCS-020 Task Creator|Task Creator]] is one of the surfaces you will use m
 
 ## Open the creator and pick a shape
 
-Run **[[DOCS-084 Create New Operon Task|Create New Operon Task]]** to open the dialog, and choose whether the task is an [[DOCS-011 Inline tasks|inline task]] or a [[DOCS-013 File tasks|file task]]. You can change everything else as you go.
+Run [[DOCS-084 Create New Operon Task|Create New Operon Task]] to open the dialog, and choose whether the task is an [[DOCS-011 Inline tasks|inline task]] or a [[DOCS-013 File tasks|file task]]. You can change everything else as you go.
 
 If you usually create file tasks, set **Default to File Task in Task Creator** in **Settings → Operon → Tasks → File Tasks → New File Task Creation Defaults**. Then this dialog opens with File selected instead of Inline. You can also set **Default file task template** there, so your usual template is already selected when the creator is in File mode.
 

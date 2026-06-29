@@ -11,7 +11,7 @@ tags:
   - settings
   - chips
   - configure
-Updated: 2026-06-25T16:47:21
+Updated: 2026-06-28T18:10:47
 ---
 
 # Task chips: display and behavior
@@ -44,7 +44,7 @@ Chips follow a task across several surfaces, and each surface has its **own** ch
 - **Inline Task Chips**: the compact chip row on inline tasks in Live Preview and reading view.
 - **Filter Task Chips**: the chips on rows in the [[DOCS-025 Filter View|Filter View]].
 - **Task Finder Chips**: the chips in Task Finder results.
-- **File Task Overlay Chips**: the chips on file task overlays.
+- **Task Wikilink Overlay Chips**: the chips on a task wikilink overlay, which now decorates both file-task links and inline links written as `[[File#-operonId]]`. See [[DOCS-103 Task Wikilink Overlay|Task Wikilink Overlay]].
 
 Because each is independent, you tune the chip row per place rather than once for everything.
 
@@ -111,7 +111,7 @@ A custom key shown as a chip inherits the behavior of its type. A custom **list*
 
 ## Settings
 
-Chip configuration lives in **Settings → Operon → Interface → Task Chips**, with a separate page for each surface: **Inline Task Chips**, **Filter Task Chips**, **Task Finder Chips**, and **File Task Overlay Chips**. On each you set which chips show, their order, and which are Icon Only. The location chip's rendered map preview is configured in **Settings → Operon → Interface → Location Map**.
+Chip configuration lives in **Settings → Operon → Interface → Task Chips**, with a separate page for each surface: **Inline Task Chips**, **Filter Task Chips**, **Task Finder Chips**, and **Task Wikilink Overlay Chips**. On each you set which chips show, their order, and which are Icon Only. The location chip's rendered map preview is configured in **Settings → Operon → Interface → Location Map**.
 
 ## FAQ
 

@@ -12,7 +12,7 @@ tags:
   - migrate
   - tasknotes
   - howto
-Updated: 2026-06-25T16:47:21
+Updated: 2026-06-28T18:10:47
 ---
 
 # How to migrate from TaskNotes
@@ -91,7 +91,7 @@ Your former TaskNotes tasks now behave like any Operon file task. They appear in
 
 You can keep TaskNotes installed while you move, but the two systems overlap in places, so a few things can clash. These are why running both is best treated as a temporary bridge rather than a permanent setup. The safe pattern is to let one system own status and time, map only flat properties, and convert each note once.
 
-- **Two file-task overlays.** Operon draws its own File Task Overlay on a note it treats as a file task. If another plugin also decorates the same note, both overlays can appear on it. Let one system manage a given note.
+- **Two plugins decorating one note.** Operon treats the note as its own file task and manages its fields and status. If another plugin also manages the same note, their decorations and writes can collide. Let one system manage a given note.
 - **Different status systems.** Operon moves tasks through a pipeline of statuses, like `Project.InProgress`, which is not the same set another plugin uses. Do not map Operon's `status` onto a status property another plugin also writes, or the two will overwrite each other. Keep status owned by one system. See [[DOCS-037 Pipelines and statuses|Pipelines and statuses]].
 - **Time is in seconds.** Operon stores `estimate` and `duration` in seconds, not minutes. A tool that uses a different unit would misread the same raw value, so do not share a single duration or estimate property between systems. See [[DOCS-034 Time tracking|Time tracking]].
 - **Flat properties only.** Operon's fields use Obsidian's own property types: text, number, date, date and time, list, and checkbox. A nested or structured property has no Operon field type, so map only flat properties and move nested data into separate flat keys. See [[DOCS-040 Custom keys|Custom keys]].

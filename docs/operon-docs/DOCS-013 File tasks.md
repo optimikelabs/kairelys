@@ -10,7 +10,7 @@ tags:
   - operon
   - taskmodel
   - filetask
-Updated: 2026-06-25T16:47:21
+Updated: 2026-06-28T18:10:47
 ---
 
 # File tasks
@@ -59,7 +59,7 @@ After:
 [[Draft migration guide]]
 ```
 
-The note becomes easier to scan, and the task gets room to grow.
+The note becomes easier to scan, and the task gets room to grow. A wikilink to a file task is not just a plain link: Operon decorates it with the task's chips and actions as a [[DOCS-103 Task Wikilink Overlay|Task Wikilink Overlay]], and the same overlay can decorate a link to an inline task written as `[[File#-operonId]]`.
 
 ## A lifecycle, not a commitment
 

@@ -10,7 +10,7 @@ tags:
   - operon
   - calendar
   - plan
-Updated: 2026-06-27T19:46:16
+Updated: 2026-06-28T18:48:40
 ---
 
 # Calendar overview
@@ -37,6 +37,10 @@ A task with only a date shows as an all-day item. A task with a start and end ti
 ## Plan by dragging
 
 You can schedule and reschedule by dragging tasks on the Calendar instead of editing fields by hand. Drop a task on a day to schedule it, or drag a block to move or resize its time. This is the fastest way to shape a week and to spot overload before it happens.
+
+## Open a task
+
+Click a task on the Calendar to open it in the [[DOCS-021 Task Editor|Task Editor]]. Hold **Cmd** (macOS) or **Ctrl** (Windows and Linux) and click to open the task's source in a new Obsidian tab instead: the note for a file task, or the exact line for an inline task, the same convention as opening a link in a new browser tab. This works on materialized tasks; a recurring occurrence that has not been created yet has no source line to open.
 
 ## Move by keyboard
 

@@ -10,7 +10,7 @@ tags:
   - operon
   - taskmodel
   - checkboxes
-Updated: 2026-06-25T16:47:21
+Updated: 2026-06-28T18:10:47
 ---
 
 # Plain checkbox lists
@@ -76,7 +76,7 @@ The checkbox popover is reachable from several surfaces, so you rarely have to l
 
 - The **Checkboxes** action in the contextual menu.
 - The **Open checkboxes** chip in [[DOCS-025 Filter View|filter]] rows, which also shows checklist progress.
-- File task overlays, via the **Open checkboxes** action.
+- [[DOCS-103 Task Wikilink Overlay|Task Wikilink Overlays]], via the **Open checkboxes** action.
 - The **Show checkboxes** view in the [[DOCS-021 Task Editor|Task Editor]].
 
 ## Progress rollup

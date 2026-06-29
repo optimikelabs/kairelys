@@ -10,7 +10,7 @@ tags:
   - operon
   - kanban
   - plan
-Updated: 2026-06-27T19:46:16
+Updated: 2026-06-28T18:48:40
 ---
 
 # Kanban overview
@@ -37,6 +37,10 @@ Dragging a card to another column is a real change, not a visual one. The card's
 
 When the board has **swimlanes**, dragging a card into a different lane edits the field that lane is grouped by, the same way a column move edits status. Drop a card in another priority lane and its priority changes; drop it in another assignee's lane and its assignee changes. A single drag can change both at once, the column for status and the lane for that field. See [[DOCS-074 Kanban swimlanes|Kanban swimlanes]].
 
+## Open a card
+
+Click a card to open it in the [[DOCS-021 Task Editor|Task Editor]]. Hold **Cmd** (macOS) or **Ctrl** (Windows and Linux) and click to open the task's source in a new Obsidian tab instead: the note for a file task, or the exact line for an inline task, the same convention as opening a link in a new browser tab. This works on materialized tasks; a recurring occurrence that has not been created yet has no source line to open.
+
 ## When the Kanban fits
 
 Reach for it when work moves through clear stages:
@@ -55,7 +59,7 @@ Within a column you can arrange cards in a deliberate order rather than an autom
 
 ## Searching the board
 
-The Kanban has a search box that narrows the board to the cards you care about. Type at least two letters and it keeps only the cards whose tasks match, using the **same matching as [[DOCS-027 Task Finder|Task Finder]]**: it looks across each task's words, fields, and the names of its parent, sub-tasks, and related tasks, every typed word has to match, and words match from the start.
+The Kanban has a search box that narrows the board to the cards you care about. Type at least two letters and it keeps only the cards whose tasks match, using the **same matching as** [[DOCS-027 Task Finder|Task Finder]]: it looks across each task's words, fields, and the names of its parent, sub-tasks, and related tasks, every typed word has to match, and words match from the start.
 
 ### Scopes, the same as Task Finder
 

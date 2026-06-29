@@ -21,8 +21,8 @@ The first task should prove the system, not test every feature. Operon can creat
 
 There are two good first paths:
 
-- Use **[[DOCS-084 Create New Operon Task|Create New Operon Task]]** when you want a guided form before the task is written.
-- Use **[[DOCS-085 Create or edit inline task|Create or edit inline task]]** when you are already inside a note and want the current line to become a task.
+- Use [[DOCS-084 Create New Operon Task|Create New Operon Task]] when you want a guided form before the task is written.
+- Use [[DOCS-085 Create or edit inline task|Create or edit inline task]] when you are already inside a note and want the current line to become a task.
 
 Both create real Operon tasks. The only difference is the moment you are in.
 

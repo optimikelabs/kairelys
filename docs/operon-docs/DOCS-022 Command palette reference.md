@@ -9,7 +9,7 @@ Color: "#475569"
 tags:
   - operon
   - commands
-Updated: 2026-06-25T16:47:21
+Updated: 2026-06-28T18:10:47
 ---
 
 # Command palette reference
@@ -26,25 +26,26 @@ This page is the index. The action commands link to a dedicated page with their 
 
 ## Create tasks
 
-- **[[DOCS-084 Create New Operon Task|Create New Operon Task]]**: opens the full [[DOCS-020 Task Creator|Task Creator]]. The safest starting point when you want Operon to guide you through the fields.
-- **[[DOCS-085 Create or edit inline task|Create or edit inline task]]**: context-aware. On an empty line it creates a task; on plain text or a checkbox it converts or upgrades the line; on an existing task it opens the [[DOCS-021 Task Editor|Task Editor]].
-- **[[DOCS-086 Create file task|Create file task]]**: creates a task that lives as its own note, optionally seeded from selected text or an inline task. See [[DOCS-013 File tasks|File tasks]].
+- [[DOCS-084 Create New Operon Task|Create New Operon Task]]: opens the full [[DOCS-020 Task Creator|Task Creator]]. The safest starting point when you want Operon to guide you through the fields.
+- [[DOCS-085 Create or edit inline task|Create or edit inline task]]: context-aware. On an empty line it creates a task; on plain text or a checkbox it converts or upgrades the line; on an existing task it opens the [[DOCS-021 Task Editor|Task Editor]].
+- [[DOCS-086 Create file task|Create file task]]: creates a task that lives as its own note, optionally seeded from selected text or an inline task. See [[DOCS-013 File tasks|File tasks]].
 
 ## Edit and convert
 
-- **[[DOCS-087 Edit or convert to file task|Edit or convert to file task]]**: edits the current file task, or converts a normal note into one.
-- **[[DOCS-088 Convert file task to inline task|Convert file task to inline task]]**: collapses a file task back into a single inline task, then moves the old note to the Obsidian trash. See [[DOCS-019 Converting inline and file tasks|Converting inline and file tasks]].
+- [[DOCS-087 Edit or convert to file task|Edit or convert to file task]]: edits the current file task, or converts a normal note into one.
+- [[DOCS-088 Convert file task to inline task|Convert file task to inline task]]: collapses a file task back into a single inline task, then moves the old note to the Obsidian trash. See [[DOCS-019 Converting inline and file tasks|Converting inline and file tasks]].
 - **Convert Tasks emoji line to inline task**: migrates a line written in the Obsidian Tasks emoji format into an Operon inline task. See [[DOCS-049 Obsidian Tasks migration|Obsidian Tasks migration]].
 - **Convert Selection to Operon Tasks**: turns several selected lines into tasks at once. See [[DOCS-023 Create tasks from selected text|Create tasks from selected text]].
 
 ## Find and move
 
 - **Task Finder**: search and jump to any task across the vault. See [[DOCS-027 Task Finder|Task Finder]].
-- **[[DOCS-089 Move an inline task here|Move an inline task here]]**: picks a task with Task Finder and moves it to the current cursor line.
+- [[DOCS-089 Move an inline task here|Move an inline task here]]: picks a task with Task Finder and moves it to the current cursor line.
+- [[DOCS-104 Add Task Wikilink Overlay|Add Task Wikilink Overlay]]: picks a task with Task Finder and inserts a link to it at the cursor, which renders as a [[DOCS-103 Task Wikilink Overlay|Task Wikilink Overlay]].
 
 ## State and time
 
-- **[[DOCS-090 Toggle task completion|Toggle task completion]]**: completes or reopens the task at the cursor.
+- [[DOCS-090 Toggle task completion|Toggle task completion]]: completes or reopens the task at the cursor.
 - **Start/stop time tracker**: starts or stops the timer on the task at the cursor. See [[DOCS-034 Time tracking|Time tracking]].
 
 ## Open views
@@ -58,10 +59,11 @@ This page is the index. The action commands link to a dedicated page with their 
 
 ## Maintenance
 
-- **[[DOCS-091 Rebuild full index|Rebuild full index]]**: re-scans the vault for tasks. Use it when tasks are missing or a file was edited outside Obsidian. See [[DOCS-054 Missing tasks|Missing tasks]].
+- [[DOCS-091 Rebuild full index|Rebuild full index]]: re-scans the vault for tasks. Use it when tasks are missing or a file was edited outside Obsidian. See [[DOCS-054 Missing tasks|Missing tasks]].
 - **Reload Operon settings from storage**: reloads Operon settings from disk.
-- **[[DOCS-092 Show index stats|Show index stats]]**: a quick count of total, open, due-today, and overdue tasks.
+- [[DOCS-092 Show index stats|Show index stats]]: a quick count of total, open, due-today, and overdue tasks.
 - **Open duplicate operonId manager**: resolves tasks that share the same `operonId`. See [[DOCS-055 Duplicate IDs|Duplicate IDs]].
+- **Repair Task Wikilink Overlay Links**: scans the vault and repairs stale inline `[[File#-operonId]]` links so their overlays resolve again. See [[DOCS-103 Task Wikilink Overlay|Task Wikilink Overlay]].
 - **Update External Calendars**: refreshes configured external calendar sources. See [[DOCS-048 External calendars|External calendars]].
 
 ## Related

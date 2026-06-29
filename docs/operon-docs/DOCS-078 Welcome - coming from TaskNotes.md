@@ -11,7 +11,7 @@ tags:
   - start
   - tasknotes
   - migrate
-Updated: 2026-06-25T16:47:21
+Updated: 2026-06-28T18:10:47
 ---
 
 # Welcome: coming from TaskNotes
@@ -64,7 +64,7 @@ Alongside the file-task workflow you already know, Operon adds:
 - **Two shapes, not one.** TaskNotes makes every task a note; Operon lets a task be a quick line or a full note, and convert between them.
 - **Statuses drive a board.** Operon tasks move through a pipeline of statuses, which powers the Kanban. See [[DOCS-037 Pipelines and statuses|Pipelines and statuses]].
 
-If you keep TaskNotes installed while you move, a few things can clash, since both add a file-task overlay, use different status systems, and measure time differently (Operon in seconds). Treat running both as a temporary bridge and see the conflicts section in [[DOCS-093 How to migrate from TaskNotes|How to migrate from TaskNotes]].
+If you keep TaskNotes installed while you move, a few things can clash, since both manage the same file-task notes, use different status systems, and measure time differently (Operon in seconds). Treat running both as a temporary bridge and see the conflicts section in [[DOCS-093 How to migrate from TaskNotes|How to migrate from TaskNotes]].
 
 ## Next step
 

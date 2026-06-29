@@ -11,7 +11,7 @@ tags:
   - faq
   - tasknotes
   - migrate
-Updated: 2026-06-25T16:47:21
+Updated: 2026-06-28T18:10:47
 ---
 
 # FAQ for TaskNotes users
@@ -46,7 +46,7 @@ The questions TaskNotes users ask most when they try Operon, with short answers 
 
 **Can I keep TaskNotes installed while I move?** Yes, but treat it as a temporary bridge. The two overlap in a few places, so run both with care rather than as a permanent setup. The full list is under "Running both at once" in [[DOCS-093 How to migrate from TaskNotes|How to migrate from TaskNotes]].
 
-**Can both plugins manage the same note?** It works best if they do not. Operon draws its own File Task Overlay on a note it manages, and its status pipeline differs from another plugin's statuses. Let one system own a given note and its status, so their writes do not overwrite each other. See [[DOCS-037 Pipelines and statuses|Pipelines and statuses]].
+**Can both plugins manage the same note?** It works best if they do not. Operon manages the note as its own file task, with its own status pipeline that differs from another plugin's statuses. Let one system own a given note and its status, so their writes do not overwrite each other. See [[DOCS-037 Pipelines and statuses|Pipelines and statuses]].
 
 **A nested property did not map.** Operon's fields use Obsidian's flat property types (text, number, date, date and time, list, checkbox). A nested or structured property has no Operon field type, so move that data into separate flat keys. See [[DOCS-040 Custom keys|Custom keys]].
 

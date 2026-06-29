@@ -10,7 +10,7 @@ tags:
   - operon
   - taskfinder
   - search
-Updated: 2026-06-25T16:47:21
+Updated: 2026-06-28T18:10:47
 ---
 
 # Task Finder
@@ -75,7 +75,7 @@ The key point: **the set of fields you can match on is wider than the set that l
 
 With nothing typed there is nothing to score, so Task Finder falls back to a sensible default: open tasks first, most recently modified at the top. That is why it opens showing what you touched last.
 
-The same matching also powers the search box on the [[DOCS-030 Kanban overview|Kanban]] board.
+The same matching also powers the search box on the [[DOCS-030 Kanban overview|Kanban]] board, and the commands that pick a task before acting on it, such as [[DOCS-089 Move an inline task here|Move an inline task here]] and [[DOCS-104 Add Task Wikilink Overlay|Add Task Wikilink Overlay]], which opens Task Finder to choose the task to link.
 
 ## Scopes
 

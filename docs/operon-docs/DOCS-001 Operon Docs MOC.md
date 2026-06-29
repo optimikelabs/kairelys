@@ -6,7 +6,7 @@ tags:
   - operon
   - start
   - navigation
-Updated: 2026-06-25T16:47:21
+Updated: 2026-06-28T18:10:47
 ---
 
 # Operon Docs
@@ -89,6 +89,7 @@ Follow these in order. They are enough to go from "what is this?" to doing real 
 - [[DOCS-090 Toggle task completion|Toggle task completion]]
 - [[DOCS-091 Rebuild full index|Rebuild full index]]
 - [[DOCS-092 Show index stats|Show index stats]]
+- [[DOCS-104 Add Task Wikilink Overlay|Add Task Wikilink Overlay]]
 
 ### Pickers and field controls
 - [[DOCS-062 Field pickers overview|Field pickers overview]]
@@ -132,6 +133,7 @@ Follow these in order. They are enough to go from "what is this?" to doing real 
 - [[DOCS-039 Key mappings|Key mappings]]
 - [[DOCS-040 Custom keys|Custom keys]]
 - [[DOCS-041 Task chips display and behavior|Task chips: display and behavior]]
+- [[DOCS-103 Task Wikilink Overlay|Task Wikilink Overlay]]
 - [[DOCS-042 Contextual menu actions|Contextual menu actions]]
 - [[DOCS-043 Settings search|Settings search]]
 - [[DOCS-098 Workspace Tweaks|Workspace Tweaks]]

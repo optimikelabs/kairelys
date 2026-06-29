@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packageId": "operon-docs",
-  "generatedAt": "2026-06-27T17:47:27.555Z",
+  "generatedAt": "2026-06-29T06:56:12.246Z",
   "source": {
     "branch": "main",
     "docsBasePath": "docs/operon-docs",
@@ -10,8 +10,8 @@
   "files": [
     {
       "path": "DOCS-001 Operon Docs MOC.md",
-      "sha256": "216a96e2a99447f517ee93577433222ef3a13c9aeb42b7fc95945a0bd8e5ff5a",
-      "bytes": 8027
+      "sha256": "f178d032f3831f07e7d078ad7afd840d9747ee8b0e21d23e71d523a2e42e419d",
+      "bytes": 8153
     },
     {
       "path": "DOCS-002 How to use these docs.md",
@@ -50,8 +50,8 @@
     },
     {
       "path": "DOCS-009 Create your first task.md",
-      "sha256": "bd83a8ab297c7d2693a109805e3702fadf6d46d066d717d6bb68773c689b124c",
-      "bytes": 3913
+      "sha256": "2b0ee800f738c2d516e4934802a24a253997988f24fa9394d2c8ca83c7c0fcf8",
+      "bytes": 3905
     },
     {
       "path": "DOCS-010 Build your first filtered view.md",
@@ -70,8 +70,8 @@
     },
     {
       "path": "DOCS-013 File tasks.md",
-      "sha256": "3b2afec4e537f967c55814672fd6509967eeb36c261259372028c341d033a6e6",
-      "bytes": 5900
+      "sha256": "613d1f4b9c02d336da4f4724f2bf2ebc7ae40a364274e00c0f73e7d21560baae",
+      "bytes": 6161
     },
     {
       "path": "DOCS-014 Inline vs file tasks.md",
@@ -90,8 +90,8 @@
     },
     {
       "path": "DOCS-017 Plain checkbox lists.md",
-      "sha256": "9e217bebf4b66440975d3b796fab693cd99630ccab06f4ecb99bc1c8b45ee832",
-      "bytes": 6915
+      "sha256": "923d958d4a358472b7a4278828bc38c050d6c1f7ffc4453f9e6e4a24ac84f2d1",
+      "bytes": 6954
     },
     {
       "path": "DOCS-018 Task properties.md",
@@ -115,8 +115,8 @@
     },
     {
       "path": "DOCS-022 Command palette reference.md",
-      "sha256": "5ac7337ce14593280ebb4bf1c5c3da06d67f47bddfe256485595afe9b1fc78bb",
-      "bytes": 4785
+      "sha256": "01e5b3be61360680a68f926126f6df9dd6270198507d6c0407c934caf58fa8b5",
+      "bytes": 5169
     },
     {
       "path": "DOCS-023 Create tasks from selected text.md",
@@ -140,13 +140,13 @@
     },
     {
       "path": "DOCS-027 Task Finder.md",
-      "sha256": "8646a009678d1c3350c292380b8bae459268e18b7bdfa2ae51caa471d02a561d",
-      "bytes": 8195
+      "sha256": "33cb4034b77f242d12882897a463cf358e7d32ec0f9da3c8341c93d6480c9f11",
+      "bytes": 8443
     },
     {
       "path": "DOCS-028 Calendar overview.md",
-      "sha256": "ce861a2971b87da075a3b4f1d27d2898aa9116f5f98cf46657bbd2affd8c3ff5",
-      "bytes": 4759
+      "sha256": "1565df63d5f01e14cc5d6316b72cbe4d0a8131580ef685f05c94116962ea863a",
+      "bytes": 5220
     },
     {
       "path": "DOCS-029 Calendar presets and time grid.md",
@@ -155,8 +155,8 @@
     },
     {
       "path": "DOCS-030 Kanban overview.md",
-      "sha256": "4a6f9ff9df3646c90687177fbea46e0b0567be6cc7744f7cb57c8074291580eb",
-      "bytes": 6847
+      "sha256": "4cafb096033b3323f2097faebef9454ea64b73c58daf55abffb5c6cb3f5f6998",
+      "bytes": 7292
     },
     {
       "path": "DOCS-031 Kanban manual order.md",
@@ -165,8 +165,8 @@
     },
     {
       "path": "DOCS-032 Pinned Task Dock.md",
-      "sha256": "c9fd11c63b9f016354805a12d2460e5e233de065af2b55f9c1e4f36e10254192",
-      "bytes": 2815
+      "sha256": "eb32ce33715921c84e959000abd4088860f53310194080d604cd1ba33e0257b3",
+      "bytes": 3136
     },
     {
       "path": "DOCS-033 Recurring tasks.md",
@@ -210,8 +210,8 @@
     },
     {
       "path": "DOCS-041 Task chips display and behavior.md",
-      "sha256": "a3766a7a2a6c6eaf686ceebeb0bb45d4cf41389dd4dbcdea509b3bcb99ba24b1",
-      "bytes": 8451
+      "sha256": "3ccb35d476865f26754a694cdcb16500dd05a7fbf19c8384795eba40b440a1c8",
+      "bytes": 8617
     },
     {
       "path": "DOCS-042 Contextual menu actions.md",
@@ -395,8 +395,8 @@
     },
     {
       "path": "DOCS-078 Welcome - coming from TaskNotes.md",
-      "sha256": "ebe609551f6a03f9f98b7950c1fb727fdccbb6ba8ba91645cd6e0de7b9ef1d0e",
-      "bytes": 4389
+      "sha256": "5cbfad1140542095aae8d79cb9bed79b797f8203dc727390321dd0b511305b72",
+      "bytes": 4397
     },
     {
       "path": "DOCS-079 FAQ for Obsidian Tasks users.md",
@@ -405,8 +405,8 @@
     },
     {
       "path": "DOCS-080 FAQ for TaskNotes users.md",
-      "sha256": "78b37a2bb4e719137fe81faafde1ac3b2970cd56e6e30dcd3a3df26bc6a7c85f",
-      "bytes": 4534
+      "sha256": "663b9512475622569cf5dde69fb48f1e8a518f1632f9244d6b745d87b340e93c",
+      "bytes": 4529
     },
     {
       "path": "DOCS-081 Your first 7 days with Operon.md",
@@ -470,13 +470,13 @@
     },
     {
       "path": "DOCS-093 How to migrate from TaskNotes.md",
-      "sha256": "df12d38bd165f51cfe9bcd423316f4676d0a454bfa7e495ceeecbe5062d0170d",
-      "bytes": 8030
+      "sha256": "739026091bda7e1d2ffaf1bd0a1d217d385cf103bc7cc219b1b590d6580bd8cb",
+      "bytes": 8051
     },
     {
       "path": "DOCS-094 How to create a task with Task Creator.md",
-      "sha256": "68a55ec4892ca8d0230f0ad960c8e1b75d4da99a91c82d07cd04503ae9b2dfdb",
-      "bytes": 9224
+      "sha256": "2f06db678505feb9c5c72f404fdbda126eda5958b646b0a6c93639c4ff24503e",
+      "bytes": 9220
     },
     {
       "path": "DOCS-095 Calendar Task Pool.md",
@@ -515,8 +515,18 @@
     },
     {
       "path": "DOCS-102 Do you need to use all of Operon.md",
-      "sha256": "93a59a9909fc53ed534b370df58675afde8f8ead428e27fcdfc1a7358368190a",
-      "bytes": 6228
+      "sha256": "e1e9d4f0d70c5cd82153963d06a7c1eb57707deb3d761885cd6627358a7078cc",
+      "bytes": 6224
+    },
+    {
+      "path": "DOCS-103 Task Wikilink Overlay.md",
+      "sha256": "d2ed04160a2276a2a67756bf431a198027264f8beca91c221eee91b797b11256",
+      "bytes": 7063
+    },
+    {
+      "path": "DOCS-104 Add Task Wikilink Overlay.md",
+      "sha256": "a382dbbe65483de8d7013347c0cf88210dff0487400fc86d90fd8c9af6a988b9",
+      "bytes": 2131
     }
   ]
 }

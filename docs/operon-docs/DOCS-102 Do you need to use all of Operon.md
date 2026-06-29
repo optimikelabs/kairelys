@@ -38,7 +38,7 @@ Out of the box, Operon is tuned for a fairly typical user: someone who uses **bo
 
 If that feels like too much, **simplify what you see through the chip settings.** The chips are display only, so turning them off changes nothing about your tasks; it only quiets the row. Switch off the duration and estimate chips and the time-tracking look disappears. Switch off more and a task narrows toward a plain line with just its words. You decide how much each task wears on its sleeve. See [[DOCS-041 Task chips display and behavior|Task chips]].
 
-The same is true of the **[[DOCS-042 Contextual menu actions|contextual menu]]**, the action menu that appears on a task. Its actions are individually switchable, so you can pare it down to just the few you use, and if you turn them all off the menu simply stops appearing. Like the chips, this is a display choice; hiding an action does not remove the ability, only the button.
+The same is true of the [[DOCS-042 Contextual menu actions|contextual menu]], the action menu that appears on a task. Its actions are individually switchable, so you can pare it down to just the few you use, and if you turn them all off the menu simply stops appearing. Like the chips, this is a display choice; hiding an action does not remove the ability, only the button.
 
 ## A few ways people use Operon
 
