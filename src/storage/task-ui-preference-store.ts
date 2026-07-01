@@ -22,6 +22,12 @@ export type TaskUiPreferenceStoreSettings = Pick<
 	| 'inlineExpandedTaskChips'
 	| 'inlineTaskCompactChips'
 	| 'filterTaskCompactChips'
+	| 'kanbanTaskCompactChips'
+	| 'kanbanTaskShowPlayAction'
+	| 'kanbanTaskShowPinAction'
+	| 'kanbanTaskShowNoteAction'
+	| 'kanbanTaskShowSubtaskAction'
+	| 'kanbanTaskShowPlainCheckboxAction'
 	| 'taskFinderCompactChips'
 	| 'taskFinderDefaultScope'
 	| 'taskFinderRememberLastScopes'
@@ -64,6 +70,12 @@ function cloneSettings(settings: TaskUiPreferenceStoreSettings): TaskUiPreferenc
 		inlineExpandedTaskChips: { ...settings.inlineExpandedTaskChips },
 		inlineTaskCompactChips: settings.inlineTaskCompactChips.map(item => ({ ...item })),
 		filterTaskCompactChips: settings.filterTaskCompactChips.map(item => ({ ...item })),
+		kanbanTaskCompactChips: settings.kanbanTaskCompactChips.map(item => ({ ...item })),
+		kanbanTaskShowPlayAction: settings.kanbanTaskShowPlayAction,
+		kanbanTaskShowPinAction: settings.kanbanTaskShowPinAction,
+		kanbanTaskShowNoteAction: settings.kanbanTaskShowNoteAction,
+		kanbanTaskShowSubtaskAction: settings.kanbanTaskShowSubtaskAction,
+		kanbanTaskShowPlainCheckboxAction: settings.kanbanTaskShowPlainCheckboxAction,
 		taskFinderCompactChips: settings.taskFinderCompactChips.map(item => ({ ...item })),
 		taskFinderDefaultScope: settings.taskFinderDefaultScope.map(item => ({ ...item })),
 		taskFinderRememberLastScopes: settings.taskFinderRememberLastScopes,
@@ -142,6 +154,12 @@ function readStoreData(
 		),
 		inlineTaskCompactChips: readArray(raw.inlineTaskCompactChips, fallback.inlineTaskCompactChips),
 		filterTaskCompactChips: readArray(raw.filterTaskCompactChips, fallback.filterTaskCompactChips),
+		kanbanTaskCompactChips: readArray(raw.kanbanTaskCompactChips, fallback.kanbanTaskCompactChips),
+		kanbanTaskShowPlayAction: readBoolean(raw.kanbanTaskShowPlayAction, fallback.kanbanTaskShowPlayAction),
+		kanbanTaskShowPinAction: readBoolean(raw.kanbanTaskShowPinAction, fallback.kanbanTaskShowPinAction),
+		kanbanTaskShowNoteAction: readBoolean(raw.kanbanTaskShowNoteAction, fallback.kanbanTaskShowNoteAction),
+		kanbanTaskShowSubtaskAction: readBoolean(raw.kanbanTaskShowSubtaskAction, fallback.kanbanTaskShowSubtaskAction),
+		kanbanTaskShowPlainCheckboxAction: readBoolean(raw.kanbanTaskShowPlainCheckboxAction, fallback.kanbanTaskShowPlainCheckboxAction),
 		taskFinderCompactChips: readArray(raw.taskFinderCompactChips, fallback.taskFinderCompactChips),
 		taskFinderDefaultScope: readArray(raw.taskFinderDefaultScope, fallback.taskFinderDefaultScope),
 		taskFinderRememberLastScopes: readBoolean(raw.taskFinderRememberLastScopes, fallback.taskFinderRememberLastScopes),

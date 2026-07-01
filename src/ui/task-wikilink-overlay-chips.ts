@@ -21,6 +21,7 @@ import {
 	bindAdaptiveIconOnlyExpansion,
 	bindIconOnlyChipPreview,
 	closeIconOnlyChipPreview,
+	isIconOnlyChipExpansionSuppressed,
 	openIconOnlyChipPreview,
 	shouldOpenIconOnlyChipPreview,
 } from './icon-only-chip-preview';
@@ -138,6 +139,7 @@ export function buildTaskWikilinkOverlayChipContainer(
 					title: entry.tooltipTitle ?? t('taskEditor', 'details'),
 					content: entry.tooltipContent,
 					taskColor,
+					shouldOpen: () => isIconOnlyChipExpansionSuppressed(chip),
 				});
 			}
 			if (entry.interactive) {

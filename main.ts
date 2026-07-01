@@ -1658,18 +1658,25 @@ export default class OperonPlugin extends Plugin {
 			void this.handleIndexedTasksChanged(changes);
 		};
 
+		this.register(
+			this.timeTracker.subscribe((event) => {
+				if (event !== 'state') return;
+				this.refreshTimerStateSurfaces();
+			}),
+		);
+
 		// Auto-pin on timer start
-			this.register(
-				this.timeTracker.subscribe(asyncHandler('auto-pin active timer failed', async (event) => {
-					if (event !== 'state') return;
-					if (!this.settings.pinnedDockAutoPin) return;
-					if (!this.pinnedCache) return;
-					const operonId = this.timeTracker.getActiveOperonId();
-					if (!operonId) return;
-					if (this.pinnedCache.isPinned(operonId)) return; // already pinned
-					await this.pinnedCache.pin(operonId);
-				}))
-			);
+		this.register(
+			this.timeTracker.subscribe(asyncHandler('auto-pin active timer failed', async (event) => {
+				if (event !== 'state') return;
+				if (!this.settings.pinnedDockAutoPin) return;
+				if (!this.pinnedCache) return;
+				const operonId = this.timeTracker.getActiveOperonId();
+				if (!operonId) return;
+				if (this.pinnedCache.isPinned(operonId)) return; // already pinned
+				await this.pinnedCache.pin(operonId);
+			})),
+		);
 
 		// Register file watchers for incremental updates (Architecture doc Section 4.2)
 		this.registerFileWatchers();
@@ -2177,6 +2184,31 @@ export default class OperonPlugin extends Plugin {
 					onItemAction: (taskId, actionId, context, invocation) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
 					onOpenTaskSource: openTaskSourceInNewTab,
 					onStatusIconClick: (taskId) => this.handleCalendarStatusIconClick(taskId),
+					updateField: async (operonId, key, value) => {
+						await this.updateTaskFieldAndRefresh(operonId, key, value);
+					},
+					updateFields: async (operonId, payload) => {
+						await this.updateTaskFieldsAndRefresh(operonId, payload);
+					},
+					updateSubtasks: (operonId, subtaskIds) => {
+						void this.syncExistingSubtasksForParent(operonId, subtaskIds);
+					},
+					updateDependencyField: (operonId, field, value) => {
+						void this.updateTaskDependencyFieldAndRefresh(operonId, field, value);
+					},
+					getRepeatSkipDates: (repeatSeriesId) => this.storage.repeatSeries.getSkipDates(repeatSeriesId),
+					getRepeatSkipSignature: () => this.getRepeatSkipSignature(),
+					getRepeatSeriesInlineCompletionMode: (repeatSeriesId) => this.getRepeatSeriesInlineCompletionMode(repeatSeriesId),
+					updateRepeatSeriesInlineCompletionMode: (operonId, mode) => {
+						void this.applyInlineRepeatCompletionModeIfRequested(this.indexer.getTask(operonId), mode);
+					},
+					getProjectSerialDisplay: (operonId) => this.getProjectSerialDisplayForTask(operonId),
+					getProjectSerialSignature: () => this.getProjectSerialSignature(),
+					isTaskTracking: (operonId) => this.timeTracker.isTimerRunning(operonId),
+					toggleTimer: async (operonId) => {
+						await this.toggleTimerForTask(operonId, 'command');
+					},
+					getTrackingSignature: () => this.timeTracker.getActiveOperonId() ?? '',
 					onOpenPresetSettings: (presetId) => {
 						const preset = this.settings.kanbanPresets.find(entry => entry.id === presetId) ?? null;
 						new KanbanPresetQuickSettingsModal(this.app, {
@@ -7418,6 +7450,9 @@ export default class OperonPlugin extends Plugin {
 			callUnknownMethod(leaf.view, 'render');
 		}
 		for (const leaf of this.app.workspace.getLeavesOfType(CALENDAR_VIEW_TYPE)) {
+			callUnknownMethod(leaf.view, 'markDirty');
+		}
+		for (const leaf of this.app.workspace.getLeavesOfType(KANBAN_VIEW_TYPE)) {
 			callUnknownMethod(leaf.view, 'markDirty');
 		}
 		this.trackerStatusBar?.render();

@@ -1,5 +1,5 @@
 import type { IndexedTask } from './fields';
-import type { CalendarTaskColorSource } from '../core/task-color-source';
+import type { CalendarPresetTaskColorSource, CalendarTaskColorSource } from '../core/task-color-source';
 export {
 	CONTEXTUAL_MENU_ACTIONS,
 	getContextualMenuActionDescription,
@@ -9,6 +9,7 @@ export {
 } from '../core/contextual-menu-engine';
 
 export type CalendarColorSource = CalendarTaskColorSource;
+export type CalendarPresetColorSource = CalendarPresetTaskColorSource;
 export type CalendarAppearanceMode = 'theme' | 'anupuccin-light' | 'anupuccin-dark' | 'catppuccin-dark' | 'atom-light' | 'atom-dark' | 'flexoki-light' | 'flexoki-dark';
 export type CalendarNavigationMode = 'toolbar' | 'sidebar';
 export type CalendarSurfaceType = 'timeGrid' | 'multiWeek' | 'timeTrackerGrid';
@@ -35,7 +36,7 @@ export interface CalendarPreset {
 	showExternalCalendars: boolean;
 	hiddenTimeStart: string;
 	hiddenTimeEnd: string;
-	colorSource: CalendarColorSource;
+	colorSource: CalendarPresetColorSource;
 	appearanceModeLight: CalendarAppearanceMode;
 	appearanceModeDark: CalendarAppearanceMode;
 	externalCalendarVisibility: Record<string, boolean>;

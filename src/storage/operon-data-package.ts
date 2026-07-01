@@ -76,6 +76,12 @@ export const OPERON_DATA_PACKAGE_OWNED_SETTINGS_KEYS = [
 	'inlineExpandedTaskChips',
 	'inlineTaskCompactChips',
 	'filterTaskCompactChips',
+	'kanbanTaskCompactChips',
+	'kanbanTaskShowPlayAction',
+	'kanbanTaskShowPinAction',
+	'kanbanTaskShowNoteAction',
+	'kanbanTaskShowSubtaskAction',
+	'kanbanTaskShowPlainCheckboxAction',
 	'taskFinderCompactChips',
 	'taskFinderDefaultScope',
 	'taskFinderRememberLastScopes',
@@ -136,6 +142,40 @@ export const OPERON_DATA_PACKAGE_OWNED_SETTINGS_KEYS = [
 	'estimateAutoReallocation',
 	'trackerSplitSessionsAtMidnight',
 ] as const satisfies readonly OperonDataPackageOwnedSettingsKey[];
+
+const TASK_UI_PREFERENCE_PACKAGE_KEYS = [
+	'taskCreatorToolbar',
+	'taskEditorShowLineNumbers',
+	'taskEditorWorkflowPickers',
+	'taskEditorMobileCoreTools',
+	'inlineExpandedTaskChips',
+	'inlineTaskCompactChips',
+	'filterTaskCompactChips',
+	'kanbanTaskCompactChips',
+	'kanbanTaskShowPlayAction',
+	'kanbanTaskShowPinAction',
+	'kanbanTaskShowNoteAction',
+	'kanbanTaskShowSubtaskAction',
+	'kanbanTaskShowPlainCheckboxAction',
+	'taskFinderCompactChips',
+	'taskFinderDefaultScope',
+	'taskFinderRememberLastScopes',
+	'taskFinderSelectedProjectId',
+	'taskFinderShortcuts',
+	'taskWikilinkOverlayCompactChips',
+	'taskWikilinkOverlayShowPlayAction',
+	'taskWikilinkOverlayShowPinAction',
+	'taskWikilinkOverlayShowNoteAction',
+	'taskWikilinkOverlayShowSubtaskAction',
+	'taskWikilinkOverlayShowPlainCheckboxAction',
+	'inlineTaskShowPlayAction',
+	'inlineTaskShowPinAction',
+	'inlineTaskShowSubtaskAction',
+	'filterTaskShowPlayAction',
+	'filterTaskShowPinAction',
+	'filterTaskShowSubtaskAction',
+	'filterTaskShowPlainCheckboxAction',
+] as const satisfies readonly (keyof TaskUiPreferenceStoreSettings)[];
 
 export type OperonDataPackageSettings = Omit<
 	OperonSettings,
@@ -354,6 +394,12 @@ export function buildOperonDataPackageFromSettings(
 				inlineExpandedTaskChips: cloneUnknown(normalized.inlineExpandedTaskChips),
 				inlineTaskCompactChips: cloneUnknown(normalized.inlineTaskCompactChips),
 				filterTaskCompactChips: cloneUnknown(normalized.filterTaskCompactChips),
+				kanbanTaskCompactChips: cloneUnknown(normalized.kanbanTaskCompactChips),
+				kanbanTaskShowPlayAction: normalized.kanbanTaskShowPlayAction,
+				kanbanTaskShowPinAction: normalized.kanbanTaskShowPinAction,
+				kanbanTaskShowNoteAction: normalized.kanbanTaskShowNoteAction,
+				kanbanTaskShowSubtaskAction: normalized.kanbanTaskShowSubtaskAction,
+				kanbanTaskShowPlainCheckboxAction: normalized.kanbanTaskShowPlainCheckboxAction,
 				taskFinderCompactChips: cloneUnknown(normalized.taskFinderCompactChips),
 				taskFinderDefaultScope: normalized.taskFinderDefaultScope,
 				taskFinderRememberLastScopes: normalized.taskFinderRememberLastScopes,
@@ -447,7 +493,7 @@ export function mergeOperonDataPackage(
 		settings: cloneExistingDomain(existing?.settings, fallback.settings),
 		taxonomy: cloneExistingDomain(existing?.taxonomy, fallback.taxonomy, isTaxonomyDomain),
 		views: cloneExistingDomain(existing?.views, fallback.views, isViewsDomain),
-		ui: mergeUiPackage(existing?.ui, fallback.ui),
+		ui: mergeUiPackage(existing?.ui, fallback.ui, existing?.settings),
 		automation: cloneExistingDomain(existing?.automation, fallback.automation, isAutomationDomain),
 		integrations: cloneExistingDomain(existing?.integrations, fallback.integrations, isIntegrationsDomain),
 		state: buildStatePackage(existing?.state, fallback.state),
@@ -687,26 +733,32 @@ function isViewsDomain(value: unknown): boolean {
 		&& isRecord(value.kanbanOrder);
 }
 
-function isUiDomain(value: unknown): boolean {
-	return isRecord(value)
-		&& isRecord(value.contextualMenu)
-		&& isRecord(value.taskUiPreferences)
-		&& isRecord(value.taskCreationProfile);
-}
-
 function mergeUiPackage(
 	existing: Partial<OperonDataPackageV1['ui']> | null | undefined,
 	fallback: OperonDataPackageV1['ui'],
+	legacySettings?: Partial<OperonDataPackageV1['settings']> | null,
 ): OperonDataPackageV1['ui'] {
 	const fallbackPackage = cloneUnknown<OperonDataPackageV1['ui']>(fallback);
-	if (!existing || !isUiDomain(existing)) return fallbackPackage;
+	if (!existing || !isRecord(existing)) {
+		return {
+			...fallbackPackage,
+			taskUiPreferences: mergeTaskUiPreferencesWithLegacyRoot(
+				fallbackPackage.taskUiPreferences,
+				legacySettings,
+				true,
+			),
+		};
+	}
+	const hasTaskUiPreferences = isRecord(existing.taskUiPreferences);
 	return {
 		contextualMenu: isRecord(existing.contextualMenu)
 			? cloneUnknown(existing.contextualMenu)
 			: fallbackPackage.contextualMenu,
-		taskUiPreferences: isRecord(existing.taskUiPreferences)
-			? cloneUnknown(existing.taskUiPreferences)
-			: fallbackPackage.taskUiPreferences,
+		taskUiPreferences: mergeTaskUiPreferencesWithLegacyRoot(
+			hasTaskUiPreferences ? cloneUnknown(existing.taskUiPreferences) : fallbackPackage.taskUiPreferences,
+			legacySettings,
+			!hasTaskUiPreferences,
+		),
 		taskCreationProfile: isRecord(existing.taskCreationProfile)
 			? cloneUnknown(existing.taskCreationProfile)
 			: fallbackPackage.taskCreationProfile,
@@ -714,6 +766,23 @@ function mergeUiPackage(
 			? cloneUnknown(existing.workspaceTweaks)
 			: fallbackPackage.workspaceTweaks,
 	};
+}
+
+function mergeTaskUiPreferencesWithLegacyRoot(
+	taskUiPreferences: OperonDataPackageV1['ui']['taskUiPreferences'],
+	legacySettings: Partial<OperonDataPackageV1['settings']> | null | undefined,
+	preferLegacyOverFallback: boolean,
+): OperonDataPackageV1['ui']['taskUiPreferences'] {
+	const merged = cloneUnknown<OperonDataPackageV1['ui']['taskUiPreferences']>(taskUiPreferences);
+	if (!legacySettings || !isRecord(legacySettings)) return merged;
+	const legacyRecord = legacySettings as Record<string, unknown>;
+	const mergedRecord = merged as Record<string, unknown>;
+	for (const key of TASK_UI_PREFERENCE_PACKAGE_KEYS) {
+		if (!Object.prototype.hasOwnProperty.call(legacyRecord, key)) continue;
+		if (!preferLegacyOverFallback && Object.prototype.hasOwnProperty.call(mergedRecord, key)) continue;
+		mergedRecord[key] = cloneUnknown(legacyRecord[key]);
+	}
+	return merged;
 }
 
 function isAutomationDomain(value: unknown): boolean {

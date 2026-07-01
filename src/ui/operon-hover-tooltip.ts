@@ -14,6 +14,7 @@ interface OperonHoverTooltipOptions {
 	preferredHorizontal?: 'auto' | 'left' | 'center' | 'right';
 	preferredVertical?: 'auto' | 'above' | 'below';
 	owner?: Node | null;
+	shouldOpen?: () => boolean;
 }
 
 interface OperonHoverIndicatorOptions extends OperonHoverTooltipOptions {
@@ -93,7 +94,18 @@ export function bindOperonHoverTooltip(
 	if (!options.title && !options.content && !options.contentEl) return;
 	const ownerWindow = getOwnerWindow(target);
 
+	const close = (): void => {
+		const tooltip = typedTarget._operonFloatingTooltip;
+		if (!tooltip) return;
+		tooltip.remove();
+		typedTarget._operonFloatingTooltip = null;
+	};
+
 	const open = (): void => {
+		if (options.shouldOpen && !options.shouldOpen()) {
+			close();
+			return;
+		}
 		if (typedTarget._operonFloatingTooltip) {
 			positionFloatingTooltip(target, typedTarget._operonFloatingTooltip, options.preferredVertical ?? 'auto');
 			return;
@@ -108,13 +120,6 @@ export function bindOperonHoverTooltip(
 		positionFloatingTooltip(target, tooltip, options.preferredVertical ?? 'auto');
 		ownerWindow.requestAnimationFrame(() => tooltip.classList.add('is-visible'));
 		typedTarget._operonFloatingTooltip = tooltip;
-	};
-
-	const close = (): void => {
-		const tooltip = typedTarget._operonFloatingTooltip;
-		if (!tooltip) return;
-		tooltip.remove();
-		typedTarget._operonFloatingTooltip = null;
 	};
 
 	const cleanup = (): void => {

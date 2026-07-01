@@ -44,6 +44,7 @@ import {
 	bindIconOnlyChipPreview,
 	closeIconOnlyChipPreview,
 	closeIconOnlyChipPreviewsForRoot,
+	isIconOnlyChipExpansionSuppressed,
 	openIconOnlyChipPreview,
 	shouldOpenIconOnlyChipPreview,
 } from './icon-only-chip-preview';
@@ -333,6 +334,7 @@ class MetadataTailWidget extends WidgetType {
 						title: entry.tooltipTitle ?? t('taskEditor', 'details'),
 						content: entry.tooltipContent,
 						taskColor,
+						shouldOpen: () => isIconOnlyChipExpansionSuppressed(chip),
 					});
 				}
 				if (entry.interactive) {

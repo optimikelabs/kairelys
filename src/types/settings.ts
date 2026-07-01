@@ -40,6 +40,7 @@ import {
 	normalizeBuiltInKanbanPreset,
 } from './kanban';
 import {
+	CALENDAR_PRESET_TASK_COLOR_SOURCES,
 	CALENDAR_TASK_COLOR_SOURCES,
 	KANBAN_TASK_COLOR_SOURCES,
 	PINNED_DOCK_TASK_COLOR_SOURCES,
@@ -913,6 +914,33 @@ function buildDefaultFilterTaskCompactChipItems(): InlineTaskCompactChipItem[] {
 	];
 }
 
+function buildDefaultKanbanTaskCompactChipItems(): InlineTaskCompactChipItem[] {
+	return [
+		{ key: 'priority', visible: false, iconOnly: false },
+		{ key: 'status', visible: false, iconOnly: false },
+		{ key: 'parentTask', visible: false, iconOnly: false },
+		{ key: 'blocking', visible: false, iconOnly: false },
+		{ key: 'blockedBy', visible: false, iconOnly: false },
+		{ key: 'dateScheduled', visible: true, iconOnly: false },
+		{ key: 'dateDue', visible: true, iconOnly: false },
+		{ key: 'dateStarted', visible: true, iconOnly: true },
+		{ key: 'dateCompleted', visible: true, iconOnly: true },
+		{ key: 'dateCancelled', visible: true, iconOnly: true },
+		{ key: 'datetimeStart', visible: false, iconOnly: false },
+		{ key: 'datetimeEnd', visible: false, iconOnly: false },
+		{ key: 'repeat', visible: false, iconOnly: false },
+		{ key: 'assignees', visible: true, iconOnly: false },
+		{ key: 'contexts', visible: false, iconOnly: false },
+		{ key: 'location', visible: false, iconOnly: false },
+		{ key: 'links', visible: false, iconOnly: false },
+		{ key: 'duration', visible: false, iconOnly: false },
+		{ key: 'estimate', visible: false, iconOnly: false },
+		{ key: 'tags', visible: false, iconOnly: false },
+		{ key: 'totalDuration', visible: false, iconOnly: false },
+		{ key: 'totalEstimate', visible: false, iconOnly: false },
+	];
+}
+
 function buildDefaultTaskFinderCompactChipItems(): InlineTaskCompactChipItem[] {
 	return [
 		{ key: 'priority', visible: true, iconOnly: false },
@@ -1226,6 +1254,18 @@ export interface OperonSettings {
 	inlineTaskCompactChips: InlineTaskCompactChipItem[];
 	/** Ordered, user-customizable compact filter chips used by filter surfaces. */
 	filterTaskCompactChips: InlineTaskCompactChipItem[];
+	/** Ordered, user-customizable compact chips used by Kanban task cards. */
+	kanbanTaskCompactChips: InlineTaskCompactChipItem[];
+	/** Whether Kanban task cards show the timer action chip when the task is actionable. */
+	kanbanTaskShowPlayAction: boolean;
+	/** Whether Kanban task cards show the pin action chip. */
+	kanbanTaskShowPinAction: boolean;
+	/** Whether Kanban task cards show the note indicator chip when the task has a note. */
+	kanbanTaskShowNoteAction: boolean;
+	/** Whether Kanban task cards show the add subtask action chip. */
+	kanbanTaskShowSubtaskAction: boolean;
+	/** Whether Kanban task cards show the plain checkbox action chip. */
+	kanbanTaskShowPlainCheckboxAction: boolean;
 	/** Ordered, user-customizable compact chips used by the Task Finder result rows. */
 	taskFinderCompactChips: InlineTaskCompactChipItem[];
 	/** Persisted last-used opening buttons for the normal Task Finder command. Hidden from the settings UI. */
@@ -1673,6 +1713,12 @@ export const DEFAULT_SETTINGS: OperonSettings = {
 	taskEditorMobileCoreTools: buildDefaultTaskEditorMobileCoreToolItems(),
 	inlineTaskCompactChips: buildDefaultInlineTaskCompactChipItems(),
 	filterTaskCompactChips: buildDefaultFilterTaskCompactChipItems(),
+	kanbanTaskCompactChips: buildDefaultKanbanTaskCompactChipItems(),
+	kanbanTaskShowPlayAction: false,
+	kanbanTaskShowPinAction: false,
+	kanbanTaskShowNoteAction: true,
+	kanbanTaskShowSubtaskAction: false,
+	kanbanTaskShowPlainCheckboxAction: false,
 	taskFinderCompactChips: buildDefaultTaskFinderCompactChipItems(),
 	taskFinderDefaultScope: buildDefaultTaskFinderDefaultScopeItems(),
 	taskFinderRememberLastScopes: true,
@@ -2059,7 +2105,7 @@ function normalizeCalendarPresetDefinition(raw: unknown): CalendarPreset | null 
 	const hiddenTimeEnd = normalizeCalendarHiddenTime(src.hiddenTimeEnd, `0${fallbackStartHour}:00`.slice(-5));
 	const colorSource = normalizeTaskColorSource(
 		src.colorSource,
-		CALENDAR_TASK_COLOR_SOURCES,
+		CALENDAR_PRESET_TASK_COLOR_SOURCES,
 		'taskColor',
 	);
 	const navigationMode = src.navigationMode === 'sidebar' || src.navigationMode === 'toolbar'
@@ -2115,7 +2161,7 @@ function normalizeKanbanPresetDefinition(raw: unknown): KanbanPreset | null {
 	const colorSource = normalizeTaskColorSource(
 		src.colorSource,
 		KANBAN_TASK_COLOR_SOURCES,
-		'taskColor',
+		'noColor',
 	);
 	const kanbanAppearanceModes: string[] = ['theme', 'anupuccin-light', 'anupuccin-dark', 'catppuccin-dark', 'atom-light', 'atom-dark', 'flexoki-light', 'flexoki-dark'];
 	const normalizeKanbanAppearance = (value: unknown): KanbanAppearanceMode =>
@@ -3331,6 +3377,22 @@ export function migrateSettings(raw: unknown): OperonSettings {
 	out.taskEditorMobileCoreTools = normalizeTaskEditorMobileCoreTools(src.taskEditorMobileCoreTools);
 	out.inlineTaskCompactChips = normalizeInlineTaskCompactChips(src.inlineTaskCompactChips);
 	out.filterTaskCompactChips = normalizeFilterTaskCompactChips(src);
+	out.kanbanTaskCompactChips = normalizeKanbanTaskCompactChips(src.kanbanTaskCompactChips);
+	out.kanbanTaskShowPlayAction = typeof src.kanbanTaskShowPlayAction === 'boolean'
+		? src.kanbanTaskShowPlayAction
+		: DEFAULT_SETTINGS.kanbanTaskShowPlayAction;
+	out.kanbanTaskShowPinAction = typeof src.kanbanTaskShowPinAction === 'boolean'
+		? src.kanbanTaskShowPinAction
+		: DEFAULT_SETTINGS.kanbanTaskShowPinAction;
+	out.kanbanTaskShowNoteAction = typeof src.kanbanTaskShowNoteAction === 'boolean'
+		? src.kanbanTaskShowNoteAction
+		: DEFAULT_SETTINGS.kanbanTaskShowNoteAction;
+	out.kanbanTaskShowSubtaskAction = typeof src.kanbanTaskShowSubtaskAction === 'boolean'
+		? src.kanbanTaskShowSubtaskAction
+		: DEFAULT_SETTINGS.kanbanTaskShowSubtaskAction;
+	out.kanbanTaskShowPlainCheckboxAction = typeof src.kanbanTaskShowPlainCheckboxAction === 'boolean'
+		? src.kanbanTaskShowPlainCheckboxAction
+		: DEFAULT_SETTINGS.kanbanTaskShowPlainCheckboxAction;
 	out.taskFinderCompactChips = normalizeTaskFinderCompactChips(src.taskFinderCompactChips);
 	out.taskFinderDefaultScope = normalizeTaskFinderDefaultScope(src.taskFinderDefaultScope);
 	out.taskFinderRememberLastScopes = typeof src.taskFinderRememberLastScopes === 'boolean'
@@ -3790,6 +3852,7 @@ function normalizeSurfaceOrderingSettings(out: OperonSettings, src: Record<strin
 	);
 	out.inlineTaskCompactChips = normalizeInlineTaskCompactChips(src.inlineTaskCompactChips, out.keyMappings);
 	out.filterTaskCompactChips = normalizeFilterTaskCompactChips(src, out.keyMappings);
+	out.kanbanTaskCompactChips = normalizeKanbanTaskCompactChips(src.kanbanTaskCompactChips, out.keyMappings);
 	out.taskFinderCompactChips = normalizeTaskFinderCompactChips(src.taskFinderCompactChips, out.keyMappings);
 	const legacyTaskWikilinkOverlaySource = src;
 	out.taskWikilinkOverlayCompactChips = normalizeTaskWikilinkOverlayCompactChips(
@@ -4007,6 +4070,10 @@ function normalizeFilterTaskCompactChips(src: Record<string, unknown>, keyMappin
 			? { ...item, visible: savedVisible }
 			: item;
 	});
+}
+
+function normalizeKanbanTaskCompactChips(raw: unknown, keyMappings?: readonly KeyMapping[]): InlineTaskCompactChipItem[] {
+	return normalizeCompactChipItems(raw, buildDefaultKanbanTaskCompactChipItems(), keyMappings);
 }
 
 function normalizeTaskFinderCompactChips(raw: unknown, keyMappings?: readonly KeyMapping[]): InlineTaskCompactChipItem[] {

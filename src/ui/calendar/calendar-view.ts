@@ -34,6 +34,7 @@ import {
 	CalendarMobileViewMode,
 	CalendarSidebarTaskPoolMode,
 	normalizeCalendarLeafState,
+	CalendarColorSource,
 	CalendarPreset,
 	CalendarSlotSelection,
 	buildCalendarRenderSnapshot,
@@ -60,6 +61,7 @@ import {
 	type ResolvedContextualMenuAction,
 } from '../../core/contextual-menu-engine';
 import {
+	CALENDAR_PRESET_TASK_COLOR_SOURCES,
 	CALENDAR_TASK_COLOR_SOURCES,
 	getNextTaskColorSource,
 	getTaskColorSourceIcon,
@@ -127,6 +129,8 @@ const CALENDAR_MOBILE_TASK_LONG_PRESS_MS = 260;
 const CALENDAR_TOUCH_TAP_EDITOR_DELAY_MS = 80;
 const CALENDAR_TOUCH_CLICK_SUPPRESSION_MS = 800;
 const CALENDAR_TRACKED_SESSION_DESKTOP_DRAG_INTENT_DISTANCE_PX = 4;
+const CALENDAR_DESKTOP_ALL_DAY_TRACK_LANE_HEIGHT_PX = 38;
+const CALENDAR_DESKTOP_ALL_DAY_TRACK_LANE_INSET_PX = 4;
 
 export type CalendarMobileTimedTaskGestureIntent = 'pending' | 'scroll' | 'drag';
 export type CalendarMobileEmptyAreaSwipeIntent = 'pending' | 'previous' | 'next';
@@ -462,11 +466,16 @@ interface CalendarResolvedColor {
 	a: number;
 }
 
+type CalendarRenderPreset = Omit<CalendarPreset, 'colorSource'> & {
+	colorSource: CalendarColorSource;
+};
+
 interface CalendarAllDayDropContext {
 	body: HTMLElement;
 	overlay: HTMLElement;
 	visibleDates: string[];
 	laneHeight: number;
+	laneInset?: number;
 	previewLane: number;
 	cells?: HTMLElement[];
 	activeColumn?: number | null;
@@ -481,7 +490,7 @@ interface CalendarTimedDropContext {
 	hoverGuideOverlay: HTMLElement;
 	visibleDates: string[];
 	metrics: CalendarTimedMetrics;
-	preset: CalendarPreset;
+	preset: CalendarRenderPreset;
 	settings: OperonSettings;
 	isMobile?: boolean;
 	resolvePosition?: (clientX: number, clientY: number) => { dayIndex: number; minuteOfDay: number } | null;
@@ -492,7 +501,7 @@ interface CalendarMultiWeekInDayDropContext {
 	body: HTMLElement;
 	dayLists: HTMLElement[];
 	visibleDates: string[];
-	preset: CalendarPreset;
+	preset: CalendarRenderPreset;
 	settings: OperonSettings;
 }
 
@@ -1679,7 +1688,7 @@ export class CalendarView extends ItemView {
 	}
 
 	private resolveCalendarPresetFilter(
-		preset: CalendarPreset | null | undefined,
+		preset: CalendarRenderPreset | null | undefined,
 		settings: OperonSettings,
 	): FilterSet | null {
 		const raw = preset?.filterSetId
@@ -1691,7 +1700,7 @@ export class CalendarView extends ItemView {
 
 	private getCalendarSidebarTaskPoolSourceTasks(
 		tasks: IndexedTask[],
-		preset: CalendarPreset | null | undefined,
+		preset: CalendarRenderPreset | null | undefined,
 		settings: OperonSettings,
 	): IndexedTask[] {
 		if (!settings.calendarSidebarTaskPoolFollowPresetFilter) return tasks;
@@ -1731,7 +1740,7 @@ export class CalendarView extends ItemView {
 		settings: OperonSettings,
 		viewMode: CalendarMobileViewMode,
 		state?: CalendarLeafState,
-	): CalendarPreset | null {
+	): CalendarRenderPreset | null {
 		const sourcePresetSettingKey = CALENDAR_MOBILE_SOURCE_PRESET_SETTING_BY_VIEW_MODE[viewMode];
 		const candidatePresetIds = [
 			settings[sourcePresetSettingKey],
@@ -1748,7 +1757,7 @@ export class CalendarView extends ItemView {
 		return settings.calendarPresets[0] ?? null;
 	}
 
-	private buildMobileCalendarRenderPreset(preset: CalendarPreset, settings: OperonSettings): CalendarPreset {
+	private buildMobileCalendarRenderPreset(preset: CalendarRenderPreset, settings: OperonSettings): CalendarRenderPreset {
 		return {
 			...preset,
 			showProjectedOccurrences: settings.calendarMobileShowProjectedOccurrences,
@@ -1758,7 +1767,7 @@ export class CalendarView extends ItemView {
 	}
 
 	private buildMobileCalendarQueryPreset(
-		_preset: CalendarPreset,
+		_preset: CalendarRenderPreset,
 		viewMode: CalendarMobileViewMode,
 		settings: OperonSettings,
 	): Pick<CalendarPreset, 'dayCount' | 'showWeekends' | 'todayPosition' | 'showProjectedOccurrences'> {
@@ -1843,7 +1852,7 @@ export class CalendarView extends ItemView {
 	private renderMobileCalendarSurface(
 		root: HTMLElement,
 		state: CalendarLeafState,
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 		viewMode: CalendarMobileViewMode,
 		anchorDate: string,
@@ -1928,7 +1937,7 @@ export class CalendarView extends ItemView {
 	private renderMobileCalendarHeader(
 		root: HTMLElement,
 		state: CalendarLeafState,
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 		viewMode: CalendarMobileViewMode,
 		anchorDate: string,
@@ -1941,7 +1950,7 @@ export class CalendarView extends ItemView {
 	private renderMobileCalendarActionStrip(
 		container: HTMLElement,
 		state: CalendarLeafState,
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 		viewMode: CalendarMobileViewMode,
 		anchorDate: string,
@@ -2119,7 +2128,7 @@ export class CalendarView extends ItemView {
 
 	private renderMobileCalendarSourcePresetButton(
 		container: HTMLElement,
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 		viewMode: CalendarMobileViewMode,
 	): void {
@@ -2255,7 +2264,7 @@ export class CalendarView extends ItemView {
 			finished: CalendarItem[];
 			timed: CalendarItem[];
 		},
-			preset: CalendarPreset,
+			preset: CalendarRenderPreset,
 			settings: OperonSettings,
 			anchorDate: string,
 			options: {
@@ -2335,7 +2344,7 @@ export class CalendarView extends ItemView {
 			finished: CalendarItem[];
 			timed: CalendarItem[];
 		},
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 		viewMode: CalendarMobileViewMode,
 	): void {
@@ -2441,7 +2450,7 @@ export class CalendarView extends ItemView {
 	private renderMobileTimeGridHeader(
 		container: HTMLElement,
 		renderWindow: CalendarMobileTimeGridRenderWindow,
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		timedItems: CalendarItem[] = [],
 	): void {
 		const header = container.createDiv('operon-calendar-mobile-timegrid-header');
@@ -2531,7 +2540,7 @@ export class CalendarView extends ItemView {
 			finished: CalendarItem[];
 			timed: CalendarItem[];
 		},
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 	): void {
 		const rail = container.createDiv('operon-calendar-mobile-timegrid-all-day');
@@ -2610,7 +2619,7 @@ export class CalendarView extends ItemView {
 	private renderMobileTimeGridPill(
 		container: HTMLElement,
 		item: CalendarItem,
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 		kind: 'allDay' | 'due' | 'finished',
 	): void {
@@ -3043,7 +3052,7 @@ export class CalendarView extends ItemView {
 		hoverGuideOverlay: HTMLElement,
 		timeGrid: HTMLElement,
 		visibleDayCount: number,
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 	): void {
 		const slotMinutes = Math.max(15, this.getSettings().calendarMobileSlotMinutes || 30);
 		const dayModels = preset.surfaceType === 'timeTrackerGrid'
@@ -3523,7 +3532,7 @@ export class CalendarView extends ItemView {
 		daysGrid: HTMLElement,
 		visibleDates: string[],
 		timedItems: CalendarItem[],
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 		metrics: CalendarTimedMetrics,
 		section: HTMLElement,
@@ -3557,7 +3566,7 @@ export class CalendarView extends ItemView {
 		daysGrid: HTMLElement,
 		visibleDates: string[],
 		timedItems: CalendarItem[],
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 		metrics: CalendarTimedMetrics,
 		section: HTMLElement,
@@ -3643,7 +3652,7 @@ export class CalendarView extends ItemView {
 		daysGrid: HTMLElement,
 		visibleDates: string[],
 		timedItems: CalendarItem[],
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 		metrics: CalendarTimedMetrics,
 		section: HTMLElement,
@@ -3750,7 +3759,7 @@ export class CalendarView extends ItemView {
 		dayModels: TimeTrackerGridDayLaneModel[],
 		items: CalendarItem[],
 		visibleDates: string[],
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 		metrics: CalendarTimedMetrics,
 		section: HTMLElement,
@@ -3778,7 +3787,7 @@ export class CalendarView extends ItemView {
 		dayModels: TimeTrackerGridDayLaneModel[],
 		sessions: CalendarTrackedSessionGridItem[],
 		visibleDates: string[],
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 		metrics: CalendarTimedMetrics,
 		section: HTMLElement,
@@ -3887,7 +3896,7 @@ export class CalendarView extends ItemView {
 		daysGrid: HTMLElement,
 		placement: TimedGridVisualPlacement,
 		visibleDates: string[],
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 		metrics: CalendarTimedMetrics,
 		section: HTMLElement,
@@ -4046,7 +4055,7 @@ export class CalendarView extends ItemView {
 	private renderMobileCalendarItem(
 		container: HTMLElement,
 		item: CalendarItem,
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 		kind: 'timed' | 'allDay' | 'due' | 'finished',
 	): void {
@@ -4157,7 +4166,7 @@ export class CalendarView extends ItemView {
 		finishedItems: CalendarItem[],
 		timedItems: CalendarItem[],
 		renderWindow: TimedHorizontalRenderWindow,
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 		state: CalendarLeafState,
 	): void {
@@ -4183,7 +4192,7 @@ export class CalendarView extends ItemView {
 		container: HTMLElement,
 		renderWindow: TimedHorizontalRenderWindow,
 		items: CalendarItem[],
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 	): void {
 		const visibleDates = renderWindow.bufferedDates;
@@ -4394,7 +4403,7 @@ export class CalendarView extends ItemView {
 		finishedItems: CalendarItem[],
 		timedItems: CalendarItem[],
 		renderWindow: TimedHorizontalRenderWindow,
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 		state: CalendarLeafState,
 	): void {
@@ -4420,7 +4429,7 @@ export class CalendarView extends ItemView {
 		container: HTMLElement,
 		renderWindow: TimedHorizontalRenderWindow,
 		items: CalendarItem[],
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 	): void {
 		const visibleDates = renderWindow.bufferedDates;
@@ -4669,7 +4678,7 @@ export class CalendarView extends ItemView {
 		this.render();
 	}
 
-	private resolveTimeGridLanes(preset: CalendarPreset): TimeTrackerGridLane[] {
+	private resolveTimeGridLanes(preset: CalendarRenderPreset): TimeTrackerGridLane[] {
 		const ids = resolveTimeGridLaneIds({
 			showExternal: this.shouldRenderTimeGridExternalLane(preset),
 		});
@@ -4681,7 +4690,7 @@ export class CalendarView extends ItemView {
 	}
 
 	private resolveTimeGridDayLaneModels(
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		visibleDates: string[],
 	): TimeTrackerGridDayLaneModel[] {
 		return visibleDates.map((dateKey, dayIndex) => ({
@@ -4692,11 +4701,11 @@ export class CalendarView extends ItemView {
 		}));
 	}
 
-	private shouldRenderTimeGridExternalLane(preset: CalendarPreset): boolean {
+	private shouldRenderTimeGridExternalLane(preset: CalendarRenderPreset): boolean {
 		return preset.showExternalCalendars !== false && this.hasSelectedExternalCalendars(preset);
 	}
 
-	private resolveTimeTrackerGridLanes(preset: CalendarPreset, dateKey?: string): TimeTrackerGridLane[] {
+	private resolveTimeTrackerGridLanes(preset: CalendarRenderPreset, dateKey?: string): TimeTrackerGridLane[] {
 		const showExternal = this.shouldRenderTimeTrackerGridExternalLane(preset);
 		const ids = resolveTimeTrackerGridLaneIdsForDate({
 			dateKey,
@@ -4723,7 +4732,7 @@ export class CalendarView extends ItemView {
 		);
 	}
 
-	private shouldRenderTimeTrackerGridExternalLane(preset: CalendarPreset): boolean {
+	private shouldRenderTimeTrackerGridExternalLane(preset: CalendarRenderPreset): boolean {
 		return preset.showExternalCalendars !== false && this.hasSelectedExternalCalendars(preset);
 	}
 
@@ -4747,7 +4756,7 @@ export class CalendarView extends ItemView {
 	}
 
 	private resolveTimeTrackerGridDayLaneModel(
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		dateKey: string,
 		dayIndex: number,
 	): TimeTrackerGridDayLaneModel {
@@ -4761,7 +4770,7 @@ export class CalendarView extends ItemView {
 	}
 
 	private resolveTimeTrackerGridDayLaneModels(
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		visibleDates: string[],
 	): TimeTrackerGridDayLaneModel[] {
 		return visibleDates.map((dateKey, dayIndex) =>
@@ -4849,7 +4858,7 @@ export class CalendarView extends ItemView {
 		return formatTimeTrackerGridCompactDurationSeconds(summary.trackedCompletedSeconds);
 	}
 
-	private resolveTimeTrackerGridLaneModel(preset: CalendarPreset): TimeTrackerGridLaneModel {
+	private resolveTimeTrackerGridLaneModel(preset: CalendarRenderPreset): TimeTrackerGridLaneModel {
 		return this.buildTimeTrackerGridLaneModel(this.resolveTimeTrackerGridLanes(preset));
 	}
 
@@ -4861,7 +4870,7 @@ export class CalendarView extends ItemView {
 		dayModels: TimeTrackerGridDayLaneModel[],
 		items: CalendarItem[],
 		visibleDates: string[],
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 		metrics: CalendarTimedMetrics,
 		section: HTMLElement,
@@ -4972,7 +4981,7 @@ export class CalendarView extends ItemView {
 		dayModels: TimeTrackerGridDayLaneModel[],
 		sessions: CalendarTrackedSessionGridItem[],
 		visibleDates: string[],
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 		metrics: CalendarTimedMetrics,
 		section: HTMLElement,
@@ -5894,7 +5903,7 @@ export class CalendarView extends ItemView {
 		dueItems: CalendarItem[],
 		finishedItems: CalendarItem[],
 		timedItems: CalendarItem[],
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 		state: CalendarLeafState,
 	): void {
@@ -6020,7 +6029,7 @@ export class CalendarView extends ItemView {
 		container: HTMLElement,
 		visibleDates: string[],
 		timedItems: CalendarItem[],
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 	): void {
 		const row = container.createDiv('operon-calendar-multi-week-inday-row');
@@ -6081,7 +6090,7 @@ export class CalendarView extends ItemView {
 		container: HTMLElement,
 		placement: TimedSegmentPlacement,
 		visibleDates: string[],
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 	): void {
 		const itemEl = container.createDiv('operon-calendar-multi-week-inday-item');
@@ -6113,7 +6122,7 @@ export class CalendarView extends ItemView {
 	private renderSidebarShell(
 		root: HTMLElement,
 		state: CalendarLeafState,
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		visibleDates: string[],
 	): HTMLElement {
 		root.addClass('is-sidebar-mode');
@@ -6139,7 +6148,7 @@ export class CalendarView extends ItemView {
 
 	private renderCalendarQuickActions(
 		container: HTMLElement,
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		placement: 'toolbar' | 'sidebar',
 	): HTMLElement {
 		const actions = container.createDiv(`operon-calendar-quick-actions is-${placement}`);
@@ -6191,8 +6200,8 @@ export class CalendarView extends ItemView {
 			void this.callbacks.onToggleExternalCalendars?.(preset.id, !showExternalCalendars);
 		});
 
-		const currentColorSource = normalizeTaskColorSource(preset.colorSource, CALENDAR_TASK_COLOR_SOURCES, 'taskColor');
-		const nextColorSource = getNextTaskColorSource(currentColorSource, CALENDAR_TASK_COLOR_SOURCES, 'taskColor');
+		const currentColorSource = normalizeTaskColorSource(preset.colorSource, CALENDAR_PRESET_TASK_COLOR_SOURCES, 'taskColor');
+		const nextColorSource = getNextTaskColorSource(currentColorSource, CALENDAR_PRESET_TASK_COLOR_SOURCES, 'taskColor');
 		const colorSourceLabel = t('calendar', 'cycleTaskColorSourceTooltip', {
 			current: getTaskColorSourceLabel(currentColorSource),
 			next: getTaskColorSourceLabel(nextColorSource),
@@ -6239,7 +6248,7 @@ export class CalendarView extends ItemView {
 	private renderSidebar(
 		container: HTMLElement,
 		state: CalendarLeafState,
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		visibleDates: string[],
 	): void {
 		const header = container.createDiv('operon-calendar-sidebar-header');
@@ -6430,7 +6439,7 @@ export class CalendarView extends ItemView {
 		section.style.maxHeight = nextValue;
 	}
 
-	private renderMiniMonth(container: HTMLElement, state: CalendarLeafState, preset: CalendarPreset): void {
+	private renderMiniMonth(container: HTMLElement, state: CalendarLeafState, preset: CalendarRenderPreset): void {
 		const monthCard = container.createDiv('operon-calendar-sidebar-month');
 		const anchorDate = state.anchorDate;
 		const anchorDateObject = this.parseDateKey(anchorDate) ?? this.parseDateKey(localToday()) ?? new Date();
@@ -6679,7 +6688,7 @@ export class CalendarView extends ItemView {
 
 		private renderSidebarTaskPool(
 			container: HTMLElement,
-			preset: CalendarPreset,
+			preset: CalendarRenderPreset,
 			visibleDates: string[],
 		): void {
 			const section = container.createDiv('operon-calendar-sidebar-section operon-calendar-sidebar-task-pool-section operon-calendar-sidebar-managed-section');
@@ -6906,7 +6915,7 @@ export class CalendarView extends ItemView {
 		private renderSidebarTaskPoolRow(
 			container: HTMLElement,
 			task: IndexedTask,
-			preset: CalendarPreset,
+			preset: CalendarRenderPreset,
 			visibleDates: string[],
 			mode: 'pool' | 'finished' = 'pool',
 		): void {
@@ -7106,7 +7115,7 @@ export class CalendarView extends ItemView {
 	private bindSidebarTaskPoolRowDrag(
 		row: HTMLElement,
 		task: IndexedTask,
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		visibleDates: string[],
 	): void {
 		const dragThresholdPx = 6;
@@ -7183,6 +7192,7 @@ export class CalendarView extends ItemView {
 							this.allDayDropContext.previewLane,
 							this.allDayDropContext.laneHeight,
 							this.allDayDropContext.visibleDates.length,
+							this.allDayDropContext.laneInset,
 						);
 						return;
 					}
@@ -7200,6 +7210,7 @@ export class CalendarView extends ItemView {
 					multiWeekAllDayTarget.context.previewLane,
 					multiWeekAllDayTarget.context.laneHeight,
 					multiWeekAllDayTarget.context.visibleDates.length,
+					multiWeekAllDayTarget.context.laneInset,
 				);
 				return;
 			}
@@ -7406,7 +7417,7 @@ export class CalendarView extends ItemView {
 	private renderToolbar(
 		container: HTMLElement,
 		state: CalendarLeafState,
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		visibleDates: string[],
 	): void {
 		const toolbar = container.createDiv('operon-calendar-toolbar');
@@ -7630,7 +7641,7 @@ export class CalendarView extends ItemView {
 		scheduledItems: CalendarItem[],
 		dueItems: CalendarItem[],
 		finishedItems: CalendarItem[],
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 		showAllDayLane: boolean,
 		showDueMarkers: boolean,
@@ -7656,7 +7667,7 @@ export class CalendarView extends ItemView {
 		visibleDates: string[],
 		items: CalendarItem[],
 		isDueTrack: boolean,
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 		dropContextMode: 'timeGrid' | 'multiWeek' = 'timeGrid',
 	): void {
@@ -7685,7 +7696,8 @@ export class CalendarView extends ItemView {
 		});
 
 		const body = row.createDiv('operon-calendar-all-day-body');
-		const laneHeight = 31;
+		const laneHeight = CALENDAR_DESKTOP_ALL_DAY_TRACK_LANE_HEIGHT_PX;
+		const laneInset = CALENDAR_DESKTOP_ALL_DAY_TRACK_LANE_INSET_PX;
 		const usedLaneCount = Math.max(0, placements[0]?.laneCount ?? 0);
 		const totalLaneCount = Math.max(1, usedLaneCount);
 		body.style.height = `${totalLaneCount * laneHeight}px`;
@@ -7713,6 +7725,7 @@ export class CalendarView extends ItemView {
 				overlay,
 				visibleDates: [...visibleDates],
 				laneHeight,
+				laneInset,
 				previewLane: totalLaneCount - 1,
 			};
 			if (dropContextMode === 'multiWeek') {
@@ -7728,7 +7741,7 @@ export class CalendarView extends ItemView {
 					itemEl.addClass(`is-${placement.item.renderSnapshot.checkbox}`);
 				this.applyCalendarProjectionClasses(itemEl, placement.item);
 				if (placement.item.origin === 'external') itemEl.addClass('is-external');
-				this.applyAllDayPlacementStyle(itemEl, placement.startColumn, placement.endColumn, placement.lane, laneHeight, visibleDates.length);
+				this.applyAllDayPlacementStyle(itemEl, placement.startColumn, placement.endColumn, placement.lane, laneHeight, visibleDates.length, laneInset);
 				this.applyCalendarItemColor(itemEl, placement.item, preset, settings);
 				const hoverTrigger = this.renderCalendarItemLabel(itemEl, placement.item, settings, true);
 				if (hoverTrigger) {
@@ -7762,7 +7775,7 @@ export class CalendarView extends ItemView {
 		container: HTMLElement,
 		renderWindow: TimedHorizontalRenderWindow,
 		items: CalendarItem[],
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 	): void {
 		const visibleDates = renderWindow.bufferedDates;
@@ -7935,7 +7948,7 @@ export class CalendarView extends ItemView {
 	private bindTimedSelection(
 		column: HTMLElement,
 		dateKey: string,
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		metrics: CalendarTimedMetrics,
 		section: HTMLElement,
 		gutter: HTMLElement,
@@ -8351,6 +8364,7 @@ export class CalendarView extends ItemView {
 							this.allDayDropContext.previewLane,
 							this.allDayDropContext.laneHeight,
 							this.allDayDropContext.visibleDates.length,
+							this.allDayDropContext.laneInset,
 						);
 					}
 					return;
@@ -8670,7 +8684,7 @@ export class CalendarView extends ItemView {
 		itemEl: HTMLElement,
 		placement: TimedSegmentPlacement,
 		visibleDates: string[],
-		_preset: CalendarPreset,
+		_preset: CalendarRenderPreset,
 		_settings: OperonSettings,
 	): void {
 		const dragThresholdPx = 6;
@@ -8770,6 +8784,7 @@ export class CalendarView extends ItemView {
 					allDayTarget.context.previewLane,
 					allDayTarget.context.laneHeight,
 					allDayTarget.context.visibleDates.length,
+					allDayTarget.context.laneInset,
 				);
 				return;
 			}
@@ -8938,6 +8953,7 @@ export class CalendarView extends ItemView {
 				placement.lane,
 				laneHeight,
 				visibleDates.length,
+				CALENDAR_DESKTOP_ALL_DAY_TRACK_LANE_INSET_PX,
 			);
 		};
 
@@ -9628,7 +9644,7 @@ export class CalendarView extends ItemView {
 	private applyCalendarItemColor(
 		element: HTMLElement,
 		item: CalendarItem,
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 		): void {
 			if (preset.colorSource === 'noColor') {
@@ -9703,7 +9719,7 @@ export class CalendarView extends ItemView {
 		return resolveTaskDisplayIcon(settings, fieldValues, checkbox);
 	}
 
-	private resolveCurrentCalendarPreset(settings = this.getSettings()): CalendarPreset | null {
+	private resolveCurrentCalendarPreset(settings = this.getSettings()): CalendarRenderPreset | null {
 		const state = this.ensureState();
 		const host = this.containerEl?.children?.[1] as HTMLElement | undefined;
 		if (host?.querySelector('.operon-calendar-mobile-root')) {
@@ -9730,7 +9746,7 @@ export class CalendarView extends ItemView {
 	private applyCalendarTaskFieldColor(
 		element: HTMLElement,
 		fieldValues: Record<string, string>,
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		settings: OperonSettings,
 	): void {
 		if (preset.colorSource === 'noColor') {
@@ -9820,7 +9836,7 @@ export class CalendarView extends ItemView {
 		block.addEventListener('pointerdown', hideGuides);
 	}
 
-	private applyCalendarPresetTheme(root: HTMLElement, preset: CalendarPreset): void {
+	private applyCalendarPresetTheme(root: HTMLElement, preset: CalendarRenderPreset): void {
 		root.removeClass('is-background-themed');
 		root.removeClass('is-background-tinted');
 		root.removeClass('is-background-custom');
@@ -9976,15 +9992,15 @@ export class CalendarView extends ItemView {
 			: `${startFormatter.format(start)} - ${endFormatter.format(end)}`;
 	}
 
-	private getMultiWeekVisibleDaySpan(preset: CalendarPreset): number {
+	private getMultiWeekVisibleDaySpan(preset: CalendarRenderPreset): number {
 		return preset.showWeekends ? 7 : 5;
 	}
 
-	private getMultiWeekVisibleDayCount(preset: CalendarPreset): number {
+	private getMultiWeekVisibleDayCount(preset: CalendarRenderPreset): number {
 		return this.getMultiWeekVisibleDaySpan(preset) * Math.max(1, preset.weekCount || 2);
 	}
 
-	private buildMultiWeekGroups(visibleDates: string[], preset: CalendarPreset): CalendarMultiWeekGroup[] {
+	private buildMultiWeekGroups(visibleDates: string[], preset: CalendarRenderPreset): CalendarMultiWeekGroup[] {
 		const groupSize = Math.max(1, this.getMultiWeekVisibleDaySpan(preset));
 		const groups: CalendarMultiWeekGroup[] = [];
 		for (let index = 0; index < visibleDates.length; index += groupSize) {
@@ -9995,7 +10011,7 @@ export class CalendarView extends ItemView {
 		return groups;
 	}
 
-	private getMultiWeekFocusedWeekNumber(preset: CalendarPreset): 1 | 2 | 3 | 4 | 5 | 6 {
+	private getMultiWeekFocusedWeekNumber(preset: CalendarRenderPreset): 1 | 2 | 3 | 4 | 5 | 6 {
 		const safeWeekCount = Math.max(1, Math.min(6, preset.weekCount || 2)) as 1 | 2 | 3 | 4 | 5 | 6;
 		const focused = preset.focusedWeekNumber ?? 1;
 		return Math.max(1, Math.min(safeWeekCount, focused)) as 1 | 2 | 3 | 4 | 5 | 6;
@@ -10015,7 +10031,7 @@ export class CalendarView extends ItemView {
 
 	private resolveMultiWeekRangeStart(
 		anchorDate: string,
-		preset: CalendarPreset,
+		preset: CalendarRenderPreset,
 		weekStart: 'monday' | 'sunday',
 	): string {
 		const focusedWeekStart = this.alignCalendarDateToWeekStart(anchorDate, weekStart);
@@ -10133,7 +10149,7 @@ export class CalendarView extends ItemView {
 		}).format(date);
 	}
 
-	private buildTimedMetrics(preset: CalendarPreset, isHiddenExpanded: boolean): CalendarTimedMetrics {
+	private buildTimedMetrics(preset: CalendarRenderPreset, isHiddenExpanded: boolean): CalendarTimedMetrics {
 		const hiddenRange = this.resolveHiddenTimeRange(preset);
 		const scale = Math.max(0.5, Math.min(4, this.getSettings().calendarTimeGridScale || 2));
 		const collapsedBandHeight = hiddenRange.enabled && !isHiddenExpanded
@@ -10151,7 +10167,7 @@ export class CalendarView extends ItemView {
 		};
 	}
 
-	private resolveHiddenTimeRange(preset: CalendarPreset): CalendarHiddenTimeRange {
+	private resolveHiddenTimeRange(preset: CalendarRenderPreset): CalendarHiddenTimeRange {
 		const startMinutes = this.parseClockMinutes(preset.hiddenTimeStart);
 		const endMinutes = this.parseClockMinutes(preset.hiddenTimeEnd);
 		if (startMinutes === null || endMinutes === null || endMinutes <= startMinutes) {
@@ -10335,11 +10351,12 @@ export class CalendarView extends ItemView {
 		lane: number,
 		laneHeight: number,
 		totalColumns: number,
+		laneInset = 2,
 	): void {
-		element.style.top = `${lane * laneHeight + 2}px`;
+		element.style.top = `${lane * laneHeight + laneInset}px`;
 		element.style.left = `${(startColumn / totalColumns) * 100}%`;
 		element.style.width = `${((endColumn - startColumn + 1) / totalColumns) * 100}%`;
-		element.style.height = `${laneHeight - 4}px`;
+		element.style.height = `${laneHeight - (laneInset * 2)}px`;
 	}
 
 	private attachNowIndicator(
@@ -10515,7 +10532,7 @@ export class CalendarView extends ItemView {
 		button.addEventListener('click', onClick);
 	}
 
-	private async handleTodayButtonClick(state: CalendarLeafState, preset: CalendarPreset): Promise<void> {
+	private async handleTodayButtonClick(state: CalendarLeafState, preset: CalendarRenderPreset): Promise<void> {
 		const today = localToday();
 		if (state.anchorDate !== today) {
 			await this.updateLeafState({ ...state, anchorDate: today });
@@ -10739,7 +10756,7 @@ export class CalendarView extends ItemView {
 		await this.shiftCalendarAnchorByDays(snappedDayDelta, true);
 	}
 
-	private scheduleInitialScroll(state: CalendarLeafState, preset: CalendarPreset, generation: number, force = false): void {
+	private scheduleInitialScroll(state: CalendarLeafState, preset: CalendarRenderPreset, generation: number, force = false): void {
 		this.lastAppliedScrollSignature = null;
 		const scheduledAt = Date.now();
 		this.requestRenderAnimationFrame(generation, () => {
@@ -10749,7 +10766,7 @@ export class CalendarView extends ItemView {
 		});
 	}
 
-	private applyInitialScroll(state: CalendarLeafState, preset: CalendarPreset, generation: number, attempt = 0, scheduledAt = 0, force = false): void {
+	private applyInitialScroll(state: CalendarLeafState, preset: CalendarRenderPreset, generation: number, attempt = 0, scheduledAt = 0, force = false): void {
 		if (!this.isRenderGenerationActive(generation)) return;
 		if (!this.timedScrollEl) return;
 		if (!force && this.lastTimedGridUserScrollInteractionAt >= scheduledAt) return;
@@ -10796,7 +10813,7 @@ export class CalendarView extends ItemView {
 		this.lastAppliedScrollSignature = signature;
 	}
 
-	private restoreScrollPosition(state: CalendarLeafState, preset: CalendarPreset): void {
+	private restoreScrollPosition(state: CalendarLeafState, preset: CalendarRenderPreset): void {
 		if (!this.timedScrollEl) return;
 		const hiddenTimeKey = `${preset.id}|${state.anchorDate}`;
 		const metrics = this.buildTimedMetrics(preset, this.expandedHiddenTimeKey === hiddenTimeKey);

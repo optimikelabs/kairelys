@@ -1,4 +1,8 @@
 import type { KanbanTaskColorSource } from '../core/task-color-source';
+import type { ContextualMenuActionHandler } from '../core/contextual-menu-engine';
+import type { ProjectSerialDisplay } from '../core/project-serials';
+import type { InlineRepeatCompletionMode } from '../storage/repeat-series-store';
+import type { IndexedTask } from './fields';
 
 export type BuiltInKanbanSwimlaneBy =
 	| 'priority'
@@ -103,11 +107,24 @@ export interface KanbanCellActionContext {
 export interface KanbanViewCallbacks {
 	getManualOrder?: (presetId: string) => Record<string, string[]>;
 	onCardDrop?: (context: KanbanDropContext) => void | Promise<void>;
-	onItemAction?: import('../core/contextual-menu-engine').ContextualMenuActionHandler;
+	onItemAction?: ContextualMenuActionHandler;
 	onOpenTaskSource?: (taskId: string) => void | Promise<void>;
 	onStatusIconClick?: (taskId: string) => void | Promise<void>;
 	onOpenPresetSettings?: (presetId: string) => void | Promise<void>;
 	onCellAction?: (context: KanbanCellActionContext) => void | Promise<void>;
+	updateField?: (operonId: string, key: string, value: string) => void | Promise<void>;
+	updateFields?: (operonId: string, payload: Record<string, string>) => void | Promise<void>;
+	updateSubtasks?: (operonId: string, subtaskIds: string[]) => void;
+	updateDependencyField?: (operonId: string, field: 'blocking' | 'blockedBy', value: string) => void;
+	getRepeatSkipDates?: (repeatSeriesId: string) => string[];
+	getRepeatSkipSignature?: () => string;
+	getRepeatSeriesInlineCompletionMode?: (repeatSeriesId: string) => InlineRepeatCompletionMode;
+	updateRepeatSeriesInlineCompletionMode?: (operonId: string, mode: InlineRepeatCompletionMode) => void | Promise<void>;
+	getProjectSerialDisplay?: (operonId: string, task?: IndexedTask) => ProjectSerialDisplay | null;
+	getProjectSerialSignature?: () => string;
+	isTaskTracking?: (operonId: string) => boolean;
+	toggleTimer?: (operonId: string) => void | Promise<void>;
+	getTrackingSignature?: () => string;
 }
 
 export const DEFAULT_KANBAN_PRESETS: KanbanPreset[] = [
@@ -117,7 +134,7 @@ export const DEFAULT_KANBAN_PRESETS: KanbanPreset[] = [
 		pipelineId: DEFAULT_KANBAN_PIPELINE_ID,
 		filterSetId: null,
 		swimlaneBy: 'priority',
-		colorSource: 'taskColor',
+		colorSource: 'noColor',
 		appearanceModeLight: 'theme',
 		appearanceModeDark: 'theme',
 		collapseEmptyColumns: true,

@@ -17,6 +17,7 @@ import {
 	getOwnerWindow,
 	setWindowTimeout,
 } from '../core/dom-compat';
+import { normalizeTaskFieldColor } from '../core/task-color-source';
 import { resolveContextualHoverMenuPosition } from './contextual-hover-menu-position';
 import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
 
@@ -199,6 +200,7 @@ export class ContextualHoverMenuController {
 		this.clearHideTimer();
 		this.clearAutoHideTimer();
 		if (this.isActive(options.key) && this.activeMenuEl) {
+			applyContextualMenuAccent(this.activeMenuEl, options.context);
 			if (!this.options.positionMenu(options.anchorRect, this.activeMenuEl)) {
 				this.hide(true);
 				return false;
@@ -223,6 +225,7 @@ export class ContextualHoverMenuController {
 		const menu = hostDocument.createElement('div');
 		menu.className = this.options.menuClassName ?? 'operon-calendar-hover-menu';
 		menu.tabIndex = -1;
+		applyContextualMenuAccent(menu, options.context);
 		const usesPointerLeaveHide = !options.mobileInteraction;
 		if (this.options.menuPosition) {
 			menu.style.position = this.options.menuPosition;
@@ -347,6 +350,15 @@ export class ContextualHoverMenuController {
 		}
 		return true;
 	}
+}
+
+function applyContextualMenuAccent(menu: HTMLElement, context: ContextualMenuContext | undefined): void {
+	const taskColor = normalizeTaskFieldColor(context?.task?.fieldValues['taskColor']);
+	if (taskColor) {
+		menu.style.setProperty('--operon-contextual-menu-accent', taskColor);
+		return;
+	}
+	menu.style.removeProperty('--operon-contextual-menu-accent');
 }
 
 function isContextualMenuMobilePlatform(): boolean {

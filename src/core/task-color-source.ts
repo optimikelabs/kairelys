@@ -5,11 +5,13 @@ import { t } from './i18n';
 
 export type TaskColorSource = 'taskColor' | 'statusColor' | 'priorityColor' | 'accentColor' | 'noColor';
 export type CalendarTaskColorSource = 'noColor' | 'accentColor' | 'taskColor' | 'statusColor' | 'priorityColor';
-export type KanbanTaskColorSource = CalendarTaskColorSource;
+export type CalendarPresetTaskColorSource = 'noColor' | 'taskColor' | 'statusColor' | 'priorityColor';
+export type KanbanTaskColorSource = 'noColor' | 'taskColor' | 'statusColor' | 'priorityColor';
 export type PinnedDockTaskColorSource = CalendarTaskColorSource;
 
 export const CALENDAR_TASK_COLOR_SOURCES = ['noColor', 'accentColor', 'taskColor', 'statusColor', 'priorityColor'] as const;
-export const KANBAN_TASK_COLOR_SOURCES = CALENDAR_TASK_COLOR_SOURCES;
+export const CALENDAR_PRESET_TASK_COLOR_SOURCES = ['noColor', 'taskColor', 'statusColor', 'priorityColor'] as const;
+export const KANBAN_TASK_COLOR_SOURCES = ['noColor', 'taskColor', 'statusColor', 'priorityColor'] as const;
 export const PINNED_DOCK_TASK_COLOR_SOURCES = CALENDAR_TASK_COLOR_SOURCES;
 
 const TASK_COLOR_SOURCE_LABELS: Record<TaskColorSource, string> = {

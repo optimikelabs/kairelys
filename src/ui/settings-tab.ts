@@ -128,6 +128,7 @@ import {
 import { buildRepeatSeriesContexts, deriveTemporalTemplateFromTask } from '../systems/recurrence-domain';
 import { detectRepeatSeriesNamingConfig } from '../systems/recurring-file-naming';
 import {
+	CALENDAR_PRESET_TASK_COLOR_SOURCES,
 	CALENDAR_TASK_COLOR_SOURCES,
 	KANBAN_TASK_COLOR_SOURCES,
 	PINNED_DOCK_TASK_COLOR_SOURCES,
@@ -271,11 +272,13 @@ type TaskChipsSettingsPageId =
 	| 'inlineTaskChips'
 	| 'taskFinderChips'
 	| 'filterTaskChips'
+	| 'kanbanTaskChips'
 	| 'taskWikilinkOverlayChips';
 
 type TaskChipsSettingsPageMeta = {
 	titleKey: string;
 	descKey: string;
+	entryIds: readonly string[];
 };
 
 type CustomSurfaceSettingsTarget = 'editor' | 'creator' | 'chips' | 'kanbanSwimlane';
@@ -291,6 +294,7 @@ const TASK_CHIPS_SETTINGS_PAGE_ORDER: readonly TaskChipsSettingsPageId[] = [
 	'inlineTaskChips',
 	'taskFinderChips',
 	'filterTaskChips',
+	'kanbanTaskChips',
 	'taskWikilinkOverlayChips',
 ];
 
@@ -298,22 +302,39 @@ const TASK_CHIPS_SETTINGS_PAGE_META: Record<TaskChipsSettingsPageId, TaskChipsSe
 	taskCreatorToolbar: {
 		titleKey: 'taskCreatorToolbarSection',
 		descKey: 'taskCreatorToolbarSectionDesc',
+		entryIds: ['taskCreatorToolbar'],
 	},
 	inlineTaskChips: {
 		titleKey: 'inlineTaskIconsSection',
 		descKey: 'inlineTaskIconsSectionDesc',
+		entryIds: ['inlineTaskChips'],
 	},
 	taskFinderChips: {
 		titleKey: 'taskFinderIconsSection',
 		descKey: 'taskFinderIconsSectionDesc',
+		entryIds: ['taskFinderChips'],
 	},
 	filterTaskChips: {
 		titleKey: 'filterTaskIconsSection',
 		descKey: 'filterTaskIconsSectionDesc',
+		entryIds: ['filterTaskChips', 'filterTaskShowPlainCheckboxAction'],
+	},
+	kanbanTaskChips: {
+		titleKey: 'kanbanTaskIconsSection',
+		descKey: 'kanbanTaskIconsSectionDesc',
+		entryIds: [
+			'kanbanTaskChips',
+			'kanbanTaskShowPlayAction',
+			'kanbanTaskShowPinAction',
+			'kanbanTaskShowNoteAction',
+			'kanbanTaskShowSubtaskAction',
+			'kanbanTaskShowPlainCheckboxAction',
+		],
 	},
 	taskWikilinkOverlayChips: {
 		titleKey: 'taskWikilinkOverlayIconsSection',
 		descKey: 'taskWikilinkOverlayIconsSectionDesc',
+		entryIds: ['taskWikilinkOverlayChips', 'taskWikilinkOverlayShowPlainCheckboxAction'],
 	},
 };
 
@@ -505,9 +526,9 @@ type ObsidianSettingPageShape = {
 type ObsidianSettingPageCtor = new () => ObsidianSettingPageShape;
 
 const createFallbackSettingPageCtor = (): ObsidianSettingPageCtor => class FallbackSettingPage implements ObsidianSettingPageShape {
-	rootEl = activeDocument.createElement('div');
-	titlebarEl = activeDocument.createElement('div');
-	containerEl = activeDocument.createElement('div');
+	rootEl = activeDocument.createDiv();
+	titlebarEl = activeDocument.createDiv();
+	containerEl = activeDocument.createDiv();
 	title = '';
 
 	display(): void {
@@ -992,14 +1013,18 @@ export class OperonSettingsTab extends PluginSettingTab {
 		};
 	}
 
-	private buildTaskChipsSettingsPages(_entries: OperonSettingsSearchEntry[]): SettingDefinitionPage[] {
+	private buildTaskChipsSettingsPages(entries: OperonSettingsSearchEntry[]): SettingDefinitionPage[] {
 		return TASK_CHIPS_SETTINGS_PAGE_ORDER.map(pageId => {
 			const meta = TASK_CHIPS_SETTINGS_PAGE_META[pageId];
 			const pageName = t('settings', meta.titleKey);
+			const pageEntries = meta.entryIds
+				.map(entryId => entries.find(entry => entry.id === `ui.${entryId}`))
+				.filter((entry): entry is OperonSettingsSearchEntry => !!entry);
 			return {
 				type: 'page',
 				name: pageName,
 				desc: t('settings', meta.descKey),
+				items: this.buildSettingsSearchTabItems(pageEntries),
 				page: () => new OperonNativeSettingsPage(
 					pageName,
 					containerEl => this.renderNativeTaskChipsSettingsPage(pageId, containerEl),
@@ -4334,6 +4359,8 @@ export class OperonSettingsTab extends PluginSettingTab {
 			this.renderTaskFinderCompactChipSettingsSection(this.renderTaskChipsGroupedSection(containerEl, title, sectionOptions));
 		} else if (pageId === 'filterTaskChips') {
 			this.renderFilterTaskCardsSection(containerEl, sectionOptions);
+		} else if (pageId === 'kanbanTaskChips') {
+			this.renderKanbanTaskCompactChipSettingsSection(this.renderTaskChipsGroupedSection(containerEl, title, sectionOptions));
 		} else if (pageId === 'taskWikilinkOverlayChips') {
 			this.renderTaskWikilinkOverlayCompactChipSettingsSection(this.renderTaskChipsGroupedSection(containerEl, title, sectionOptions));
 		}
@@ -4807,6 +4834,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 					...this.settings.inlineTaskCompactChips,
 					...this.settings.taskFinderCompactChips,
 					...this.settings.filterTaskCompactChips,
+					...this.settings.kanbanTaskCompactChips,
 					...this.settings.taskWikilinkOverlayCompactChips,
 				];
 		const matches = entries.filter(entry => entry.key === mapping.canonicalKey);
@@ -4859,6 +4887,12 @@ export class OperonSettingsTab extends PluginSettingTab {
 			).map(item => ({ ...item, iconOnly: false }));
 			this.settings.filterTaskCompactChips = this.setSurfaceEntryVisibility(
 				this.settings.filterTaskCompactChips,
+				mapping.canonicalKey,
+				visible,
+				() => ({ key: mapping.canonicalKey, visible, iconOnly: false }),
+			);
+			this.settings.kanbanTaskCompactChips = this.setSurfaceEntryVisibility(
+				this.settings.kanbanTaskCompactChips,
 				mapping.canonicalKey,
 				visible,
 				() => ({ key: mapping.canonicalKey, visible, iconOnly: false }),
@@ -6101,7 +6135,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 				pipelineId: null,
 				filterSetId: null,
 				swimlaneBy: 'priority',
-				colorSource: 'taskColor',
+				colorSource: 'noColor',
 				appearanceModeLight: 'theme',
 				appearanceModeDark: 'theme',
 				collapseEmptyColumns: true,
@@ -6415,10 +6449,10 @@ export class OperonSettingsTab extends PluginSettingTab {
 			.setDesc(t('settings', 'kanbanTaskColorSourceDesc'))
 			.addDropdown(dropdown => {
 				addTaskColorSourceOptions(dropdown, KANBAN_TASK_COLOR_SOURCES);
-				dropdown.setValue(preset.colorSource);
+				dropdown.setValue(normalizeTaskColorSource(preset.colorSource, KANBAN_TASK_COLOR_SOURCES, 'noColor'));
 				dropdown.onChange(async value => {
 					await this.updateKanbanPreset(preset.id, current => {
-						current.colorSource = normalizeTaskColorSource(value, KANBAN_TASK_COLOR_SOURCES, 'taskColor');
+						current.colorSource = normalizeTaskColorSource(value, KANBAN_TASK_COLOR_SOURCES, 'noColor');
 					});
 				});
 			});
@@ -7074,12 +7108,12 @@ export class OperonSettingsTab extends PluginSettingTab {
 			.setName(t('calendar', 'taskColorSource'))
 			.setDesc(t('calendar', 'taskColorSourceDesc'))
 			.addButton(button => {
-				const currentSource = normalizeTaskColorSource(preset.colorSource, CALENDAR_TASK_COLOR_SOURCES, 'taskColor');
+				const currentSource = normalizeTaskColorSource(preset.colorSource, CALENDAR_PRESET_TASK_COLOR_SOURCES, 'taskColor');
 				renderTaskColorSourceSelectButton(button.buttonEl, currentSource);
 				button.onClick(event => {
 					event.preventDefault();
 					showTaskColorSourceSelectMenu(button.buttonEl, {
-						sources: CALENDAR_TASK_COLOR_SOURCES,
+						sources: CALENDAR_PRESET_TASK_COLOR_SOURCES,
 						currentSource,
 						onSelect: settingsAsyncHandler('settings calendar preset task color source selection failed', async (source) => {
 							await this.updateCalendarPreset(preset.id, current => {
@@ -8511,6 +8545,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 				inlineTaskCompactChips: this.settings.inlineTaskCompactChips,
 				taskFinderCompactChips: this.settings.taskFinderCompactChips,
 				filterTaskCompactChips: this.settings.filterTaskCompactChips,
+				kanbanTaskCompactChips: this.settings.kanbanTaskCompactChips,
 				taskWikilinkOverlayCompactChips: this.settings.taskWikilinkOverlayCompactChips,
 			},
 		});
@@ -9753,6 +9788,88 @@ export class OperonSettingsTab extends PluginSettingTab {
 			],
 		});
 	}
+
+	private renderKanbanTaskCompactChipSettingsSection(containerEl: HTMLElement): void {
+		renderCompactChipSettingsSection({
+			layout: 'row-list',
+			containerEl,
+			description: t('settings', 'kanbanTaskIconsSectionDesc'),
+			descriptionSearchTargetId: 'ui.kanbanTaskChips',
+			toggleTitle: t('settings', 'kanbanTaskIconsToggleTitle'),
+			iconOnlyTitle: t('settings', 'kanbanTaskIconsDisplayModeTitle'),
+			reorderTitle: t('settings', 'kanbanTaskIconsReorder'),
+			moveUpLabel: t('settings', 'kanbanTaskIconsMoveUp'),
+			moveDownLabel: t('settings', 'kanbanTaskIconsMoveDown'),
+			getItems: () => this.getRenderableSurfaceItems(this.settings.kanbanTaskCompactChips, 'chips'),
+			setItems: items => {
+				this.settings.kanbanTaskCompactChips = this.mergeRenderableSurfaceItems(
+					this.settings.kanbanTaskCompactChips,
+					items,
+					'chips',
+				);
+				},
+				getLabel: key => this.getInlineTaskCompactChipLabel(key),
+				getIcon: key => this.getInlineTaskCompactChipIcon(key),
+				getCanonicalLabel: key => `{{${key}:: }}`,
+				iconOnlyButtonLabel: t('settings', 'compactChipIconOnly'),
+				actionTogglesTitle: t('settings', 'kanbanTaskActionsSection'),
+				getVisibilityToggleLabel: label => t('settings', 'compactChipVisibilityToggle', { label }),
+				getIconOnlyToggleLabel: label => t('settings', 'compactChipIconOnlyToggle', { label }),
+				save: () => this.saveSettings(),
+				getActionToggles: () => [
+					{
+						visible: this.settings.kanbanTaskShowPlayAction,
+						icon: 'play',
+						label: t('settings', 'inlineTaskPlayAction'),
+						searchTargetId: 'ui.kanbanTaskShowPlayAction',
+						onToggle: async () => {
+							this.settings.kanbanTaskShowPlayAction = !this.settings.kanbanTaskShowPlayAction;
+							await this.saveSettings();
+						},
+					},
+					{
+						visible: this.settings.kanbanTaskShowPinAction,
+						icon: 'pin',
+						label: t('settings', 'inlineTaskPinAction'),
+						searchTargetId: 'ui.kanbanTaskShowPinAction',
+						onToggle: async () => {
+							this.settings.kanbanTaskShowPinAction = !this.settings.kanbanTaskShowPinAction;
+							await this.saveSettings();
+						},
+					},
+					{
+						visible: this.settings.kanbanTaskShowNoteAction,
+						icon: 'notebook-pen',
+						label: t('settings', 'inlineTaskNoteAction'),
+						searchTargetId: 'ui.kanbanTaskShowNoteAction',
+						onToggle: async () => {
+							this.settings.kanbanTaskShowNoteAction = !this.settings.kanbanTaskShowNoteAction;
+							await this.saveSettings();
+						},
+					},
+					{
+						visible: this.settings.kanbanTaskShowSubtaskAction,
+						icon: 'list-plus',
+						label: t('settings', 'inlineTaskSubtaskAction'),
+						searchTargetId: 'ui.kanbanTaskShowSubtaskAction',
+						onToggle: async () => {
+							this.settings.kanbanTaskShowSubtaskAction = !this.settings.kanbanTaskShowSubtaskAction;
+							await this.saveSettings();
+						},
+					},
+					{
+						visible: this.settings.kanbanTaskShowPlainCheckboxAction,
+						icon: 'layout-list',
+						label: t('settings', 'kanbanTaskOpenCheckboxAction'),
+						searchTargetId: 'ui.kanbanTaskShowPlainCheckboxAction',
+						onToggle: async () => {
+							this.settings.kanbanTaskShowPlainCheckboxAction = !this.settings.kanbanTaskShowPlainCheckboxAction;
+							await this.saveSettings();
+						},
+					},
+				],
+			});
+		}
 
 	private renderFileTaskTemplateSettings(containerEl: HTMLElement, sectionHostEl = containerEl): void {
 		let preview: HTMLElement | null = null;

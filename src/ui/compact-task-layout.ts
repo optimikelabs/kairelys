@@ -35,8 +35,14 @@ export interface LocationChipMatch {
 export type LocationChipResolver = (coordinateText: string) => LocationChipMatch | null;
 export type RepeatSkipDateResolver = (repeatSeriesId: string) => string[];
 
+export interface CompactTaskLookupContext {
+	taskById: ReadonlyMap<string, IndexedTask>;
+	parentTaskIds: ReadonlySet<string>;
+}
+
 export interface CompactChipEntryBuildOptions {
 	repeatSkipDateResolver?: RepeatSkipDateResolver;
+	taskLookup?: CompactTaskLookupContext;
 }
 
 export const COMPACT_VISIBLE_CHIP_KEYS = [
@@ -116,6 +122,17 @@ export const COMPACT_VISIBLE_KEYS = new Set<string>([
 	...COMPACT_INTERNAL_VISIBLE_KEYS,
 ]);
 
+export function createCompactTaskLookup(allTasks: IndexedTask[] = []): CompactTaskLookupContext {
+	const taskById = new Map<string, IndexedTask>();
+	const parentTaskIds = new Set<string>();
+	for (const task of allTasks) {
+		taskById.set(task.operonId, task);
+		const parentTaskId = task.fieldValues['parentTask']?.trim();
+		if (parentTaskId) parentTaskIds.add(parentTaskId);
+	}
+	return { taskById, parentTaskIds };
+}
+
 export function buildInlineTaskCompactChipEntries(
 	fieldValues: Record<string, string>,
 	tags: string[],
@@ -128,7 +145,8 @@ export function buildInlineTaskCompactChipEntries(
 	const entries: InlineTaskCompactChipEntry[] = [];
 	const taskColor = normalizeTaskFieldColor(fieldValues['taskColor']);
 	const itemMap = new Map(getCompactChipItems(settings, chipItems).map(item => [item.key, item]));
-	const taskById = new Map(allTasks.map(task => [task.operonId, task]));
+	const taskLookup = options?.taskLookup ?? createCompactTaskLookup(allTasks);
+	const taskById = taskLookup.taskById;
 	for (const key of getInlineTaskCompactVisibleChipKeys(settings, chipItems)) {
 		const item = itemMap.get(key);
 		const customMapping = getCustomFieldMapping(settings.keyMappings, key);
@@ -320,7 +338,7 @@ export function buildInlineTaskCompactChipEntries(
 				break;
 			}
 			case 'totalDuration': {
-				if (!isParentTask(fieldValues, allTasks)) break;
+				if (!isParentTask(fieldValues, allTasks, taskLookup)) break;
 				const seconds = Number.parseInt(fieldValues['totalDuration'] ?? '0', 10);
 				if (!Number.isFinite(seconds) || seconds <= 0) break;
 				entries.push(createEntry(settings, key, formatDuration(seconds), item?.iconOnly === true, 'default', false));
@@ -333,7 +351,7 @@ export function buildInlineTaskCompactChipEntries(
 				break;
 			}
 			case 'totalEstimate': {
-				if (!isParentTask(fieldValues, allTasks)) break;
+				if (!isParentTask(fieldValues, allTasks, taskLookup)) break;
 				const seconds = Number.parseInt(fieldValues['totalEstimate'] ?? '0', 10);
 				if (!Number.isFinite(seconds) || seconds <= 0) break;
 				entries.push(createEntry(settings, key, formatDuration(seconds), item?.iconOnly === true, 'default', false));
@@ -460,8 +478,9 @@ export function getInlineTaskCompactHiddenCount(
 	settings: OperonSettings,
 	allTasks: IndexedTask[] = [],
 	chipItems?: InlineTaskCompactChipItem[],
+	options?: CompactChipEntryBuildOptions,
 ): number {
-	return getInlineTaskCompactHiddenKeys(fieldValues, tags, settings, allTasks, chipItems).length;
+	return getInlineTaskCompactHiddenKeys(fieldValues, tags, settings, allTasks, chipItems, options).length;
 }
 
 export function getInlineTaskCompactHiddenKeys(
@@ -470,8 +489,9 @@ export function getInlineTaskCompactHiddenKeys(
 	settings: OperonSettings,
 	allTasks: IndexedTask[] = [],
 	chipItems?: InlineTaskCompactChipItem[],
+	options?: CompactChipEntryBuildOptions,
 ): string[] {
-	return collectHiddenKeys(fieldValues, tags, getInlineTaskCompactVisibleKeys(settings, chipItems), allTasks);
+	return collectHiddenKeys(fieldValues, tags, getInlineTaskCompactVisibleKeys(settings, chipItems), allTasks, options?.taskLookup);
 }
 
 export function collectHiddenKeys(
@@ -479,6 +499,7 @@ export function collectHiddenKeys(
 	tags: string[],
 	visibleKeys: Iterable<string>,
 	allTasks: IndexedTask[] = [],
+	taskLookup?: CompactTaskLookupContext,
 ): string[] {
 	const visible = new Set(visibleKeys);
 	const hidden = new Set<string>();
@@ -486,7 +507,7 @@ export function collectHiddenKeys(
 	for (const key of INLINE_TASK_COMPACT_CHIP_ORDER) {
 		if (isSuppressedByTerminalDate(key, fieldValues)) continue;
 		if (visible.has(key)) continue;
-		if (hasCompactValue(key, fieldValues, tags, allTasks)) {
+		if (hasCompactValue(key, fieldValues, tags, allTasks, taskLookup)) {
 			hidden.add(key);
 		}
 	}
@@ -605,6 +626,7 @@ function hasCompactValue(
 	fieldValues: Record<string, string>,
 	tags: string[],
 	allTasks: IndexedTask[] = [],
+	taskLookup?: CompactTaskLookupContext,
 ): boolean {
 	switch (key) {
 		case 'assignees':
@@ -623,7 +645,7 @@ function hasCompactValue(
 		}
 		case 'totalDuration':
 		case 'totalEstimate': {
-			if (!isParentTask(fieldValues, allTasks)) return false;
+			if (!isParentTask(fieldValues, allTasks, taskLookup)) return false;
 			const seconds = Number.parseInt(fieldValues[key] ?? '0', 10);
 			return Number.isFinite(seconds) && seconds > 0;
 		}
@@ -635,9 +657,11 @@ function hasCompactValue(
 function isParentTask(
 	fieldValues: Record<string, string>,
 	allTasks: IndexedTask[],
+	taskLookup?: CompactTaskLookupContext,
 ): boolean {
 	const operonId = fieldValues['operonId']?.trim();
 	if (!operonId) return false;
+	if (taskLookup) return taskLookup.parentTaskIds.has(operonId);
 	return allTasks.some(task => task.fieldValues['parentTask']?.trim() === operonId);
 }
 

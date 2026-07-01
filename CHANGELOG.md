@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Validation
 
+## [1.9.0] - 2026-07-01
+
+This release turns Kanban into a more capable planning surface, not just a place to move cards between columns. Task Chips now bring key task context directly onto Kanban cards, while the board, headers, actions, and Calendar task visuals have been refined into a cleaner, more focused interface.
+
+### New
+- Added **Kanban Task Chips** to main Kanban cards, with configurable compact metadata, interactive desktop chips, read-only mobile chips, and Project Serial identity chips when available.
+- Added a dedicated **Kanban Task Chips** settings surface, so Kanban cards can use their own chip visibility, ordering, and action-chip preferences.
+- Added **Kanban Task Actions** for timer, pin, note, subtask, and checkbox actions, with note indicators shown by default when a task has notes.
+
+### Improved
+- Improved **Kanban cards and task chips** with calmer neutral surfaces, task-color border emphasis, outline-style chips, pinned-style task icons, trailing action chips, and a Stop state while a card timer is already running.
+- Improved **Kanban column and swimlane headers** with transparent board structure, border-only axis highlighting, cleaner count buttons, and swimlane labels that hide wikilink brackets and wrap long names.
+- Improved **Calendar desktop task visuals** with clearer task icon borders, calmer lane-label focus states, balanced all-day spacing, tighter timed-task corners, and consistent task edges across hover, focus, and editing states.
+- Improved **contextual task menus** and **Task Editor** relationship cards so resting surfaces stay neutral and task-color emphasis appears only on hover or keyboard focus.
+
+### Changed
+- Changed **Calendar and Kanban preset color sources** so Accent color is no longer offered; existing Calendar Accent presets fall back to Task color, while existing Kanban Accent presets fall back to No color.
+- Changed **Kanban Task Chips** so hidden-field overflow counts are no longer shown on desktop or mobile cards, reducing metadata noise on dense boards.
+
+### Fixed
+- Fixed **icon-only task chips** flickering near tight row edges by keeping them collapsed and showing their label in an Operon tooltip when there is not enough room to expand inline.
+
+### Validation
+- Local validation passed `npm run check:local`, including strict linting, production build, release guard, and 1032/1032 Phase 5 regression checks.
+
 ## [1.8.0] - 2026-06-29
 
 Inline and file-task wikilinks now share the same overlay controls, Task Finder can insert task links directly, source-opening behaves more like a browser across planning views, and Japanese localization opens Operon to another language workflow.

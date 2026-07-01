@@ -31,6 +31,7 @@ import {
 	bindAdaptiveIconOnlyExpansion,
 	bindIconOnlyChipPreview,
 	closeIconOnlyChipPreview,
+	isIconOnlyChipExpansionSuppressed,
 	openIconOnlyChipPreview,
 	shouldOpenIconOnlyChipPreview,
 } from './icon-only-chip-preview';
@@ -253,6 +254,7 @@ export function buildReadingTaskRowElement(
 					title: renderEntry.tooltipTitle ?? t('taskEditor', 'details'),
 					content: renderEntry.tooltipContent,
 					taskColor,
+					shouldOpen: () => isIconOnlyChipExpansionSuppressed(chip),
 				});
 			}
 			if (renderEntry.interactive) {

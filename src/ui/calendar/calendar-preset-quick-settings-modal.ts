@@ -5,7 +5,7 @@ import { APPEARANCE_SCHEME_LIGHT_OPTIONS, APPEARANCE_SCHEME_DARK_OPTIONS, addApp
 import type { FilterSet, OperonSettings } from '../../types/settings';
 import { showTimePicker } from '../field-pickers/time-picker';
 import {
-	CALENDAR_TASK_COLOR_SOURCES,
+	CALENDAR_PRESET_TASK_COLOR_SOURCES,
 	normalizeTaskColorSource,
 } from '../../core/task-color-source';
 import { getNormalFilterSets } from '../../core/dynamic-file-task-filter';
@@ -252,12 +252,12 @@ export class CalendarPresetQuickSettingsModal extends Modal {
 			.setName(t('calendar', 'taskColorSource'))
 			.setDesc(t('calendar', 'taskColorSourceDesc'))
 			.addButton(button => {
-				const currentSource = normalizeTaskColorSource(preset.colorSource, CALENDAR_TASK_COLOR_SOURCES, 'taskColor');
+				const currentSource = normalizeTaskColorSource(preset.colorSource, CALENDAR_PRESET_TASK_COLOR_SOURCES, 'taskColor');
 				renderTaskColorSourceSelectButton(button.buttonEl, currentSource);
 				button.onClick(event => {
 					event.preventDefault();
 					showTaskColorSourceSelectMenu(button.buttonEl, {
-						sources: CALENDAR_TASK_COLOR_SOURCES,
+						sources: CALENDAR_PRESET_TASK_COLOR_SOURCES,
 						currentSource,
 						onSelect: settingsAsyncHandler('calendar preset task color source selection failed', async (source) => {
 							await this.updatePreset(current => {

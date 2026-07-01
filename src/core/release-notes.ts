@@ -13,6 +13,40 @@ const RELEASE_NOTE_LIMIT = 5;
 
 export const OPERON_RELEASE_NOTES: OperonReleaseNote[] = [
 	{
+		version: '1.9.0',
+		date: '2026-07-01',
+		title: 'Kanban as a Planning Surface',
+		showOnUpdate: true,
+		youtubeUrl: 'https://youtu.be/9YjQEgOSoWQ',
+		body: `
+This release turns Kanban into a more capable planning surface, not just a place to move cards between columns. Task Chips now bring key task context directly onto Kanban cards, while the board, headers, actions, and Calendar task visuals have been refined into a cleaner, more focused interface.
+
+### New
+- Added **Kanban Task Chips** to main Kanban cards, with configurable compact metadata, interactive desktop chips, read-only mobile chips, and Project Serial identity chips when available.
+- Added a dedicated **Kanban Task Chips** settings surface, so Kanban cards can use their own chip visibility, ordering, and action-chip preferences.
+- Added **Kanban Task Actions** for timer, pin, note, subtask, and checkbox actions, with note indicators shown by default when a task has notes.
+
+### Improved
+- Improved **Kanban cards and task chips** with calmer neutral surfaces, task-color border emphasis, outline-style chips, pinned-style task icons, trailing action chips, and a Stop state while a card timer is already running.
+- Improved **Kanban column and swimlane headers** with transparent board structure, border-only axis highlighting, cleaner count buttons, and swimlane labels that hide wikilink brackets and wrap long names.
+- Improved **Calendar desktop task visuals** with clearer task icon borders, calmer lane-label focus states, balanced all-day spacing, tighter timed-task corners, and consistent task edges across hover, focus, and editing states.
+- Improved **contextual task menus** and **Task Editor** relationship cards so resting surfaces stay neutral and task-color emphasis appears only on hover or keyboard focus.
+
+### Changed
+- Changed **Calendar and Kanban preset color sources** so Accent color is no longer offered; existing Calendar Accent presets fall back to Task color, while existing Kanban Accent presets fall back to No color.
+- Changed **Kanban Task Chips** so hidden-field overflow counts are no longer shown on desktop or mobile cards, reducing metadata noise on dense boards.
+
+### Fixed
+- Fixed **icon-only task chips** flickering near tight row edges by keeping them collapsed and showing their label in an Operon tooltip when there is not enough room to expand inline.
+
+### Updated Docs
+- [[DOCS-030 Kanban overview|Kanban overview]]
+- [[DOCS-097 Project serials|Project serials]]
+- [[DOCS-041 Task chips display and behavior|Task chips display and behavior]]
+- [[DOCS-100 Mobile Kanban|Mobile Kanban]]
+`.trim(),
+	},
+	{
 		version: '1.8.0',
 		date: '2026-06-29',
 		title: 'Task Wikilink Overlay',

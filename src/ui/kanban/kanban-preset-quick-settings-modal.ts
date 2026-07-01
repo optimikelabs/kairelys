@@ -147,7 +147,7 @@ export class KanbanPresetQuickSettingsModal extends Modal {
 			.setName(t('settings', 'kanbanTaskColorSource'))
 			.setDesc(t('settings', 'kanbanTaskColorSourceDesc'))
 			.addButton(button => {
-				const currentSource = normalizeTaskColorSource(preset.colorSource, KANBAN_TASK_COLOR_SOURCES, 'taskColor');
+				const currentSource = normalizeTaskColorSource(preset.colorSource, KANBAN_TASK_COLOR_SOURCES, 'noColor');
 				renderTaskColorSourceSelectButton(button.buttonEl, currentSource);
 				button.onClick(event => {
 					event.preventDefault();

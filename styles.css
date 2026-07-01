@@ -3876,7 +3876,7 @@ body .operon-color-picker-panel button.operon-color-picker-copy:disabled {
 	justify-content: center;
 	min-width: 0;
 	border: 1px solid var(--operon-repeat-picker-border, var(--background-modifier-border));
-	border-radius: 8px;
+	border-radius: 6px;
 	background: transparent;
 	background-color: transparent;
 	background-image: none;
@@ -4313,7 +4313,7 @@ body .operon-color-picker-panel button.operon-color-picker-copy:disabled {
 	align-items: center;
 	min-height: 24px;
 	padding: 4px 10px;
-	border-radius: 8px;
+	border-radius: 6px;
 	border: 1px solid var(--operon-repeat-picker-hover-border);
 	background: transparent;
 	background-color: transparent;
@@ -4342,7 +4342,7 @@ body .operon-color-picker-panel button.operon-color-picker-copy:disabled {
 	align-items: center;
 	gap: 4px;
 	padding: 2px 8px;
-	border-radius: 8px;
+	border-radius: 6px;
 	background: var(--background-secondary);
 	border: 1px solid var(--background-modifier-border);
 }
@@ -5003,6 +5003,12 @@ body .operon-color-picker-panel button.operon-color-picker-copy:disabled {
 	overflow: auto;
 }
 
+.operon-hover-tooltip.operon-kanban-axis-tooltip {
+	border-color: color-mix(in srgb, var(--operon-live-hover-border, var(--interactive-accent)) 42%, var(--background-modifier-border));
+	background: var(--background-primary);
+	background-color: var(--background-primary);
+}
+
 .operon-hover-tooltip--floating {
 	position: fixed;
 	top: 0;
@@ -5118,7 +5124,7 @@ body .operon-color-picker-panel button.operon-color-picker-copy:disabled {
 	.operon-filter-surface,
 	.operon-task-wikilink-chip-row
 ) {
-	--operon-task-chip-radius: 8px;
+	--operon-task-chip-radius: 6px;
 	--operon-task-chip-border: color-mix(in srgb, var(--background-modifier-border) 92%, transparent);
 	--operon-task-chip-bg: transparent;
 	--operon-task-chip-hover-accent: var(--operon-live-hover-border, var(--interactive-accent));
@@ -7303,7 +7309,7 @@ body .modal.operon-task-finder-modal textarea.operon-task-finder-search:focus-vi
 .operon-subtasks-picker-panel .operon-parent-selected-chip,
 .operon-list-picker-panel .operon-list-picker-chip {
 	border: 1px solid var(--operon-list-relation-selected-border);
-	border-radius: 8px;
+	border-radius: 6px;
 	background: transparent;
 	background-color: transparent;
 	background-image: none;
@@ -7536,7 +7542,7 @@ body .modal.operon-task-finder-modal textarea.operon-task-finder-search:focus-vi
 	width: 100%;
 	padding: 8px 10px 8px 12px;
 	border: 1px solid var(--operon-custom-picker-selected-border, color-mix(in srgb, var(--interactive-accent) 28%, var(--background-modifier-border)));
-	border-radius: 8px;
+	border-radius: 6px;
 	background: transparent;
 	background-color: transparent;
 	background-image: none;
@@ -8096,7 +8102,7 @@ body.operon-subtasks-filter-modal-open .hover-popover {
 	min-height: 32px;
 	max-width: 100%;
 	padding: 0 8px 0 10px;
-	border-radius: 8px;
+	border-radius: 6px;
 	font-size: 12px;
 	box-sizing: border-box;
 	overflow: hidden;
@@ -8127,7 +8133,7 @@ body.operon-subtasks-filter-modal-open .hover-popover {
 	margin-left: auto;
 	padding: 0;
 	border: none;
-	border-radius: 8px;
+	border-radius: 6px;
 	box-sizing: border-box;
 	align-self: center;
 	background: transparent;
@@ -10161,14 +10167,20 @@ body .operon-task-editor button.operon-editor-tracking-session-action.is-danger:
 
 .operon-editor-top-context-section .operon-editor-parent-card,
 .operon-editor-top-context-section .operon-editor-subtask-card {
+	--operon-relation-context-neutral-border: color-mix(in srgb, var(--text-muted) 18%, var(--background-modifier-border));
 	margin: 0;
+	border-color: var(--operon-relation-context-neutral-border);
 	border-left-width: 1px;
-	background: color-mix(in srgb, var(--operon-relation-context-color, var(--operon-task-editor-accent, var(--interactive-accent))) 4%, transparent);
+	border-left-color: var(--operon-relation-context-neutral-border);
+	background: transparent;
+	transition: border-color 0.12s ease;
 }
 
-.operon-editor-top-context-section .operon-editor-parent-card {
-	border-color: color-mix(in srgb, var(--operon-relation-context-color, var(--color-red)) 36%, var(--background-modifier-border));
-	border-left-color: var(--operon-relation-context-color, var(--color-red));
+.operon-editor-top-context-section .operon-editor-parent-card:hover,
+.operon-editor-top-context-section .operon-editor-parent-card:focus-within,
+.operon-editor-top-context-section .operon-editor-subtask-card:hover,
+.operon-editor-top-context-section .operon-editor-subtask-card:focus-within {
+	border-color: color-mix(in srgb, var(--operon-relation-context-color, var(--operon-task-editor-accent, var(--interactive-accent))) 42%, var(--background-modifier-border));
 }
 
 .operon-parent-line-1 {
@@ -11257,7 +11269,7 @@ body .operon-task-editor button.operon-task-editor-workflow-action-button.is-loc
 	gap: 6px;
 	max-width: 100%;
 	padding: 4px 8px 4px 10px;
-	border-radius: 8px;
+	border-radius: 6px;
 	border: 1px solid var(--background-modifier-border);
 	background: transparent;
 	background-color: transparent;
@@ -11702,7 +11714,7 @@ body .operon-task-editor button.operon-task-editor-workflow-action-button.is-loc
 	padding: 0 10px;
 	gap: 6px;
 	border: 1px solid var(--background-modifier-border);
-	border-radius: 8px;
+	border-radius: 6px;
 	background: var(--background-primary);
 	color: var(--text-normal);
 	font-size: 14px;
@@ -11803,7 +11815,7 @@ body .operon-task-editor button.operon-task-editor-workflow-action-button.is-loc
 	align-items: center;
 	gap: 4px;
 	padding: 1px 6px 1px 8px;
-	border-radius: 8px;
+	border-radius: 6px;
 	background: color-mix(in srgb, var(--operon-task-editor-accent, var(--interactive-accent)) 12%, var(--background-primary));
 	color: var(--text-normal);
 	font-size: 11px;
@@ -12019,7 +12031,7 @@ body .operon-task-editor button.operon-task-editor-workflow-action-button.is-loc
 	align-items: center;
 	gap: 4px;
 	padding: 1px 6px 1px 8px;
-	border-radius: 8px;
+	border-radius: 6px;
 	background: color-mix(in srgb, var(--color-purple) 14%, var(--background-primary));
 	color: var(--text-normal);
 	font-size: 11px;
@@ -12136,7 +12148,7 @@ body .operon-task-editor button.operon-task-editor-workflow-action-button.is-loc
 	align-items: center;
 	gap: 4px;
 	padding: 1px 6px 1px 8px;
-	border-radius: 8px;
+	border-radius: 6px;
 	background: color-mix(in srgb, var(--color-green) 14%, var(--background-primary));
 	color: var(--text-normal);
 	font-size: 11px;
@@ -12254,7 +12266,7 @@ body .operon-task-editor button.operon-task-editor-workflow-action-button.is-loc
 	align-items: center;
 	gap: 4px;
 	padding: 1px 6px 1px 8px;
-	border-radius: 8px;
+	border-radius: 6px;
 	background: color-mix(in srgb, var(--operon-task-editor-accent, var(--interactive-accent)) 14%, var(--background-primary));
 	color: var(--text-normal);
 	font-size: 11px;
@@ -12488,7 +12500,7 @@ body .operon-task-editor button.operon-task-editor-workflow-action-button.is-loc
 	gap: 10px;
 	width: 100%;
 	padding: 8px 10px 8px 12px;
-	border-radius: 8px;
+	border-radius: 6px;
 	background: transparent;
 	background-color: transparent;
 	background-image: none;
@@ -13729,7 +13741,7 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-filter-
 	min-height: 24px;
 	padding: 0 7px;
 	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--operon-filter-control-radius, 8px);
+	border-radius: 6px;
 	background: transparent;
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
@@ -13741,7 +13753,7 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-filter-
 .operon-filter-surface .operon-reading-task-overflow {
 	min-height: 24px;
 	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--operon-filter-control-radius, 8px);
+	border-radius: 6px;
 	background: transparent;
 	color: var(--text-muted);
 }
@@ -14285,7 +14297,7 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-filter-
 	min-width: 0;
 	max-width: min(100%, 240px);
 	padding: 2px 7px;
-	border-radius: 8px;
+	border-radius: 6px;
 	background: var(--background-secondary);
 	color: var(--text-muted);
 	font-size: 11px;
@@ -15958,7 +15970,7 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-filter-
 	margin-right: 0;
 	margin-left: 4px;
 	border: 1px solid var(--operon-task-chip-border, var(--background-modifier-border));
-	border-radius: var(--operon-task-chip-radius, 8px);
+	border-radius: var(--operon-task-chip-radius, 6px);
 	background: var(--operon-task-chip-bg, transparent);
 	background-color: var(--operon-task-chip-bg, transparent);
 	box-shadow: none;
@@ -16073,7 +16085,7 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-filter-
 	.operon-task-wikilink-trailing,
 	.operon-task-wikilink-chip-row
 ) {
-	--operon-task-chip-radius: 8px;
+	--operon-task-chip-radius: 6px;
 	--operon-task-chip-border: color-mix(in srgb, var(--background-modifier-border) 92%, transparent);
 	--operon-task-chip-bg: transparent;
 	--operon-task-chip-hover-accent: var(--operon-live-hover-border, var(--interactive-accent));
@@ -16102,7 +16114,7 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-filter-
 	min-height: 24px;
 	padding: 0 7px;
 	border: 1px solid var(--operon-task-chip-border, var(--background-modifier-border));
-	border-radius: var(--operon-task-chip-radius, 8px);
+	border-radius: var(--operon-task-chip-radius, 6px);
 	background: var(--operon-task-chip-bg, transparent);
 	background-color: var(--operon-task-chip-bg, transparent);
 	box-shadow: none;
@@ -16163,7 +16175,7 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-filter-
 	min-height: 24px;
 	padding: 0 6px;
 	border: 1px solid var(--operon-task-chip-border, var(--background-modifier-border));
-	border-radius: var(--operon-task-chip-radius, 8px);
+	border-radius: var(--operon-task-chip-radius, 6px);
 	background: var(--operon-task-chip-bg, transparent);
 	background-color: var(--operon-task-chip-bg, transparent);
 	color: var(--text-muted);
@@ -16307,7 +16319,7 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-filter-
 	min-height: 24px;
 	padding: 0 7px;
 	border: 1px solid var(--operon-task-chip-border, var(--background-modifier-border));
-	border-radius: var(--operon-task-chip-radius, 8px);
+	border-radius: var(--operon-task-chip-radius, 6px);
 	background: var(--operon-task-chip-bg, transparent);
 	background-color: var(--operon-task-chip-bg, transparent);
 	box-shadow: none;
@@ -16322,7 +16334,7 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-filter-
 	min-height: 24px;
 	padding: 0;
 	border: 1px solid var(--operon-task-chip-border, var(--background-modifier-border));
-	border-radius: var(--operon-task-chip-radius, 8px);
+	border-radius: var(--operon-task-chip-radius, 6px);
 	background: var(--operon-task-chip-bg, transparent);
 	background-color: var(--operon-task-chip-bg, transparent);
 	box-shadow: none;
@@ -16383,7 +16395,7 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-filter-
 	min-height: 24px;
 	padding: 0 6px;
 	border: 1px solid var(--operon-task-chip-border, var(--background-modifier-border));
-	border-radius: var(--operon-task-chip-radius, 8px);
+	border-radius: var(--operon-task-chip-radius, 6px);
 	background: var(--operon-task-chip-bg, transparent);
 	background-color: var(--operon-task-chip-bg, transparent);
 	color: var(--text-muted);
@@ -16470,7 +16482,7 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-filter-
 /* Canonical task chip visual system. Prefer changing this block for task-surface chip geometry and states. */
 .operon-task-chip-surface {
 	--operon-task-chip-height: 24px;
-	--operon-task-chip-radius: 8px;
+	--operon-task-chip-radius: 6px;
 	--operon-task-chip-border: color-mix(in srgb, var(--background-modifier-border) 92%, transparent);
 	--operon-task-chip-bg: transparent;
 	--operon-task-chip-padding-x: 7px;
@@ -16484,7 +16496,7 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-filter-
 
 .operon-task-chip-surface :is(.operon-task-chip, .operon-task-chip-action) {
 	border: 1px solid var(--operon-task-chip-border, var(--background-modifier-border));
-	border-radius: var(--operon-task-chip-radius, 8px);
+	border-radius: var(--operon-task-chip-radius, 6px);
 	background: var(--operon-task-chip-bg, transparent);
 	background-color: var(--operon-task-chip-bg, transparent);
 	box-shadow: none;
@@ -19576,7 +19588,7 @@ body .modal.operon-kanban-preset-quick-settings-modal :is(
 
 .operon-calendar-lane-toggle-button.is-on {
 	min-width: 68px;
-	border-color: color-mix(in srgb, var(--interactive-accent) 42%, var(--background-modifier-border));
+	border-color: color-mix(in srgb, var(--background-modifier-border) 84%, transparent);
 	background: transparent;
 	color: var(--text-normal);
 }
@@ -19822,9 +19834,10 @@ body .operon-calendar-root button.operon-calendar-lane-toggle-button:is(:hover, 
 
 .operon-calendar-hover-menu {
 	--operon-contextual-menu-radius: 8px;
+	--operon-contextual-menu-accent: var(--interactive-accent);
 	--operon-contextual-menu-border: color-mix(in srgb, var(--text-muted) 26%, var(--background-modifier-border));
-	--operon-contextual-menu-hover-border: color-mix(in srgb, var(--interactive-accent) 34%, var(--background-modifier-border));
-	--operon-contextual-menu-focus-ring: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+	--operon-contextual-menu-hover-border: color-mix(in srgb, var(--operon-contextual-menu-accent) 34%, var(--background-modifier-border));
+	--operon-contextual-menu-focus-ring: color-mix(in srgb, var(--operon-contextual-menu-accent) 12%, transparent);
 	position: absolute;
 	box-sizing: border-box;
 	z-index: 40;
@@ -19897,6 +19910,7 @@ body .operon-calendar-root button.operon-calendar-lane-toggle-button:is(:hover, 
 	height: 16px;
 	color: var(--text-muted);
 	flex-shrink: 0;
+	transition: color 0.12s ease;
 }
 
 .operon-calendar-hover-menu-icon svg {
@@ -19904,36 +19918,13 @@ body .operon-calendar-root button.operon-calendar-lane-toggle-button:is(:hover, 
 	height: 16px;
 }
 
+.operon-calendar-hover-menu button.operon-calendar-hover-menu-item:hover .operon-calendar-hover-menu-icon,
+.operon-calendar-hover-menu button.operon-calendar-hover-menu-item:focus-visible .operon-calendar-hover-menu-icon {
+	color: var(--operon-contextual-menu-hover-border);
+}
+
 .operon-calendar-hover-menu-label {
 	min-width: 0;
-}
-
-.operon-calendar-hover-menu-item[data-action-id="startTimer"] .operon-calendar-hover-menu-icon {
-	color: color-mix(in srgb, var(--interactive-accent) 78%, white 22%);
-}
-
-.operon-calendar-hover-menu-item[data-action-id="markDone"] .operon-calendar-hover-menu-icon {
-	color: color-mix(in srgb, #4caf50 72%, var(--text-normal) 28%);
-}
-
-.operon-calendar-hover-menu-item[data-action-id="unschedule"] .operon-calendar-hover-menu-icon {
-	color: color-mix(in srgb, #ef6c00 76%, var(--text-normal) 24%);
-}
-
-.operon-calendar-hover-menu-item[data-action-id="jumpToSource"] .operon-calendar-hover-menu-icon {
-	color: color-mix(in srgb, #7e57c2 76%, var(--text-normal) 24%);
-}
-
-.operon-calendar-hover-menu-item[data-action-id="openEditor"] .operon-calendar-hover-menu-icon {
-	color: color-mix(in srgb, #42a5f5 74%, var(--text-normal) 26%);
-}
-
-.operon-calendar-hover-menu-item[data-action-id="setAsTracked"] .operon-calendar-hover-menu-icon {
-	color: color-mix(in srgb, #00897b 78%, var(--text-normal) 22%);
-}
-
-.operon-calendar-hover-menu-item[data-action-id="skipThisOccurrence"] .operon-calendar-hover-menu-icon {
-	color: color-mix(in srgb, #d84315 76%, var(--text-normal) 24%);
 }
 
 .operon-calendar-all-day-item.is-draggable {
@@ -20724,12 +20715,12 @@ body .operon-calendar-root button.operon-calendar-lane-toggle-button:is(:hover, 
 }
 
 .operon-calendar-timed-item {
-	--operon-calendar-timed-edge-top: linear-gradient(var(--operon-calendar-accent, var(--interactive-accent)), var(--operon-calendar-accent, var(--interactive-accent))) top / 100% 2px no-repeat;
-	--operon-calendar-timed-edge-bottom: linear-gradient(var(--operon-calendar-accent, var(--interactive-accent)), var(--operon-calendar-accent, var(--interactive-accent))) bottom / 100% 2px no-repeat;
+	--operon-calendar-timed-edge-top: linear-gradient(var(--operon-calendar-accent, var(--interactive-accent)), var(--operon-calendar-accent, var(--interactive-accent))) top / 100% 1px no-repeat;
+	--operon-calendar-timed-edge-bottom: linear-gradient(var(--operon-calendar-accent, var(--interactive-accent)), var(--operon-calendar-accent, var(--interactive-accent))) bottom / 100% 1px no-repeat;
 	position: absolute;
 	box-sizing: border-box;
 	background: color-mix(in srgb, var(--operon-calendar-accent, var(--interactive-accent)) 12%, var(--background-secondary));
-	border-radius: 6px;
+	border-radius: 4px;
 	padding: 0 8px;
 	overflow: hidden;
 	min-height: 24px;
@@ -20921,12 +20912,6 @@ body.operon-calendar-touch-drag-active {
 	opacity: 1;
 	background: none;
 	transition: none;
-}
-
-.operon-calendar-timed-item:not(.is-availability-layer):hover::after,
-.operon-calendar-timed-item:not(.is-availability-layer):focus-within::after,
-.operon-calendar-timed-item:not(.is-availability-layer).is-live-editing::after {
-	opacity: 0.95;
 }
 
 .operon-calendar-timed-item.is-projected:hover::after,
@@ -21313,10 +21298,26 @@ body.operon-calendar-touch-drag-active {
 	border-top-right-radius: 0;
 }
 
+.operon-calendar-timed-item:not(.is-projected):not(.is-availability-layer).is-clipped-top {
+	--operon-calendar-timed-edge-top: linear-gradient(transparent, transparent) top / 100% 0 no-repeat;
+}
+
+.operon-calendar-timed-item.is-projected.is-clipped-top::before {
+	border-top: 0;
+}
+
 .operon-calendar-timed-item.is-clipped-bottom {
 	--operon-calendar-timed-edge-bottom: linear-gradient(transparent, transparent) bottom / 100% 0 no-repeat;
 	border-bottom-left-radius: 0;
 	border-bottom-right-radius: 0;
+}
+
+.operon-calendar-timed-item:not(.is-projected):not(.is-availability-layer).is-clipped-bottom {
+	--operon-calendar-timed-edge-bottom: linear-gradient(transparent, transparent) bottom / 100% 0 no-repeat;
+}
+
+.operon-calendar-timed-item.is-projected.is-clipped-bottom::after {
+	border-bottom: 0;
 }
 
 .operon-calendar-now-line {
@@ -21602,6 +21603,29 @@ body.operon-calendar-touch-drag-active {
 	border-radius: 7px;
 	font-size: 15px;
 	margin-top: 0;
+}
+
+body:not(.is-mobile) .operon-calendar-root .operon-calendar-status-button.is-compact:not(.operon-calendar-sidebar-task-pool-status) {
+	width: 24px;
+	height: 24px;
+	min-width: 24px;
+	border-width: 1px;
+	border-color: color-mix(in srgb, currentColor 34%, var(--background-modifier-border));
+	border-radius: 6px;
+	background: transparent;
+	box-sizing: border-box;
+	font-size: 16px;
+}
+
+body:not(.is-mobile) .operon-calendar-root .operon-calendar-status-button.is-compact:not(.operon-calendar-sidebar-task-pool-status):hover,
+body:not(.is-mobile) .operon-calendar-root .operon-calendar-status-button.is-compact:not(.operon-calendar-sidebar-task-pool-status):focus-visible {
+	border-color: currentColor;
+	background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+body:not(.is-mobile) .operon-calendar-root .operon-calendar-status-button.is-compact:not(.operon-calendar-sidebar-task-pool-status) svg {
+	width: 16px;
+	height: 16px;
 }
 
 .operon-calendar-sidebar-task-pool-status.operon-calendar-status-button.is-compact {
@@ -21967,9 +21991,8 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-kanban-
 	height: 100%;
 	min-height: 0;
 	padding: 14px;
-	background:
-		linear-gradient(180deg, color-mix(in srgb, var(--operon-kanban-surface-soft) 78%, transparent), transparent 42%),
-		var(--operon-kanban-surface-main);
+	background: transparent;
+	background-color: transparent;
 	color: var(--text-normal);
 }
 
@@ -22047,28 +22070,41 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-kanban-
 	height: 34px;
 	padding: 0 10px;
 	border: 1px solid var(--operon-kanban-surface-border);
-	border-radius: 8px;
-	background: color-mix(in srgb, var(--operon-kanban-surface-soft) 88%, transparent);
+	border-radius: 6px;
+	background: transparent;
+	background-color: transparent;
 	color: var(--text-normal);
 	font-size: 13px;
 	font-weight: 700;
+	box-shadow: none;
 	outline: none;
 }
 
-.operon-kanban-toolbar-preset-button,
-.operon-kanban-toolbar-settings-button {
+button.operon-kanban-toolbar-preset-button,
+button.operon-kanban-toolbar-settings-button {
+	appearance: none;
+	-webkit-appearance: none;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
 	gap: 8px;
 	min-height: 34px;
 	padding: 7px 12px;
-	border-radius: 8px;
+	border-radius: 6px;
 	border: 1px solid var(--operon-kanban-surface-border);
-	background: color-mix(in srgb, var(--operon-kanban-surface-soft) 88%, transparent);
+	border-style: solid;
+	background: transparent;
+	background-color: transparent;
+	background-image: none;
+	background-clip: border-box;
 	color: var(--text-normal);
+	box-shadow: none;
+	filter: none;
+	outline: none;
+	text-shadow: none;
+	transform: none;
 	cursor: pointer;
-	transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease;
+	transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 .operon-kanban-toolbar-search-wrap {
@@ -22104,10 +22140,12 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-kanban-
 	padding: 0 34px 0 40px;
 	appearance: none;
 	-webkit-appearance: none;
-	border-radius: 8px;
+	border-radius: 6px;
 	border: 1px solid var(--operon-kanban-surface-border);
-	background: color-mix(in srgb, var(--operon-kanban-surface-soft) 88%, transparent);
+	background: transparent;
+	background-color: transparent;
 	color: var(--text-normal);
+	box-shadow: none;
 	outline: none;
 	cursor: text;
 	text-overflow: ellipsis;
@@ -22177,7 +22215,8 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-kanban-
 }
 
 .operon-kanban-toolbar-search:hover {
-	background: color-mix(in srgb, var(--operon-kanban-surface-hover) 88%, transparent);
+	background: transparent;
+	background-color: transparent;
 }
 
 .operon-kanban-toolbar-search-wrap:focus-within .operon-kanban-toolbar-search,
@@ -22187,7 +22226,8 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-kanban-
 	box-shadow:
 		0 0 0 1px color-mix(in srgb, var(--interactive-accent) 60%, transparent),
 		0 0 0 4px color-mix(in srgb, var(--interactive-accent) 28%, transparent);
-	background: color-mix(in srgb, var(--operon-kanban-surface-soft) 88%, transparent);
+	background: transparent;
+	background-color: transparent;
 }
 
 .operon-kanban-toolbar-search-wrap.has-active-scope .operon-kanban-toolbar-search-icon {
@@ -22210,7 +22250,8 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-kanban-
 	box-shadow:
 		0 0 0 1px color-mix(in srgb, var(--interactive-accent) 46%, transparent),
 		0 0 0 3px color-mix(in srgb, var(--interactive-accent) 18%, transparent);
-	background: color-mix(in srgb, var(--operon-kanban-surface-soft) 88%, transparent);
+	background: transparent;
+	background-color: transparent;
 }
 
 .operon-kanban-toolbar-search-clear {
@@ -22224,7 +22265,8 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-kanban-
 	padding: 0;
 	border: 0;
 	border-radius: 999px;
-	background: color-mix(in srgb, var(--operon-kanban-surface-main) 92%, transparent);
+	background: transparent;
+	background-color: transparent;
 	color: var(--text-muted);
 	cursor: pointer;
 	opacity: 0;
@@ -22240,7 +22282,8 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-kanban-
 
 .operon-kanban-toolbar-search-clear:hover,
 .operon-kanban-toolbar-search-clear:focus-visible {
-	background: color-mix(in srgb, var(--operon-kanban-surface-hover) 88%, transparent);
+	background: transparent;
+	background-color: transparent;
 	color: var(--text-normal);
 }
 
@@ -22258,7 +22301,7 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-kanban-
 	padding: 8px;
 	overflow-x: auto;
 	border: 1px solid var(--operon-kanban-surface-border);
-	border-radius: 10px;
+	border-radius: 6px;
 	background: color-mix(in srgb, var(--operon-kanban-surface-main) 94%, transparent);
 	box-shadow: 0 16px 40px rgba(0, 0, 0, 0.16);
 	backdrop-filter: blur(16px);
@@ -22290,7 +22333,9 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-kanban-
 	min-width: 44px;
 	height: 40px;
 	padding: 0 13px;
-	border-radius: var(--operon-task-finder-control-radius);
+	border-radius: 6px;
+	background: transparent;
+	background-color: transparent;
 }
 
 .operon-kanban-search-scope-popover .operon-kanban-search-scope-button.is-disabled {
@@ -22343,8 +22388,9 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-kanban-
 	min-width: 0;
 	padding: 6px 8px 6px 10px;
 	border: 1px solid color-mix(in srgb, var(--interactive-accent) 26%, var(--operon-kanban-surface-border));
-	border-radius: 8px;
-	background: color-mix(in srgb, var(--interactive-accent) 12%, var(--operon-kanban-surface-soft));
+	border-radius: 6px;
+	background: transparent;
+	background-color: transparent;
 	color: var(--text-normal);
 }
 
@@ -22368,18 +22414,39 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-kanban-
 	padding: 0;
 	border: 0;
 	border-radius: 999px;
-	background: color-mix(in srgb, var(--operon-kanban-surface-main) 88%, transparent);
+	background: transparent;
+	background-color: transparent;
 	color: var(--text-muted);
 	cursor: pointer;
 }
 
-.operon-kanban-toolbar-preset-button:hover,
-.operon-kanban-toolbar-preset-button:focus-visible,
+button.operon-kanban-toolbar-preset-button:hover,
+button.operon-kanban-toolbar-preset-button:focus-visible,
+button.operon-kanban-toolbar-settings-button:hover,
+button.operon-kanban-toolbar-settings-button:focus-visible {
+	background: transparent;
+	background-color: transparent;
+	background-image: none;
+	background-clip: border-box;
+	border-color: color-mix(in srgb, var(--interactive-accent) 34%, var(--operon-kanban-surface-border));
+	box-shadow: none;
+	filter: none;
+	outline: none;
+	text-shadow: none;
+	transform: none;
+}
+
+button.operon-kanban-toolbar-preset-button:hover,
+button.operon-kanban-toolbar-preset-button:focus-visible {
+	background: color-mix(in srgb, var(--interactive-accent) 10%, transparent);
+	background-color: color-mix(in srgb, var(--interactive-accent) 10%, transparent);
+	border-color: color-mix(in srgb, var(--interactive-accent) 42%, var(--operon-kanban-surface-border));
+}
+
 .operon-kanban-toolbar-search:hover,
-.operon-kanban-toolbar-search:focus-visible,
-.operon-kanban-toolbar-settings-button:hover,
-.operon-kanban-toolbar-settings-button:focus-visible {
-	background: color-mix(in srgb, var(--operon-kanban-surface-hover) 88%, transparent);
+.operon-kanban-toolbar-search:focus-visible {
+	background: transparent;
+	background-color: transparent;
 	border-color: color-mix(in srgb, var(--interactive-accent) 34%, var(--operon-kanban-surface-border));
 	transform: translateY(-1px);
 }
@@ -22401,7 +22468,7 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-kanban-
 	padding: 8px;
 	overflow-y: auto;
 	border: 1px solid var(--operon-kanban-surface-border);
-	border-radius: 10px;
+	border-radius: 6px;
 	background: color-mix(in srgb, var(--operon-kanban-surface-main) 94%, transparent);
 	box-shadow: 0 16px 40px rgba(0, 0, 0, 0.16);
 	backdrop-filter: blur(16px);
@@ -22415,8 +22482,9 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-kanban-
 	width: 100%;
 	padding: 10px 12px;
 	border: 1px solid transparent;
-	border-radius: 8px;
-	background: color-mix(in srgb, var(--operon-kanban-surface-soft) 88%, transparent);
+	border-radius: 6px;
+	background: transparent;
+	background-color: transparent;
 	color: var(--text-normal);
 	cursor: pointer;
 	text-align: left;
@@ -22427,7 +22495,8 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-kanban-
 .operon-kanban-parent-search-item:focus-visible,
 .operon-kanban-parent-search-item.is-active {
 	border-color: color-mix(in srgb, var(--interactive-accent) 34%, var(--operon-kanban-surface-border));
-	background: color-mix(in srgb, var(--interactive-accent) 16%, var(--operon-kanban-surface-soft));
+	background: transparent;
+	background-color: transparent;
 	transform: translateY(-1px);
 }
 
@@ -22455,14 +22524,22 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-kanban-
 	text-align: left;
 }
 
-.operon-kanban-toolbar-preset-button.is-active {
-	background: color-mix(in srgb, var(--interactive-accent) 16%, var(--operon-kanban-surface-soft));
+button.operon-kanban-toolbar-preset-button.is-active {
+	background: transparent;
+	background-color: transparent;
+	background-image: none;
+	background-clip: border-box;
 	border-color: color-mix(in srgb, var(--interactive-accent) 46%, var(--operon-kanban-surface-border));
 	color: var(--text-normal);
+	box-shadow: none;
+	filter: none;
+	outline: none;
+	text-shadow: none;
+	transform: none;
 	font-weight: 700;
 }
 
-.operon-kanban-toolbar-settings-button {
+button.operon-kanban-toolbar-settings-button {
 	width: 34px;
 	padding: 0;
 }
@@ -22495,7 +22572,7 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-kanban-
 .operon-kanban-column-header,
 .operon-kanban-cell {
 	border: 1px solid var(--operon-kanban-surface-border);
-	border-radius: 10px;
+	border-radius: 6px;
 }
 
 .operon-kanban-corner-cell {
@@ -22539,8 +22616,9 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-kanban-
 	position: sticky;
 	top: 0;
 	z-index: 7;
-	background: color-mix(in srgb, var(--operon-kanban-surface-soft) 86%, var(--operon-kanban-surface-main));
-	box-shadow: 0 10px 18px color-mix(in srgb, var(--operon-kanban-surface-main) 82%, transparent);
+	background: transparent;
+	background-color: transparent;
+	box-shadow: none;
 }
 
 .operon-kanban-column-header {
@@ -22549,10 +22627,16 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-kanban-
 	align-items: center;
 	gap: 10px;
 	padding: 12px 14px;
-	background:
-		linear-gradient(180deg, color-mix(in srgb, var(--operon-kanban-status-color, var(--interactive-accent)) 20%, transparent), transparent 76%),
-		color-mix(in srgb, var(--operon-kanban-surface-soft) 88%, transparent);
+	background: transparent;
+	background-color: transparent;
 	backdrop-filter: blur(10px);
+	transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.operon-kanban-column-header.is-axis-active {
+	border-color: color-mix(in srgb, var(--operon-kanban-status-color, var(--interactive-accent)) 40%, var(--operon-kanban-surface-border));
+	background: transparent;
+	background-color: transparent;
 }
 
 .operon-kanban-column-header.is-collapsed {
@@ -22572,7 +22656,9 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-kanban-
 	display: none;
 }
 
-.operon-kanban-column-count-button {
+button.operon-kanban-column-count-button {
+	appearance: none;
+	-webkit-appearance: none;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -22580,23 +22666,43 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-kanban-
 	min-width: 42px;
 	height: 28px;
 	padding: 0 8px;
-	border-radius: 8px;
-	border: 1px solid color-mix(in srgb, var(--operon-kanban-status-color, var(--interactive-accent)) 28%, var(--operon-kanban-surface-border));
-	background: color-mix(in srgb, var(--operon-kanban-status-color, var(--interactive-accent)) 10%, transparent);
+	border-radius: 6px;
+	border: 1px solid color-mix(in srgb, var(--operon-kanban-surface-border) 88%, var(--background-modifier-border));
+	background: transparent;
+	background-color: transparent;
+	background-image: none;
 	color: var(--text-muted);
+	box-shadow: none;
+	filter: none;
 	font-size: 12px;
 	font-weight: 700;
 	font-variant-numeric: tabular-nums;
 	cursor: pointer;
+	transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
-.operon-kanban-column-count-button:hover,
-.operon-kanban-column-count-button:focus-visible {
-	background: color-mix(in srgb, var(--operon-kanban-status-color, var(--interactive-accent)) 16%, transparent);
+button.operon-kanban-column-count-button:hover,
+button.operon-kanban-column-count-button:focus-visible {
+	background: transparent;
+	background-color: transparent;
+	background-image: none;
+	border-color: color-mix(in srgb, var(--operon-kanban-status-color, var(--interactive-accent)) 34%, var(--operon-kanban-surface-border));
 	color: var(--text-normal);
+	box-shadow: none;
+	filter: none;
 }
 
-.operon-kanban-column-header.is-collapsed .operon-kanban-column-count-button {
+.operon-kanban-column-header.is-axis-active button.operon-kanban-column-count-button {
+	border-color: color-mix(in srgb, var(--operon-kanban-status-color, var(--interactive-accent)) 42%, var(--operon-kanban-surface-border));
+	background: transparent;
+	background-color: transparent;
+	background-image: none;
+	color: var(--text-normal);
+	box-shadow: none;
+	filter: none;
+}
+
+.operon-kanban-column-header.is-collapsed button.operon-kanban-column-count-button {
 	width: 42px;
 	min-width: 42px;
 }
@@ -22643,11 +22749,14 @@ body:not(.is-mobile) .mod-root .workspace-leaf-content[data-type="operon-kanban-
 }
 
 .operon-kanban-board.is-mobile-layout .operon-kanban-card {
-	touch-action: none;
 	user-select: none;
 	-webkit-user-select: none;
 	-webkit-user-drag: none;
 	-webkit-touch-callout: none;
+}
+
+.operon-kanban-board.is-mobile-layout .operon-kanban-card > :not(.operon-kanban-card-chip-row) {
+	touch-action: none;
 }
 
 body.operon-kanban-touch-drag-active {
@@ -22702,16 +22811,15 @@ body.operon-kanban-touch-drag-active {
 	max-width: var(--operon-kanban-mobile-lane-handle-width, 6px);
 	padding-inline: 0;
 	overflow: hidden;
-	border-radius: 10px;
+	border-radius: 6px;
 	box-shadow: 0 0 0 1px color-mix(in srgb, var(--operon-kanban-surface-main) 84%, transparent);
 }
 
 .operon-kanban-board.is-mobile-swimlane-overlay .operon-kanban-lane-label {
 	display: flex;
 	justify-content: center;
-	background:
-		linear-gradient(90deg, color-mix(in srgb, var(--operon-kanban-lane-color, var(--interactive-accent)) 28%, transparent), transparent 76%),
-		color-mix(in srgb, var(--operon-kanban-surface-soft) 90%, transparent);
+	background: transparent;
+	background-color: transparent;
 }
 
 .operon-kanban-board.is-mobile-swimlane-overlay .operon-kanban-lane-label::before,
@@ -22755,10 +22863,16 @@ body.operon-kanban-touch-drag-active {
 	gap: 10px;
 	min-width: 0;
 	padding: 14px 16px;
-	background:
-		linear-gradient(90deg, color-mix(in srgb, var(--operon-kanban-lane-color, var(--interactive-accent)) 18%, transparent), transparent 72%),
-		color-mix(in srgb, var(--operon-kanban-surface-soft) 88%, transparent);
+	background: transparent;
+	background-color: transparent;
 	backdrop-filter: blur(8px);
+	transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.operon-kanban-lane-label.is-axis-active {
+	border-color: color-mix(in srgb, var(--operon-kanban-lane-color, var(--interactive-accent)) 40%, var(--operon-kanban-surface-border));
+	background: transparent;
+	background-color: transparent;
 }
 
 .operon-kanban-lane-label.is-collapsed {
@@ -22773,12 +22887,22 @@ body.operon-kanban-touch-drag-active {
 	min-width: 0;
 	font-weight: 700;
 	line-height: 1.35;
+	overflow: visible;
+	text-overflow: clip;
+	white-space: normal;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+}
+
+.operon-kanban-lane-label.is-collapsed .operon-kanban-lane-title {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
-.operon-kanban-lane-count-button {
+button.operon-kanban-lane-count-button {
+	appearance: none;
+	-webkit-appearance: none;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -22787,20 +22911,40 @@ body.operon-kanban-touch-drag-active {
 	min-width: 42px;
 	height: 28px;
 	padding: 0 8px;
-	border-radius: 8px;
-	border: 1px solid color-mix(in srgb, var(--operon-kanban-lane-color, var(--interactive-accent)) 28%, var(--operon-kanban-surface-border));
-	background: color-mix(in srgb, var(--operon-kanban-lane-color, var(--interactive-accent)) 10%, transparent);
+	border-radius: 6px;
+	border: 1px solid color-mix(in srgb, var(--operon-kanban-surface-border) 88%, var(--background-modifier-border));
+	background: transparent;
+	background-color: transparent;
+	background-image: none;
 	color: var(--text-muted);
+	box-shadow: none;
+	filter: none;
 	font-size: 12px;
 	font-weight: 700;
 	font-variant-numeric: tabular-nums;
 	cursor: pointer;
+	transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
-.operon-kanban-lane-count-button:hover,
-.operon-kanban-lane-count-button:focus-visible {
-	background: color-mix(in srgb, var(--operon-kanban-lane-color, var(--interactive-accent)) 16%, transparent);
+button.operon-kanban-lane-count-button:hover,
+button.operon-kanban-lane-count-button:focus-visible {
+	background: transparent;
+	background-color: transparent;
+	background-image: none;
+	border-color: color-mix(in srgb, var(--operon-kanban-lane-color, var(--interactive-accent)) 34%, var(--operon-kanban-surface-border));
 	color: var(--text-normal);
+	box-shadow: none;
+	filter: none;
+}
+
+.operon-kanban-lane-label.is-axis-active button.operon-kanban-lane-count-button {
+	border-color: color-mix(in srgb, var(--operon-kanban-lane-color, var(--interactive-accent)) 42%, var(--operon-kanban-surface-border));
+	background: transparent;
+	background-color: transparent;
+	background-image: none;
+	color: var(--text-normal);
+	box-shadow: none;
+	filter: none;
 }
 
 .operon-kanban-lane-measurer {
@@ -22832,19 +22976,17 @@ body.operon-kanban-touch-drag-active {
 }
 
 .operon-kanban-cell.is-drop-target {
-	border-color: color-mix(in srgb, var(--interactive-accent) 55%, var(--operon-kanban-surface-border));
-	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 35%, transparent);
-	background:
-		linear-gradient(180deg, color-mix(in srgb, var(--interactive-accent) 16%, transparent), transparent 70%),
-		var(--operon-kanban-surface-main);
+	border-color: color-mix(in srgb, var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent))) 55%, var(--operon-kanban-surface-border));
+	box-shadow: none;
+	background: var(--operon-kanban-surface-main);
 }
 
 .operon-kanban-drop-indicator {
 	flex: 0 0 4px;
 	min-height: 4px;
 	border-radius: 999px;
-	background: var(--interactive-accent);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--interactive-accent) 22%, transparent);
+	background: var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent)));
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent))) 18%, transparent);
 	pointer-events: none;
 }
 
@@ -22852,47 +22994,21 @@ body.operon-kanban-touch-drag-active {
 .operon-kanban-cell:not(.is-collapsed):focus-within {
 	border-color: color-mix(
 		in srgb,
-		var(--operon-kanban-status-color, var(--interactive-accent)) 38%,
+		var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent))) 38%,
 		var(--operon-kanban-surface-border)
 	);
-	box-shadow: inset 0 0 0 1px color-mix(
-		in srgb,
-		var(--operon-kanban-status-color, var(--interactive-accent)) 18%,
-		transparent
-	);
-	background:
-		linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--operon-kanban-status-color, var(--interactive-accent)) 7%, transparent),
-			transparent 72%
-		),
-		var(--operon-kanban-surface-main);
+	box-shadow: none;
+	background: var(--operon-kanban-surface-main);
 }
 
 .operon-kanban-cell.is-add-hotspot-active {
 	border-color: color-mix(
 		in srgb,
-		var(--operon-kanban-status-color, var(--interactive-accent)) 52%,
+		var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent))) 52%,
 		var(--operon-kanban-surface-border)
 	);
-	box-shadow:
-		inset 0 0 0 1px color-mix(
-			in srgb,
-			var(--operon-kanban-status-color, var(--interactive-accent)) 34%,
-			transparent
-		),
-		0 0 0 1px color-mix(
-			in srgb,
-			var(--operon-kanban-status-color, var(--interactive-accent)) 12%,
-			transparent
-		);
-	background:
-		linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--operon-kanban-status-color, var(--interactive-accent)) 9%, transparent),
-			transparent 72%
-		),
-		var(--operon-kanban-surface-main);
+	box-shadow: none;
+	background: var(--operon-kanban-surface-main);
 }
 
 .operon-kanban-cell-add-overlay {
@@ -22931,22 +23047,29 @@ body.operon-kanban-touch-drag-active {
 	justify-content: center;
 	width: 44px;
 	height: 44px;
+	min-width: 44px;
+	max-width: 44px;
+	min-height: 44px;
+	max-height: 44px;
+	aspect-ratio: 1 / 1;
+	flex: 0 0 44px;
+	padding: 0;
+	box-sizing: border-box;
+	-webkit-appearance: none;
+	appearance: none;
 	border-radius: 999px;
 	border: 1px solid color-mix(
 		in srgb,
-		var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent))) 28%,
+		var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent))) 48%,
 		var(--operon-kanban-surface-border)
 	);
-	background: color-mix(
-		in srgb,
-		var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent))) 10%,
-		transparent
-	);
-	box-shadow: 0 8px 20px color-mix(in srgb, black 10%, transparent);
-	color: var(--text-muted);
+	background: var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent)));
+	background-color: var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent)));
+	box-shadow: 0 12px 28px color-mix(in srgb, black 24%, transparent);
+	color: var(--text-on-accent);
 	cursor: pointer;
 	pointer-events: auto;
-	backdrop-filter: blur(8px);
+	backdrop-filter: none;
 	transition: transform 120ms ease, border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
 }
 
@@ -22955,48 +23078,38 @@ body.operon-kanban-touch-drag-active {
 	transform: translateY(-1px) scale(1.02);
 	border-color: color-mix(
 		in srgb,
-		var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent))) 46%,
+		var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent))) 62%,
 		var(--operon-kanban-surface-border)
 	);
 	background: color-mix(
 		in srgb,
-		var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent))) 16%,
-		transparent
+		var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent))) 88%,
+		var(--interactive-accent)
 	);
-	box-shadow: 0 12px 24px color-mix(in srgb, black 14%, transparent);
-	color: var(--text-normal);
+	background-color: color-mix(
+		in srgb,
+		var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent))) 88%,
+		var(--interactive-accent)
+	);
+	box-shadow: 0 16px 34px color-mix(in srgb, black 28%, transparent);
+	color: var(--text-on-accent);
 	outline: none;
 }
 
 .operon-kanban-cell-add-button svg {
-	width: 22px;
-	height: 22px;
+	width: 24px;
+	height: 24px;
+	stroke-width: 2.4;
 }
 
 .operon-kanban-board.is-mobile-layout .operon-kanban-cell.is-add-hotspot-active {
 	border-color: color-mix(
 		in srgb,
-		var(--operon-kanban-status-color, var(--interactive-accent)) 42%,
+		var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent))) 42%,
 		var(--operon-kanban-surface-border)
 	);
-	box-shadow:
-		inset 0 0 0 1px color-mix(
-			in srgb,
-			var(--operon-kanban-status-color, var(--interactive-accent)) 22%,
-			transparent
-		),
-		0 0 0 1px color-mix(
-			in srgb,
-			var(--operon-kanban-status-color, var(--interactive-accent)) 8%,
-			transparent
-		);
-	background:
-		linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--operon-kanban-status-color, var(--interactive-accent)) 6%, transparent),
-			transparent 74%
-		),
-		var(--operon-kanban-surface-main);
+	box-shadow: none;
+	background: var(--operon-kanban-surface-main);
 }
 
 .operon-kanban-board.is-mobile-layout .operon-kanban-cell-add-overlay.is-visible {
@@ -23004,22 +23117,25 @@ body.operon-kanban-touch-drag-active {
 }
 
 .operon-kanban-board.is-mobile-layout .operon-kanban-cell-add-button {
-	width: 38px;
-	height: 38px;
+	width: 44px;
+	height: 44px;
+	min-width: 44px;
+	max-width: 44px;
+	min-height: 44px;
+	max-height: 44px;
+	aspect-ratio: 1 / 1;
+	flex-basis: 44px;
 	border-color: color-mix(
 		in srgb,
-		var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent))) 34%,
+		var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent))) 48%,
 		var(--operon-kanban-surface-border)
 	);
-	background: color-mix(
-		in srgb,
-		var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent))) 14%,
-		var(--operon-kanban-surface-main)
-	);
-	box-shadow: 0 6px 16px color-mix(in srgb, black 12%, transparent);
-	color: var(--text-normal);
+	background: var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent)));
+	background-color: var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent)));
+	box-shadow: 0 12px 28px color-mix(in srgb, black 24%, transparent);
+	color: var(--text-on-accent);
 	pointer-events: auto;
-	backdrop-filter: blur(10px);
+	backdrop-filter: none;
 }
 
 .operon-kanban-board.is-mobile-layout .operon-kanban-cell-add-button .operon-kanban-cell-add-icon.is-desktop-icon {
@@ -23028,13 +23144,14 @@ body.operon-kanban-touch-drag-active {
 
 .operon-kanban-board.is-mobile-layout .operon-kanban-cell-add-button .operon-kanban-cell-add-icon.is-mobile-icon {
 	display: inline-flex;
-	width: 20px;
-	height: 20px;
+	width: 24px;
+	height: 24px;
 }
 
 .operon-kanban-board.is-mobile-layout .operon-kanban-cell-add-button .operon-kanban-cell-add-icon.is-mobile-icon svg {
-	width: 20px;
-	height: 20px;
+	width: 24px;
+	height: 24px;
+	stroke-width: 2.4;
 }
 
 .operon-kanban-board.is-mobile-layout .operon-kanban-cell-add-button:hover,
@@ -23042,15 +23159,20 @@ body.operon-kanban-touch-drag-active {
 	transform: none;
 	border-color: color-mix(
 		in srgb,
-		var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent))) 44%,
+		var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent))) 62%,
 		var(--operon-kanban-surface-border)
 	);
 	background: color-mix(
 		in srgb,
-		var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent))) 18%,
-		var(--operon-kanban-surface-main)
+		var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent))) 88%,
+		var(--interactive-accent)
 	);
-	box-shadow: 0 8px 18px color-mix(in srgb, black 14%, transparent);
+	background-color: color-mix(
+		in srgb,
+		var(--operon-kanban-status-color, var(--operon-kanban-lane-color, var(--interactive-accent))) 88%,
+		var(--interactive-accent)
+	);
+	box-shadow: 0 16px 34px color-mix(in srgb, black 28%, transparent);
 }
 
 .operon-kanban-cell.is-scroll-limited {
@@ -23082,23 +23204,30 @@ body.operon-kanban-touch-drag-active {
 }
 
 .operon-kanban-card {
+	--operon-kanban-card-border: color-mix(in srgb, var(--operon-calendar-accent, var(--operon-kanban-surface-border)) 24%, var(--operon-kanban-surface-border));
+	--operon-kanban-card-hover-border: color-mix(in srgb, var(--operon-calendar-accent, var(--operon-kanban-surface-border)) 58%, var(--operon-kanban-surface-border));
+	--operon-kanban-card-hover-background: color-mix(in srgb, var(--operon-calendar-accent, var(--operon-kanban-surface-soft)) 2%, var(--operon-kanban-surface-soft));
+	--operon-kanban-card-chip-hover-accent: var(--background-modifier-border-hover, var(--background-modifier-border));
 	position: relative;
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
-	padding: 4px 10px;
-	border: 1px solid color-mix(in srgb, var(--operon-calendar-accent, var(--interactive-accent)) 20%, var(--operon-kanban-surface-border));
-	border-radius: 8px;
-	background: color-mix(in srgb, var(--operon-calendar-accent, var(--interactive-accent)) 10%, var(--operon-kanban-surface-soft));
-	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+	padding: 6px 10px 7px;
+	border: 1px solid var(--operon-kanban-card-border);
+	border-radius: 6px;
+	background: var(--operon-kanban-surface-soft);
+	box-shadow: 0 5px 16px rgba(0, 0, 0, 0.045);
 	cursor: pointer;
-	transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+	transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, background 120ms ease;
 }
 
 .operon-kanban-card:hover,
 .operon-kanban-card:focus-within {
+	z-index: 2;
+	border-color: var(--operon-kanban-card-hover-border);
+	background: var(--operon-kanban-card-hover-background);
 	transform: translateY(-1px);
-	box-shadow: 0 12px 28px rgba(0, 0, 0, 0.09);
+	box-shadow: 0 10px 24px rgba(0, 0, 0, 0.075);
 }
 
 .operon-kanban-card.is-dragging {
@@ -23153,21 +23282,44 @@ body.operon-kanban-touch-drag-active {
 .operon-kanban-card-head .operon-calendar-hover-menu-trigger {
 	grid-column: 1;
 	align-self: start;
-	margin-top: 1px;
+	margin-top: 0;
 }
 
-.operon-kanban-card .operon-calendar-status-button.is-compact {
-	width: 18px;
-	height: 18px;
-	min-width: 18px;
-	border-radius: 6px;
-	font-size: 13px;
+.operon-kanban-card .operon-kanban-status-button {
+	width: 28px;
+	height: 28px;
+	min-width: 28px;
+	flex: 0 0 28px;
+	padding: 0;
+	margin: 0;
+	border: 1px solid color-mix(in srgb, currentColor 42%, var(--background-modifier-border));
+	border-radius: 8px;
+	background: transparent;
+	background-color: transparent;
+	box-shadow: none;
+	box-sizing: border-box;
+	font-size: 16px;
+	line-height: 1;
+}
+
+.operon-kanban-card .operon-kanban-status-button:hover,
+.operon-kanban-card .operon-kanban-status-button:focus-visible {
+	border-color: currentColor;
+	background: transparent;
+	background-color: transparent;
+	box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 18%, transparent);
+	outline: none;
+}
+
+.operon-kanban-card .operon-kanban-status-button svg {
+	width: 16px;
+	height: 16px;
 }
 
 .operon-kanban-card-title {
 	grid-column: 2;
 	min-width: 0;
-	margin-top: 2px;
+	margin-top: 5px;
 	font-size: 12.5px;
 	font-weight: 400;
 	line-height: 1.24;
@@ -23177,7 +23329,65 @@ body.operon-kanban-touch-drag-active {
 	text-wrap: pretty;
 }
 
-.operon-kanban-descendant-toggle {
+.operon-kanban-card-chip-row {
+	--operon-live-hover-border: var(--operon-kanban-card-chip-hover-accent);
+	--operon-task-chip-hover-accent: var(--operon-kanban-card-chip-hover-accent);
+	--operon-task-chip-hover-border: color-mix(in srgb, var(--operon-task-chip-hover-accent) 44%, var(--background-modifier-border));
+	--operon-task-chip-hover-bg: color-mix(in srgb, var(--operon-task-chip-hover-accent) 4%, transparent);
+	--operon-task-chip-focus-ring: color-mix(in srgb, var(--operon-task-chip-hover-accent) 8%, transparent);
+	display: flex;
+	flex-wrap: nowrap;
+	align-items: flex-start;
+	gap: 4px;
+	min-width: 0;
+	max-width: 100%;
+	cursor: default;
+}
+
+.operon-kanban-card-chip-strip {
+	display: flex;
+	flex: 1 1 auto;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+	max-width: 100%;
+}
+
+.operon-kanban-card-chip-actions {
+	display: flex;
+	flex: 0 0 auto;
+	align-items: center;
+	gap: 4px;
+	margin-left: auto;
+}
+
+.operon-kanban-card-chip-row .operon-task-chip {
+	max-width: 100%;
+	min-width: 0;
+}
+
+.operon-kanban-card-chip-row.is-read-only :is(.operon-chip, .operon-task-chip-action),
+.operon-kanban-board.is-mobile-layout .operon-kanban-card-chip-row :is(.operon-chip, .operon-task-chip-action) {
+	cursor: default;
+}
+
+.operon-kanban-card-chip-row.is-read-only .operon-task-chip-action:is(:hover, .is-operon-chip-hovered, :focus-visible),
+.operon-kanban-board.is-mobile-layout .operon-kanban-card-chip-row .operon-task-chip-action:is(:hover, .is-operon-chip-hovered, :focus-visible) {
+	border-color: var(--operon-task-chip-border, var(--background-modifier-border));
+	background: var(--operon-task-chip-bg, transparent);
+	background-color: var(--operon-task-chip-bg, transparent);
+	box-shadow: none;
+	color: var(--text-muted);
+}
+
+.operon-kanban-board.is-mobile-layout .operon-kanban-card-chip-row {
+	touch-action: pan-x pan-y;
+}
+
+button.operon-kanban-descendant-toggle {
+	appearance: none;
+	-webkit-appearance: none;
 	grid-column: 3;
 	align-self: start;
 	display: inline-flex;
@@ -23186,21 +23396,39 @@ body.operon-kanban-touch-drag-active {
 	min-width: 36px;
 	height: 22px;
 	padding: 0 6px;
-	border-radius: 8px;
-	border: 1px solid var(--operon-kanban-surface-border);
-	background: color-mix(in srgb, var(--operon-kanban-surface-main) 65%, transparent);
+	border-radius: 6px;
+	border: 1px solid var(--operon-kanban-card-border);
+	background: transparent;
+	background-color: transparent;
+	background-image: none;
 	color: var(--text-muted);
+	box-shadow: none;
+	filter: none;
 	font-size: 10px;
 	font-weight: 700;
 	cursor: pointer;
+	transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
-.operon-kanban-descendant-toggle:hover,
-.operon-kanban-descendant-toggle:focus-visible,
-.operon-kanban-descendant-toggle.is-expanded {
+button.operon-kanban-descendant-toggle.is-expanded {
 	color: var(--text-normal);
-	border-color: color-mix(in srgb, var(--interactive-accent) 32%, var(--operon-kanban-surface-border));
-	background: color-mix(in srgb, var(--interactive-accent) 10%, var(--operon-kanban-surface-main));
+	border-color: var(--operon-kanban-card-hover-border);
+	background: transparent;
+	background-color: transparent;
+	background-image: none;
+	box-shadow: none;
+	filter: none;
+}
+
+button.operon-kanban-descendant-toggle:hover,
+button.operon-kanban-descendant-toggle:focus-visible {
+	color: var(--text-normal);
+	border-color: var(--operon-kanban-card-hover-border);
+	background: color-mix(in srgb, var(--operon-kanban-card-chip-hover-accent) 4%, transparent);
+	background-color: color-mix(in srgb, var(--operon-kanban-card-chip-hover-accent) 4%, transparent);
+	background-image: none;
+	box-shadow: none;
+	filter: none;
 }
 
 .operon-kanban-preview-tree,
@@ -23229,7 +23457,7 @@ body.operon-kanban-touch-drag-active {
 	min-height: 180px;
 	padding: 24px;
 	border: 1px dashed var(--operon-kanban-surface-border);
-	border-radius: 12px;
+	border-radius: 6px;
 	background: color-mix(in srgb, var(--operon-kanban-surface-soft) 85%, transparent);
 	color: var(--text-muted);
 	text-align: center;
