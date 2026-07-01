@@ -12,7 +12,7 @@ tags:
   - serial
   - projects
   - identity
-Updated: 2026-06-25T16:47:21
+Updated: 2026-07-01T15:33:43
 ---
 
 # Project serials
@@ -21,9 +21,9 @@ A **project serial** is a short, stable label like `PROD-0007` that Operon puts 
 
 They are **read-only and visual**. You never type a serial, you cannot edit the number, and turning serials on does not rewrite a single line of your notes. The serial sits on top of the task, a friendly name over the machine identity underneath.
 
-> **MEDIA-DOCS-097-1:** A task row showing its project serial chip, for example `PROD-0007`, next to the task text.
+> **MEDIA-DOCS-097-1:** Dynamic file task filter showing its Project Serial identity chip, before the normal task chips.
 
-![MEDIA-DOCS-097-1 - A task row showing its project serial chip, for example PROD-0007, next to the task text](https://raw.githubusercontent.com/hasanyilmaz/operon/main/docs/media/MEDIA-DOCS-097-1.png)
+![MEDIA-DOCS-097-1 - Dynamic file task filter showing its Project Serial identity chip before the normal task chips](https://raw.githubusercontent.com/hasanyilmaz/operon/main/docs/media/MEDIA-DOCS-097-1.png)
 
 ## Serials are not the operonId
 
@@ -89,7 +89,7 @@ When you add or rename a scope that **overlaps** another tree or **reuses a pref
 
 ## Where serials show up
 
-A serial appears as a **chip** on the task wherever the task is rendered: in [[DOCS-041 Task chips display and behavior|reading view and Live Preview]], on rows in the [[DOCS-025 Filter View|Filter View]], in the [[DOCS-021 Task Editor|Task Editor]], and in the calendar task picker. The chip is display only. There is nothing to click to edit, and nothing is written into the task text.
+A serial appears as a display-only **chip** on supported task surfaces: in [[DOCS-041 Task chips display and behavior|reading view and Live Preview]], on rows in the [[DOCS-025 Filter View|Filter View]], on main cards in the [[DOCS-030 Kanban overview|Kanban]], in the [[DOCS-021 Task Editor|Task Editor]], and in the calendar task picker. There is nothing to click to edit, and nothing is written into the task text.
 
 ## Stored apart from your notes
 

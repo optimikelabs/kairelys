@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packageId": "operon-docs",
-  "generatedAt": "2026-06-29T10:20:39.026Z",
+  "generatedAt": "2026-07-01T13:46:33.947Z",
   "source": {
     "branch": "main",
     "docsBasePath": "docs/operon-docs",
@@ -155,8 +155,8 @@
     },
     {
       "path": "DOCS-030 Kanban overview.md",
-      "sha256": "4cafb096033b3323f2097faebef9454ea64b73c58daf55abffb5c6cb3f5f6998",
-      "bytes": 7292
+      "sha256": "052381922eaeb47e9eef83131eb36dd3b41e19d37917ded56d4183f53619774d",
+      "bytes": 9455
     },
     {
       "path": "DOCS-031 Kanban manual order.md",
@@ -210,8 +210,8 @@
     },
     {
       "path": "DOCS-041 Task chips display and behavior.md",
-      "sha256": "3ccb35d476865f26754a694cdcb16500dd05a7fbf19c8384795eba40b440a1c8",
-      "bytes": 8617
+      "sha256": "7fc4c46a5f86a11dc63ffd90d3f6e8c2296f3b557090d1eb554cdef6523e85c0",
+      "bytes": 10065
     },
     {
       "path": "DOCS-042 Contextual menu actions.md",
@@ -490,8 +490,8 @@
     },
     {
       "path": "DOCS-097 Project serials.md",
-      "sha256": "f3293e5c661da42252935398274af1f78d988ff4f5163a565c3eaba1e32b948d",
-      "bytes": 8692
+      "sha256": "8946d1841621e261c67db061e024fa8a64ada763054343f2619cb84d8f4d6f45",
+      "bytes": 8733
     },
     {
       "path": "DOCS-098 Workspace Tweaks.md",
@@ -505,8 +505,8 @@
     },
     {
       "path": "DOCS-100 Mobile Kanban.md",
-      "sha256": "ac73d149d22bf64f47f7329d969a6eb79837380207f571b9f80019517ec4bc19",
-      "bytes": 4483
+      "sha256": "f4339a653cd2d92c8b0ebf9f10d88a5f2ebcb85a6552e19457499ee7d7e801c5",
+      "bytes": 5201
     },
     {
       "path": "DOCS-101 Mobile General.md",

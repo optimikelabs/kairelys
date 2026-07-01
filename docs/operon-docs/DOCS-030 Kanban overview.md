@@ -10,7 +10,7 @@ tags:
   - operon
   - kanban
   - plan
-Updated: 2026-06-28T18:48:40
+Updated: 2026-07-01T15:39:14
 ---
 
 # Kanban overview
@@ -19,9 +19,9 @@ The Kanban shows your tasks as cards in columns by status. It is the best surfac
 
 Open it with **Operon Kanban** from the command palette.
 
-> **MEDIA-DOCS-030-1:** The Operon Kanban with cards spread across status columns.
+> **MEDIA-DOCS-030-1:** The Operon Kanban with task chips visible on cards across status columns.
 
-![MEDIA-DOCS-030-1 - The Operon Kanban with cards spread across status columns](https://raw.githubusercontent.com/hasanyilmaz/operon/main/docs/media/MEDIA-DOCS-030-1.png)
+![MEDIA-DOCS-030-1 - The Operon Kanban with task chips visible on cards across status columns](https://raw.githubusercontent.com/hasanyilmaz/operon/main/docs/media/MEDIA-DOCS-030-1.png)
 
 ## How the board is built
 
@@ -30,6 +30,31 @@ The columns come from your pipeline: each status in the pipeline is a column, an
 You can also split the board into **swimlanes**, horizontal rows that group cards by another field such as priority, assignee, context, or a date. With swimlanes on, each card sits where its status column meets its lane, which is how you see, say, what is in progress *per person* or *per priority* at a glance. See [[DOCS-074 Kanban swimlanes|Kanban swimlanes]].
 
 A board is shaped by a **Kanban preset**, which chooses the pipeline, the swimlane field, the sort order, the card color source, and an optional filter that limits which tasks appear. Saving presets lets you keep several boards for different pipelines or slices of work, and switch between them. See [[DOCS-037 Pipelines and statuses|Pipelines and statuses]].
+
+## Card chips and actions
+
+Kanban cards can show [[DOCS-041 Task chips display and behavior|Task Chips]] under the title, so priority, dates, assignees, location, links, recurrence, and custom fields can be scanned without opening the card. The **Kanban Task Chips** settings page controls which normal chips appear, their order, and which are Icon Only.
+
+> **MEDIA-DOCS-030-2:** The Kanban Task Chips settings page, showing the card chip list and the Kanban Task Actions section.
+
+![MEDIA-DOCS-030-2 - Kanban Task Chips settings with card chips and action controls](https://raw.githubusercontent.com/hasanyilmaz/operon/main/docs/media/MEDIA-DOCS-030-2.png)
+
+If a task has a Project Serial, the serial appears first as a display-only identity chip on the main card, independent of the normal chip visibility settings. Kanban does not show hidden-chip overflow counts, so the row only shows the card chips you chose to display.
+
+Kanban also has a **Kanban Task Actions** section at the end of the same settings page. Those controls can add compact action chips at the trailing edge of the card chip row, such as Play, Pin, Note, Add subtask, and Open checkboxes. On desktop, enabled action chips are usable from the card. The Play action changes to Stop when that task's timer is already running. On mobile, the same card chip area stays visible but read-only, so card tap, scroll, and drag gestures stay predictable.
+
+Main cards can grow a little when chips wrap onto multiple lines; descendant preview cards stay compact and do not show chip rows.
+
+> **MEDIA-DOCS-030-3:** Kanban cards in action, with task chips, trailing action chips, an active timer shown as Stop, and the active column and swimlane highlighted.
+
+<iframe
+  title="MEDIA-DOCS-030-3 - Kanban cards in action video"
+  width="100%"
+  height="420"
+  src="https://www.youtube-nocookie.com/embed/9YjQEgOSoWQ"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+  allowfullscreen>
+</iframe>
 
 ## Moving a card changes the task
 
@@ -94,7 +119,7 @@ For exactly which fields are matched and how Task Finder ranks its own results, 
 
 ## Settings
 
-Operon settings for this live in **Settings → Operon → Views → Kanban**, which configures how the Kanban board displays cards.
+Operon settings for the board live in **Settings → Operon → Views → Kanban**, which configures how the Kanban board displays cards. Card chip visibility and order live in **Settings → Operon → Interface → Task Chips → Kanban Task Chips**.
 
 ## Related
 

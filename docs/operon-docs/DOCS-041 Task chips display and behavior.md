@@ -11,7 +11,7 @@ tags:
   - settings
   - chips
   - configure
-Updated: 2026-06-28T18:10:47
+Updated: 2026-07-01T15:29:10
 ---
 
 # Task chips: display and behavior
@@ -39,11 +39,12 @@ Your own [[DOCS-040 Custom keys|custom keys]] can appear as chips too, when you 
 
 ## Each surface is configured separately
 
-Chips follow a task across several surfaces, and each surface has its **own** chip configuration: which chips show, in what **order**, and whether any is **Icon Only**. So a busy Filter View can carry a shorter set than an inline row, arranged differently. The four surfaces, each its own settings page under **Settings → Operon → Interface → Task Chips**, are:
+Chips follow a task across several surfaces, and each surface has its **own** chip configuration: which chips show, in what **order**, and whether any is **Icon Only**. So a busy Filter View can carry a shorter set than an inline row, arranged differently. The five surfaces, each its own settings page under **Settings → Operon → Interface → Task Chips**, are:
 
 - **Inline Task Chips**: the compact chip row on inline tasks in Live Preview and reading view.
 - **Filter Task Chips**: the chips on rows in the [[DOCS-025 Filter View|Filter View]].
 - **Task Finder Chips**: the chips in Task Finder results.
+- **Kanban Task Chips**: the chips on main cards in the [[DOCS-030 Kanban overview|Kanban]].
 - **Task Wikilink Overlay Chips**: the chips on a task wikilink overlay, which now decorates both file-task links and inline links written as `[[File#-operonId]]`. See [[DOCS-103 Task Wikilink Overlay|Task Wikilink Overlay]].
 
 Because each is independent, you tune the chip row per place rather than once for everything.
@@ -54,11 +55,19 @@ Because each is independent, you tune the chip row per place rather than once fo
 
 ## Showing, hiding, and Icon Only
 
-For each chip on each surface you can turn its visibility on or off, and set it to **Icon Only**, which drops the text and shows just the icon, a tidy way to keep a busy row compact while still signalling the field. An Icon Only chip can show a small preview of its full content when you click it, so nothing is lost by hiding the text.
+For each chip on each surface you can turn its visibility on or off, and set it to **Icon Only**, which drops the text and shows just the icon, a tidy way to keep a busy row compact while still signalling the field. On interactive surfaces, an Icon Only chip can show a small preview of its full content when you click it, so nothing is lost by hiding the text.
+
+## Kanban card chips
+
+Kanban cards use the **Kanban Task Chips** surface. On desktop, Kanban chips behave like the same chips elsewhere: editable chips open their pickers, link-like chips open or preview their target, and location chips open the map popover. Kanban does not show hidden-chip `+N` counts, so a card only shows the chips you chose to display.
+
+The end of the Kanban Task Chips page also has **Kanban Task Actions**. These control the trailing action chips on Kanban cards, such as Play, Pin, Note, Add subtask, and Open checkboxes. When the Play action is enabled, it turns into Stop while that task's timer is running.
+
+On mobile Kanban, the same chip area stays visible but read-only. Tapping chips or action chips does not open pickers, links, previews, map popovers, or actions, so card tap, scroll, and long-press drag remain the main touch gestures. If a task has a Project Serial, that serial appears first on the main Kanban card as a display-only identity chip, even though Project Serial is not controlled by the Kanban Task Chips settings list. Descendant preview cards do not show chip rows.
 
 ## How a chip behaves when you click it
 
-Clicking a chip does something specific to its field. Some chips are quick editors, and some are navigators:
+On interactive surfaces, clicking a chip does something specific to its field. Some chips are quick editors, and some are navigators:
 
 | Chip | Clicking it |
 |---|---|
@@ -111,13 +120,15 @@ A custom key shown as a chip inherits the behavior of its type. A custom **list*
 
 ## Settings
 
-Chip configuration lives in **Settings → Operon → Interface → Task Chips**, with a separate page for each surface: **Inline Task Chips**, **Filter Task Chips**, **Task Finder Chips**, and **Task Wikilink Overlay Chips**. On each you set which chips show, their order, and which are Icon Only. The location chip's rendered map preview is configured in **Settings → Operon → Interface → Location Map**.
+Chip configuration lives in **Settings → Operon → Interface → Task Chips**, with a separate page for each surface: **Inline Task Chips**, **Filter Task Chips**, **Task Finder Chips**, **Kanban Task Chips**, and **Task Wikilink Overlay Chips**. On each you set which chips show, their order, and which are Icon Only. The location chip's rendered map preview is configured in **Settings → Operon → Interface → Location Map**.
 
 ## FAQ
 
 **Can I show only icons to save space?** Yes. Set a chip to Icon Only, and it shows its icon without the text; click it to preview the full content.
 
 **Can the same chips differ between Filter View and inline tasks?** Yes. Each surface has its own visibility, order, and Icon Only settings.
+
+**Do Kanban chips work on mobile?** They are visible on mobile Kanban cards, but read-only. Use the card itself for opening, scrolling, and long-press dragging.
 
 **Why is my due date chip red or blue?** Red means overdue, blue means due today. A finished or cancelled task drops the color.
 

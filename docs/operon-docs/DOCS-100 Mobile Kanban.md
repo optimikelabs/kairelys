@@ -11,14 +11,14 @@ tags:
   - kanban
   - mobile
   - plan
-Updated: 2026-06-25T16:47:21
+Updated: 2026-07-01T15:29:10
 ---
 
 # Mobile Kanban
 
 On a phone, a full [[DOCS-030 Kanban overview|Kanban]] board is too wide to use comfortably, so Operon switches it to a **touch-first layout** built for a narrow screen. It is the same board, with the same columns and [[DOCS-074 Kanban swimlanes|swimlanes]], but the way you move through it is tuned for a thumb instead of a mouse. This page covers what changes on mobile and the settings that shape it.
 
-> **MEDIA-DOCS-100-1:** A Kanban board on a phone, showing one status column.
+> **MEDIA-DOCS-100-1:** A Kanban board on a phone.
 
 ![MEDIA-DOCS-100-1 - Mobile Kanban status column](https://raw.githubusercontent.com/hasanyilmaz/operon/main/docs/media/MEDIA-DOCS-100-1.png)
 
@@ -44,13 +44,19 @@ When the board is grouped into [[DOCS-074 Kanban swimlanes|swimlanes]], the mobi
 - **Mobile Kanban swimlane rail width** sets how wide that colored rail is, from 6 px (a slim stripe, the default) up to 48 px.
 - **Always show swimlane rail**, on by default, keeps the rail visible at all times. Turn it off and the rail appears only after you scroll horizontally, freeing a little more room until you need the cue.
 
+## Task chips on mobile cards
+
+Mobile Kanban uses the same **Kanban Task Chips** settings as desktop Kanban, so the chips you choose for cards stay visible on a phone too. On mobile they are read-only: tapping a chip does not open a picker, link, preview, location map, or action. Kanban cards do not show hidden-chip `+N` counts on mobile.
+
+That keeps card gestures predictable. Tap the card to open it, scroll the board normally, and long-press the card itself when you want to drag. If space is tight, use Icon Only or a shorter Kanban chip order in **Settings → Operon → Interface → Task Chips → Kanban Task Chips**.
+
 ## The quick-create button
 
 The mobile quick-create button (the floating plus) appears over Operon's mobile surfaces, including Kanban. If you would rather keep the board clear, you can **hide it while a Kanban view is active** without turning it off elsewhere. That toggle lives with the other mobile interface settings; see [[DOCS-101 Mobile General|Mobile General]].
 
 ## Settings
 
-Operon settings for this live in **Settings → Operon → Mobile → Kanban**: **Enable mobile Kanban layout**, the **layout max width** that decides when it applies, the **swimlane rail width**, **Always show swimlane rail**, and **horizontal status snap**. The setting to hide the quick-create button in Kanban is on the [[DOCS-101 Mobile General|Mobile General]] page.
+Operon settings for this live in **Settings → Operon → Mobile → Kanban**: **Enable mobile Kanban layout**, the **layout max width** that decides when it applies, the **swimlane rail width**, **Always show swimlane rail**, and **horizontal status snap**. Card chip visibility and order live in **Settings → Operon → Interface → Task Chips → Kanban Task Chips**. The setting to hide the quick-create button in Kanban is on the [[DOCS-101 Mobile General|Mobile General]] page.
 
 ## FAQ
 
