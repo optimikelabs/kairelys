@@ -11,12 +11,12 @@ tags:
   - settings
   - contextmenu
   - configure
-Updated: 2026-06-25T16:47:21
+Updated: 2026-07-05T19:28:23
 ---
 
 # Contextual menu actions
 
-Wherever a task appears, Operon offers a contextual menu of actions on it: from a filter row, a Calendar item, a Kanban card, a pinned task, or an inline task. The same menu surfaces as a hover menu on task icons in the Calendar. It is the mouse-friendly counterpart to the [[DOCS-022 Command palette reference|command palette]].
+Wherever a task appears, Operon offers a contextual menu of actions on it: from a filter row, a Calendar item, a Kanban card, a pinned task, or an inline task. The same menu surfaces as a hover menu on task icons in the Calendar and on the task icon column in the [[DOCS-105 Table overview|Table]]. It is the mouse-friendly counterpart to the [[DOCS-022 Command palette reference|command palette]].
 
 The menu is **context-aware**: an action only appears when the current task and surface actually support it. A scheduled task offers **Unschedule**; a recurring occurrence offers **Skip this occurrence**; a task with no due date will not show **Clear due date**; the **Subtasks** action shows only on an open task that actually has subtasks.
 
@@ -41,7 +41,7 @@ Grouped by what they do:
 You control the menu in **Settings → Operon → Interface → Context Menu**:
 
 - **Contextual Menu Actions**: choose which actions are globally enabled and set their order. Disabled actions never appear; enabled ones still show only when the task and surface support them.
-- **Contextual Hover Menu Actions**: the same idea for the Calendar's task-icon hover menu.
+- **Contextual Hover Menu Actions**: the same idea for the task-icon hover menu in the Calendar and the Table.
 - **Context Menu Delay**: how long before the menu opens on hover.
 
 Tune this once to keep the menu short and relevant to how you work.

@@ -10,7 +10,7 @@ tags:
   - operon
   - calendar
   - plan
-Updated: 2026-06-28T18:48:40
+Updated: 2026-07-05T19:28:23
 ---
 
 # Calendar overview
@@ -88,4 +88,5 @@ Operon settings for this live in **Settings → Operon → Views → Calendar**,
 
 - [[DOCS-001 Operon Docs MOC|Operon Docs MOC]]
 - [[DOCS-030 Kanban overview|Kanban overview]]
+- [[DOCS-105 Table overview|Table overview]]
 - [[DOCS-025 Filter View|Filter View]]

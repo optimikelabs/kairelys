@@ -9,7 +9,7 @@ Color: "#16a34a"
 tags:
   - operon
   - taskmodel
-Updated: 2026-06-25T16:47:21
+Updated: 2026-07-05T19:28:23
 ---
 
 # Operon core concepts
@@ -31,7 +31,7 @@ A task can take one of two shapes:
 - **Inline task**: a lightweight Markdown checkbox with Operon metadata, useful when the task belongs inside an existing note. It stays readable but carries enough information for Operon to find it and show it everywhere. This is the low-friction shape. See [[DOCS-011 Inline tasks|Inline tasks]].
 - **File task**: a Markdown note that is itself a task, keeping its fields in frontmatter and using the body as a working document. Use it when the work deserves room: a draft, a release plan, a research thread. This is the high-context shape. See [[DOCS-013 File tasks|File tasks]].
 
-The shapes differ in form, not in standing. Both carry the same canonical fields and the same identity, and both flow through the same workflows: a filter, the Calendar, the Kanban, recurrence, pinning, and time tracking treat them alike. Unifying the two is one of Operon's central ideas, so you pick a shape for the moment without splitting your system in two. See [[DOCS-072 One workflow, two task shapes|One workflow, two task shapes]].
+The shapes differ in form, not in standing. Both carry the same canonical fields and the same identity, and both flow through the same workflows: a filter, the Calendar, the Kanban, the Table, recurrence, pinning, and time tracking treat them alike. Unifying the two is one of Operon's central ideas, so you pick a shape for the moment without splitting your system in two. See [[DOCS-072 One workflow, two task shapes|One workflow, two task shapes]].
 
 Not sure which to reach for? See [[DOCS-014 Inline vs file tasks|Inline vs file tasks]].
 
@@ -43,11 +43,11 @@ Every Operon task gets an `operonId`. That id is what lets the same task stay re
 
 ## Canonical fields
 
-Task fields keep a stable meaning. Status, priority, scheduled date, due date, parent task, recurrence, and duration should not turn into different concepts depending on where you see them. Operon maps each field once and reuses that meaning across Markdown, filters, Calendar, Kanban, the Task Editor, and chips. The visible property name can differ through key mappings, but the underlying field is the same. See [[DOCS-039 Key mappings|Key mappings]].
+Task fields keep a stable meaning. Status, priority, scheduled date, due date, parent task, recurrence, and duration should not turn into different concepts depending on where you see them. Operon maps each field once and reuses that meaning across Markdown, filters, Calendar, Kanban, the Table, the Task Editor, and chips. The visible property name can differ through key mappings, but the underlying field is the same. See [[DOCS-039 Key mappings|Key mappings]].
 
 ## Views are surfaces, not separate databases
 
-A view is a way to look at the same task records, never a second copy. A filter is a saved slice of work. The Calendar gives scheduled work a place in time. The Kanban gives status a visual workflow. Task Finder helps you recover a task when you remember the words but not the file. Each surface reveals the same task from a different angle.
+A view is a way to look at the same task records, never a second copy. A filter is a saved slice of work. The Calendar gives scheduled work a place in time. The Kanban gives status a visual workflow. The Table lays the same tasks out as rows and columns for comparison. Task Finder helps you recover a task when you remember the words but not the file. Each surface reveals the same task from a different angle.
 
 ## Recurrence and time tracking belong to the task
 

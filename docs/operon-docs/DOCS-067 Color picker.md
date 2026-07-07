@@ -10,7 +10,7 @@ tags:
   - operon
   - pickers
   - color
-Updated: 2026-06-25T16:47:21
+Updated: 2026-07-07T16:02:20
 ---
 
 # Color picker
@@ -37,6 +37,10 @@ The fastest path is the **palette**: a fixed grid of **28 named color slots** th
 ## Or choose any color
 
 When the palette is not enough, the picker opens a **full custom color**: a hue and shade area that lets you dial in any color, with its hex value. Use it for a one-off color or to add a new shade. Whatever you choose is stored as the same hex text, so a palette color and a custom color are the same kind of value underneath.
+
+### Type a HEX value directly
+
+You can also type or paste a HEX value into the picker search field, with or without the leading `#`, for example `#4987A7` or `4987a7`. Operon previews the typed color, matches a palette slot when the HEX already exists there, and still stores the task value without the leading `#`.
 
 > **MEDIA-DOCS-067-2:** The custom color area, choosing a hue and shade with the hex value shown.
 

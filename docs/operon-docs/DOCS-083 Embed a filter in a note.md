@@ -11,7 +11,7 @@ tags:
   - filterview
   - embed
   - howto
-Updated: 2026-06-25T16:47:21
+Updated: 2026-07-05T19:25:53
 ---
 
 # Embed a filter in a note
@@ -40,6 +40,8 @@ Any saved filter works, so the embedded list is as precise as the filter behind 
 
 A common use is a **project note that owns its tasks**: give the project a filter that matches its task tree, embed it at the bottom of the note, and the note becomes both the context and a live view of the work it holds.
 
+You can embed a **table** the same way, with its own Copy embed code, when you want the tasks as rows and columns rather than a list. See [[DOCS-110 Embed a table in a note|Embed a table in a note]].
+
 ## FAQ
 
 **How do I get the right `filterId`?** Use Copy embed code on the filter; it writes the correct id into the block for you. The embed references a filter only by its id.
@@ -52,3 +54,4 @@ A common use is a **project note that owns its tasks**: give the project a filte
 
 - [[DOCS-001 Operon Docs MOC|Operon Docs MOC]]
 - [[DOCS-010 Build your first filtered view|Build your first filtered view]]
+- [[DOCS-110 Embed a table in a note|Embed a table in a note]]

@@ -10,7 +10,7 @@ tags:
   - operon
   - kanban
   - plan
-Updated: 2026-07-01T15:39:14
+Updated: 2026-07-05T19:28:23
 ---
 
 # Kanban overview
@@ -76,7 +76,7 @@ Reach for it when work moves through clear stages:
 - Bug triage.
 - Release planning.
 
-If your work is mostly date-driven rather than stage-driven, the [[DOCS-028 Calendar overview|Calendar]] may suit it better. Many people use both.
+If your work is mostly date-driven rather than stage-driven, the [[DOCS-028 Calendar overview|Calendar]] may suit it better; to compare many fields at once and sort or summarize them, reach for the [[DOCS-105 Table overview|Table]]. Many people use all three.
 
 ## Card order
 
@@ -124,4 +124,5 @@ Operon settings for the board live in **Settings → Operon → Views → Kanban
 ## Related
 
 - [[DOCS-001 Operon Docs MOC|Operon Docs MOC]]
+- [[DOCS-105 Table overview|Table overview]]
 - [[DOCS-025 Filter View|Filter View]]

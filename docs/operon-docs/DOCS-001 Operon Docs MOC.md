@@ -6,7 +6,7 @@ tags:
   - operon
   - start
   - navigation
-Updated: 2026-06-28T18:10:47
+Updated: 2026-07-06T19:27:56
 ---
 
 # Operon Docs
@@ -101,6 +101,7 @@ Follow these in order. They are enough to go from "what is this?" to doing real 
 - [[DOCS-068 Location picker|Location picker]]
 - [[DOCS-069 Task link and list pickers|Task link and list pickers]]
 - [[DOCS-070 Custom field pickers|Custom field pickers]]
+- [[DOCS-113 Text field editor popover|Text field editor popover]]
 
 ### Views and planning
 - [[DOCS-025 Filter View|Filter View]]
@@ -118,6 +119,14 @@ Follow these in order. They are enough to go from "what is this?" to doing real 
 - [[DOCS-031 Kanban manual order|Kanban manual order]]
 - [[DOCS-074 Kanban swimlanes|Kanban swimlanes]]
 - [[DOCS-100 Mobile Kanban|Mobile Kanban]]
+- [[DOCS-105 Table overview|Table overview]]
+- [[DOCS-106 Table columns|Table columns]]
+- [[DOCS-112 Table cells display and behavior|Table cells: display and behavior]]
+- [[DOCS-107 Table grouping and sorting|Table grouping and sorting]]
+- [[DOCS-108 Table summaries|Table summaries]]
+- [[DOCS-109 Table presets|Table presets]]
+- [[DOCS-110 Embed a table in a note|Embed a table in a note]]
+- [[DOCS-111 Export a table|Export a table]]
 - [[DOCS-032 Pinned Task Dock|Pinned Task Dock]]
 
 ### Automation

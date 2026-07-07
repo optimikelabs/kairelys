@@ -9,7 +9,7 @@ Color: "#475569"
 tags:
   - operon
   - commands
-Updated: 2026-06-28T18:10:47
+Updated: 2026-07-07T14:01:54
 ---
 
 # Command palette reference
@@ -48,11 +48,13 @@ This page is the index. The action commands link to a dedicated page with their 
 - [[DOCS-090 Toggle task completion|Toggle task completion]]: completes or reopens the task at the cursor.
 - **Start/stop time tracker**: starts or stops the timer on the task at the cursor. See [[DOCS-034 Time tracking|Time tracking]].
 
-## Open views
+## Open views and table embeds
 
 - **Operon Filter View**: filtered, saved task lists. See [[DOCS-025 Filter View|Filter View]].
 - **Operon Calendar**: scheduled and timed tasks on a calendar. See [[DOCS-028 Calendar overview|Calendar overview]].
 - **Operon Kanban**: tasks as cards in workflow columns. See [[DOCS-030 Kanban overview|Kanban overview]].
+- **Operon Table**: tasks as rows and columns, like a spreadsheet. See [[DOCS-105 Table overview|Table overview]].
+- **Insert Operon Table embed**: inserts the default Table preset's `operon-table` code block at the cursor in the active Markdown editor, or replaces the current selection. See [[DOCS-110 Embed a table in a note|Embed a table in a note]].
 - **Toggle Pinned Tasks dock** / **Open Pinned Tasks**: the floating dock or the side panel of pinned tasks. See [[DOCS-032 Pinned Task Dock|Pinned Task Dock]].
 - **Open Time Session History panel**: review and edit tracked sessions. See [[DOCS-053 Time session history|Time session history]].
 - **Open FlowTime panel**: start a focused work session. See [[DOCS-035 FlowTime focus sessions|FlowTime focus sessions]].

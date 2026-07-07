@@ -11,7 +11,7 @@ tags:
   - filterview
   - plan
   - search
-Updated: 2026-06-25T16:47:21
+Updated: 2026-07-05T19:25:53
 ---
 
 # Filter View
@@ -46,6 +46,10 @@ Add conditions one at a time and watch the list narrow as each applies. When the
 
 Each is a different slice of the same records. Keep a handful of well-named filters rather than one giant query.
 
+## One filter, many views
+
+A saved filter is not tied to the Filter View. The same filter can scope a [[DOCS-028 Calendar overview|Calendar]], a [[DOCS-030 Kanban overview|Kanban]], or a [[DOCS-105 Table overview|Table]], so one slice of tasks can be read as a list, placed on dates, arranged as cards, or laid out as rows and columns. Each view's preset picks a filter, and the related views control lets you jump between the views that share one. See [[DOCS-105 Table overview|Table overview]].
+
 ## Acting from the view
 
 A filter row is not read-only. You can open a task's [[DOCS-042 Contextual menu actions|contextual menu]] to edit it, change status, start a timer, pin it, or open the [[DOCS-021 Task Editor|Task Editor]]. Filter rows can also show the **Open checkboxes** chip and checklist progress for a task's [[DOCS-017 Plain checkbox lists|plain checkboxes]].
@@ -70,3 +74,4 @@ Operon settings for this live in **Settings → Operon → Views → Filters**, 
 - [[DOCS-073 Filter conditions and operators|Filter conditions and operators]]
 - [[DOCS-027 Task Finder|Task Finder]]
 - [[DOCS-028 Calendar overview|Calendar overview]]
+- [[DOCS-105 Table overview|Table overview]]

@@ -11,7 +11,7 @@ tags:
   - pickers
   - taskcreator
   - taskeditor
-Updated: 2026-06-25T16:47:21
+Updated: 2026-07-06T19:27:56
 ---
 
 # Field pickers overview
@@ -68,3 +68,4 @@ Knowing the field-to-picker rule explains the whole editing experience: why a cu
 
 - [[DOCS-001 Operon Docs MOC|Operon Docs MOC]]
 - [[DOCS-094 How to create a task with Task Creator|How to create a task with Task Creator]]
+- [[DOCS-113 Text field editor popover|Text field editor popover]]

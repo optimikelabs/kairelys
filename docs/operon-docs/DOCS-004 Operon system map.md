@@ -10,7 +10,7 @@ tags:
   - operon
   - start
   - map
-Updated: 2026-06-25T16:47:21
+Updated: 2026-07-05T19:24:35
 ---
 
 # Operon system map
@@ -32,9 +32,10 @@ Not sure which kind of task to use? See [[DOCS-014 Inline vs file tasks|Inline v
 - **Task Finder**: fast search to jump to a single task when you remember it but not where it is. Run **Task Finder**. See [[DOCS-027 Task Finder|Task Finder]].
 - **Calendar**: tasks placed on dates and times, including due markers and recurring tasks. Use it to plan *when*. Run **Operon Calendar**. See [[DOCS-028 Calendar overview|Calendar overview]].
 - **Kanban**: tasks as cards in columns by status, moved through your workflow. Use it to plan *how far along*. Run **Operon Kanban**. See [[DOCS-030 Kanban overview|Kanban overview]].
+- **Table**: tasks as rows and columns, like a spreadsheet, for comparing many fields at once and sorting, grouping, or summarizing them. Use it to plan *by comparison*. Run **Operon Table**. See [[DOCS-105 Table overview|Table overview]].
 - **Pinned Task Dock**: keeps chosen tasks always in view. It can float over your notes (run **Toggle Pinned Tasks dock**) or live in a side panel (run **Open Pinned Tasks**, or set it to open in the sidebar). See [[DOCS-032 Pinned Task Dock|Pinned Task Dock]].
 
-Planning by date? Use the Calendar. Planning by stage of work? Use the Kanban.
+Planning by date? Use the Calendar. Planning by stage of work? Use the Kanban. Comparing across many fields at once? Use the Table.
 
 ## Ways to control and automate
 

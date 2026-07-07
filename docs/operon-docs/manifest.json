@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packageId": "operon-docs",
-  "generatedAt": "2026-07-01T13:46:33.947Z",
+  "generatedAt": "2026-07-07T19:08:14.388Z",
   "source": {
     "branch": "main",
     "docsBasePath": "docs/operon-docs",
@@ -10,8 +10,8 @@
   "files": [
     {
       "path": "DOCS-001 Operon Docs MOC.md",
-      "sha256": "f178d032f3831f07e7d078ad7afd840d9747ee8b0e21d23e71d523a2e42e419d",
-      "bytes": 8153
+      "sha256": "61fd1237c6ebdd1e31ac665437a51272f8b1224eaf2dda92aa2435f656dab403",
+      "bytes": 8657
     },
     {
       "path": "DOCS-002 How to use these docs.md",
@@ -25,18 +25,18 @@
     },
     {
       "path": "DOCS-004 Operon system map.md",
-      "sha256": "9549c3b23a606346a0559257e74e621347610efaf8dbd617afd6b4ee505b76d5",
-      "bytes": 4115
+      "sha256": "05272a30c5f30677a6c6a466940c92bca767da99abe20fbd90fe9f42320b74cc",
+      "bytes": 4408
     },
     {
       "path": "DOCS-005 Operon core concepts.md",
-      "sha256": "7675f51aac3413630d537dbb7e0aebd01dbbe569ed7f595dd0aa2cb15a7e19d6",
-      "bytes": 5217
+      "sha256": "c873a6677fdfda484b0c436dafaf14d69f69e8d5f8b592e3d3155d19503d7429",
+      "bytes": 5309
     },
     {
       "path": "DOCS-006 Glossary of Operon terms.md",
-      "sha256": "b78c9c0249df557fc009b900c4f7e81862041a58db1f755c188d120928179128",
-      "bytes": 4142
+      "sha256": "b43d845f9683aa9112f9a5e7b21a2320f60749edb4a2bbc721c77e5f39d3899f",
+      "bytes": 4702
     },
     {
       "path": "DOCS-007 Install and enable Operon.md",
@@ -115,8 +115,8 @@
     },
     {
       "path": "DOCS-022 Command palette reference.md",
-      "sha256": "01e5b3be61360680a68f926126f6df9dd6270198507d6c0407c934caf58fa8b5",
-      "bytes": 5169
+      "sha256": "13cfef379d41a3cbe39bba1c908ffe8acf35049aa48ada872130d5a561f5ed9e",
+      "bytes": 5541
     },
     {
       "path": "DOCS-023 Create tasks from selected text.md",
@@ -130,8 +130,8 @@
     },
     {
       "path": "DOCS-025 Filter View.md",
-      "sha256": "4ead397799db44a9592ea7e93e1419146c659578d04709f2e9b503fcb63b57c5",
-      "bytes": 3687
+      "sha256": "163d2150fccbfc59e0adc23af33dc42724ced7e5a6acb40c05bcd303c1c23e1b",
+      "bytes": 4230
     },
     {
       "path": "DOCS-026 Dynamic file task filter.md",
@@ -145,8 +145,8 @@
     },
     {
       "path": "DOCS-028 Calendar overview.md",
-      "sha256": "1565df63d5f01e14cc5d6316b72cbe4d0a8131580ef685f05c94116962ea863a",
-      "bytes": 5220
+      "sha256": "539a7748a2f92cf261f1bafd69ef0e6a98c36fe15b570f6609a4b8548fae4105",
+      "bytes": 5265
     },
     {
       "path": "DOCS-029 Calendar presets and time grid.md",
@@ -155,8 +155,8 @@
     },
     {
       "path": "DOCS-030 Kanban overview.md",
-      "sha256": "052381922eaeb47e9eef83131eb36dd3b41e19d37917ded56d4183f53619774d",
-      "bytes": 9455
+      "sha256": "1bea5a6c57e9144d403b410b334e97a15e8e81d7f1da5bee8601d1a821f18379",
+      "bytes": 9613
     },
     {
       "path": "DOCS-031 Kanban manual order.md",
@@ -215,8 +215,8 @@
     },
     {
       "path": "DOCS-042 Contextual menu actions.md",
-      "sha256": "bce1951016b4efc2243a02809f17b6c727c2a5c99950575966b20e99f803e59b",
-      "bytes": 3516
+      "sha256": "b6192a7678d08292345f1cb8699b61c526181dcddceac34ee57590045bd383d5",
+      "bytes": 3604
     },
     {
       "path": "DOCS-043 Settings search.md",
@@ -315,8 +315,8 @@
     },
     {
       "path": "DOCS-062 Field pickers overview.md",
-      "sha256": "033c50ab5681f14d68a486f559047ae4a7044900bee6fec0fec12e9194f95a86",
-      "bytes": 4215
+      "sha256": "39067fbf5f56959a9725a85432591b060114ef71acf6d7cefb708d77b8f88347",
+      "bytes": 4282
     },
     {
       "path": "DOCS-063 Date and time picker.md",
@@ -340,8 +340,8 @@
     },
     {
       "path": "DOCS-067 Color picker.md",
-      "sha256": "059aa1fb89cfa24542794f3dac65398f692e13f10b49a00aeab09077c514e6d6",
-      "bytes": 4028
+      "sha256": "6c8c1dba90a933d0aa524179b25341ecf43024b3ab0d0b9f4f936ea02a4cb74a",
+      "bytes": 4345
     },
     {
       "path": "DOCS-068 Location picker.md",
@@ -420,8 +420,8 @@
     },
     {
       "path": "DOCS-083 Embed a filter in a note.md",
-      "sha256": "2fb7bf2f1ccc50543609802b3e210e4a61ed79aa0469220bdad7cd8f06071228",
-      "bytes": 2662
+      "sha256": "bd855c49a707e630b859f9aa116c2d3e4127b4008f8105aecf124401d21d9891",
+      "bytes": 2926
     },
     {
       "path": "DOCS-084 Create New Operon Task.md",
@@ -500,8 +500,8 @@
     },
     {
       "path": "DOCS-099 State Icons.md",
-      "sha256": "47de24d622b85840c179fa4e84a01cb00191c445d184859a5285430c99a80a1b",
-      "bytes": 6410
+      "sha256": "3e31fec88b8c1dd5c340a971de614dc78c7e5c46d6f68f81bc5acdbe9efc0acb",
+      "bytes": 8266
     },
     {
       "path": "DOCS-100 Mobile Kanban.md",
@@ -527,6 +527,51 @@
       "path": "DOCS-104 Add Task Wikilink Overlay.md",
       "sha256": "a382dbbe65483de8d7013347c0cf88210dff0487400fc86d90fd8c9af6a988b9",
       "bytes": 2131
+    },
+    {
+      "path": "DOCS-105 Table overview.md",
+      "sha256": "9f4ee31bd25f83ed0e88e04cc3f4be34096d5551b39c04dd93c849dd4c6638de",
+      "bytes": 9640
+    },
+    {
+      "path": "DOCS-106 Table columns.md",
+      "sha256": "a84ad9b1f025a7119052726fb87fdd3ced6b9d8eac9fec86df7e5852b59c5920",
+      "bytes": 10428
+    },
+    {
+      "path": "DOCS-107 Table grouping and sorting.md",
+      "sha256": "80e6a85ed87a56d6f577cc6e27b5025989681ccb5395c826d168bded466d0996",
+      "bytes": 5881
+    },
+    {
+      "path": "DOCS-108 Table summaries.md",
+      "sha256": "b1d8fc92928d2f03b731abe890f2bf9e3e76857634dc4a9828b81d72bba2a2b7",
+      "bytes": 6168
+    },
+    {
+      "path": "DOCS-109 Table presets.md",
+      "sha256": "32eab1005b07e15e0549c5fe3b705442a091f1ddb42b322df9c1ad59ec3419ff",
+      "bytes": 6828
+    },
+    {
+      "path": "DOCS-110 Embed a table in a note.md",
+      "sha256": "382c6da9e8f93beb3ee62d3b0e3389836a0fcee7242bf9800397f77da0a39cd7",
+      "bytes": 8262
+    },
+    {
+      "path": "DOCS-111 Export a table.md",
+      "sha256": "6eee02416f6eb4aa63e8e1af4a417c054b29403a4004db8573cfdde906d39d3e",
+      "bytes": 4655
+    },
+    {
+      "path": "DOCS-112 Table cells display and behavior.md",
+      "sha256": "a1cc5b2cf1e4b3ee7e5b91358440c76110e935bf54b051b12008feef8a34774d",
+      "bytes": 10470
+    },
+    {
+      "path": "DOCS-113 Text field editor popover.md",
+      "sha256": "d9b8280a80309e2096dfcfcc1003cb604a90762156664737ea0e0d405dedf073",
+      "bytes": 4362
     }
   ]
 }
