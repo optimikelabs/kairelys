@@ -54,6 +54,7 @@ interface FloatingHostContext {
 }
 
 const activeFloatingPanels = new Set<FloatingPanelRecord>();
+const FLOATING_RECT_ANCHOR_OWNER = Symbol('operon-floating-rect-anchor-owner');
 export const MOBILE_PICKER_OPEN_EVENT = 'operon-mobile-picker-open';
 export const MOBILE_PICKER_CLOSE_EVENT = 'operon-mobile-picker-close';
 export const TASK_EDITOR_MOBILE_PICKER_OPEN_EVENT = 'operon-task-editor-mobile-picker-open';
@@ -75,6 +76,10 @@ interface MobilePickerSurfaceContext {
 	openEvents: string[];
 	closeEvents: string[];
 }
+
+type OwnedFloatingRect = DOMRect & {
+	[FLOATING_RECT_ANCHOR_OWNER]?: HTMLElement;
+};
 
 function isEditablePanelFocus(element: Element | null, panel: HTMLElement): boolean {
 	const htmlElement = asHTMLElement(element, panel);
@@ -146,10 +151,23 @@ function dispatchMobilePickerEvent(context: MobilePickerSurfaceContext | null, e
 	}
 }
 
+export function snapshotFloatingRectAnchor(anchorEl: HTMLElement): DOMRect {
+	const rect = anchorEl.getBoundingClientRect();
+	const snapshot = new DOMRect(rect.x, rect.y, rect.width, rect.height) as OwnedFloatingRect;
+	Object.defineProperty(snapshot, FLOATING_RECT_ANCHOR_OWNER, {
+		value: anchorEl,
+	});
+	return snapshot;
+}
+
+function getFloatingRectAnchorOwner(anchor: HTMLElement | DOMRect): HTMLElement | null {
+	return (anchor as OwnedFloatingRect)[FLOATING_RECT_ANCHOR_OWNER] ?? null;
+}
+
 export function resolvePickerApp(anchor: HTMLElement | DOMRect, app?: App): App | undefined {
 	if (app) return app;
-	const anchorEl = asHTMLElement(anchor);
-	return getWindowApp(anchorEl ? getOwnerWindow(anchorEl) : getActiveWindow());
+	const anchorOwnerEl = asHTMLElement(anchor) ?? getFloatingRectAnchorOwner(anchor);
+	return getWindowApp(anchorOwnerEl ? getOwnerWindow(anchorOwnerEl) : getActiveWindow());
 }
 
 function resolveRect(anchor: HTMLElement | DOMRect): DOMRect {
@@ -168,6 +186,14 @@ function resolveHostContext(anchor: HTMLElement | DOMRect, options: FloatingHost
 	}
 
 	const anchorEl = asHTMLElement(anchor);
+	const rectAnchorOwnerEl = anchorEl ? null : getFloatingRectAnchorOwner(anchor);
+	if (rectAnchorOwnerEl) {
+		return {
+			host: getOwnerBody(rectAnchorOwnerEl),
+			constrainToHost: false,
+			scrollHost: getOwnerWindow(rectAnchorOwnerEl),
+		};
+	}
 	if (!anchorEl) {
 		return { host: getActiveDocument().body, constrainToHost: false, scrollHost: getActiveWindow() };
 	}
@@ -379,10 +405,11 @@ export function createFloatingPanel(
 	options: FloatingPanelOptions = {},
 ): FloatingPanel {
 	const anchorEl = asHTMLElement(anchor);
+	const rectAnchorOwnerEl = anchorEl ? null : getFloatingRectAnchorOwner(anchor);
 	const { host, constrainToHost, scrollHost } = resolveHostContext(anchor, options);
 	const mobileSurfaceContext = getMobilePickerSurfaceContext(anchorEl, options, host);
 	const panelHost = mobileSurfaceContext?.panelHost ?? host;
-	const panel = createOwnerElement(anchorEl ?? host, 'div');
+	const panel = createOwnerElement(anchorEl ?? rectAnchorOwnerEl ?? host, 'div');
 	panel.className = className;
 	if (mobileSurfaceContext) {
 		panel.classList.add('operon-mobile-picker-surface', mobileSurfaceContext.surfaceClass);

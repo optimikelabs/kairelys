@@ -16,6 +16,7 @@ import { PriorityDefinition } from '../types/priority';
 import { Pipeline } from '../types/pipeline';
 import type { ContextualMenuActionHandler } from '../core/contextual-menu-engine';
 import { bindOperonHoverTooltip } from './operon-hover-tooltip';
+import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
 import { WindowTimeoutHandle, clearWindowTimeout, createOwnerElement, getActiveWindow, getOwnerBody, getOwnerWindow, setWindowTimeout } from '../core/dom-compat';
 import { buildTaskWikilinkOverlaySettingsSignature } from './task-wikilink-overlay-chips';
 import { openSettingsIconPickerModal } from './settings/settings-icon-picker-modal';
@@ -487,7 +488,6 @@ export class FilterSetModal extends Modal {
 				type: 'button',
 				'aria-haspopup': 'listbox',
 				'aria-expanded': 'false',
-				'aria-label': options.label,
 			},
 		});
 		const labelEl = button.createSpan('operon-field-picker-trigger-label');
@@ -501,10 +501,11 @@ export class FilterSetModal extends Modal {
 			const label = selected?.label ?? options.placeholder ?? nextValue;
 			labelEl.textContent = label;
 			button.dataset.value = nextValue;
-			button.title = selected && selected.label !== selected.field
+			const detail = selected && selected.label !== selected.field
 				? `${selected.label} (${selected.field})`
 				: label;
-			button.setAttribute('aria-label', `${options.label}: ${label}`);
+			setAccessibleLabelWithoutTooltip(button, `${options.label}: ${label}`);
+			bindOperonHoverTooltip(button, { content: detail, taskColor: null });
 		};
 		updateButton(value);
 
@@ -1123,10 +1124,11 @@ export class FilterSetModal extends Modal {
 			const label = selectedFieldOption?.label ?? cond.field;
 			fieldButtonLabel.textContent = label;
 			fieldButton.dataset.value = selectedFieldOption?.field ?? cond.field;
-			fieldButton.title = selectedFieldOption && selectedFieldOption.label !== selectedFieldOption.field
+			const detail = selectedFieldOption && selectedFieldOption.label !== selectedFieldOption.field
 				? `${selectedFieldOption.label} (${selectedFieldOption.field})`
 				: label;
-			fieldButton.setAttribute('aria-label', `${t('filterSets', 'conditionFieldPickerLabel')}: ${label}`);
+			setAccessibleLabelWithoutTooltip(fieldButton, `${t('filterSets', 'conditionFieldPickerLabel')}: ${label}`);
+			bindOperonHoverTooltip(fieldButton, { content: detail, taskColor: null });
 		};
 		updateFieldButton();
 
@@ -1655,7 +1657,7 @@ export class FilterSetModal extends Modal {
 		this.addClasses(button, 'operon-filter-modal-button', 'operon-filter-footer-action-button');
 		if (options.monospace) button.addClass('is-monospace');
 		if (options.danger) button.addClass('is-danger');
-		button.setAttribute('aria-label', options.label);
+		setAccessibleLabelWithoutTooltip(button, options.label);
 		bindOperonHoverTooltip(button, { content: options.label, taskColor: null });
 		if (options.icon) {
 			setIcon(button, options.icon);

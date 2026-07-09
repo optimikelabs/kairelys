@@ -1461,6 +1461,7 @@ export interface OperonSettings {
 	contextualMenuMobileTransitionGraceMs: number;
 	contextualMenuMobileAutoHideMs: number;
 	calendarInlineTaskHeading: string;
+	calendarShowHoverAddButton: boolean;
 	calendarShowAllDayLane: boolean;
 	calendarShowDueMarkers: boolean;
 	calendarDefaultScrollHour: number;
@@ -1507,6 +1508,7 @@ export interface OperonSettings {
 	kanbanDefaultPresetId: string | null;
 	kanbanExpandedColumnWidthPx: number;
 	kanbanMaxVisibleTasksPerCell: number;
+	kanbanShowHoverAddButton: boolean;
 	kanbanTaskShowNotesPreview: boolean;
 	kanbanTaskShowSubtaskProgress: boolean;
 	kanbanTaskShowPlainCheckboxProgress: boolean;
@@ -1891,6 +1893,7 @@ export const DEFAULT_SETTINGS: OperonSettings = {
 	contextualMenuMobileTransitionGraceMs: 450,
 	contextualMenuMobileAutoHideMs: 7000,
 	calendarInlineTaskHeading: '',
+	calendarShowHoverAddButton: true,
 	calendarShowAllDayLane: true,
 	calendarShowDueMarkers: true,
 	calendarDefaultScrollHour: 8,
@@ -1936,6 +1939,7 @@ export const DEFAULT_SETTINGS: OperonSettings = {
 	kanbanDefaultPresetId: DEFAULT_KANBAN_DEFAULT_PRESET_ID,
 	kanbanExpandedColumnWidthPx: 320,
 	kanbanMaxVisibleTasksPerCell: 7,
+	kanbanShowHoverAddButton: true,
 	kanbanTaskShowNotesPreview: false,
 	kanbanTaskShowSubtaskProgress: true,
 	kanbanTaskShowPlainCheckboxProgress: true,
@@ -3600,6 +3604,7 @@ export function migrateSettings(raw: unknown): OperonSettings {
 	out.workspaceTweaksCompactSidebarTabIcons = typeof src.workspaceTweaksCompactSidebarTabIcons === 'boolean'
 		? src.workspaceTweaksCompactSidebarTabIcons
 		: DEFAULT_SETTINGS.workspaceTweaksCompactSidebarTabIcons;
+	out.calendarShowHoverAddButton = src.calendarShowHoverAddButton !== false;
 	out.calendarShowAllDayLane = typeof src.calendarShowAllDayLane === 'boolean'
 		? src.calendarShowAllDayLane
 		: DEFAULT_SETTINGS.calendarShowAllDayLane;
@@ -3715,6 +3720,7 @@ export function migrateSettings(raw: unknown): OperonSettings {
 	out.kanbanPresets = normalizeKanbanPresets(src.kanbanPresets);
 	out.kanbanExpandedColumnWidthPx = normalizeKanbanExpandedColumnWidthPx(src.kanbanExpandedColumnWidthPx);
 	out.kanbanMaxVisibleTasksPerCell = normalizeKanbanMaxVisibleTasksPerCell(src.kanbanMaxVisibleTasksPerCell);
+	out.kanbanShowHoverAddButton = src.kanbanShowHoverAddButton !== false;
 	out.kanbanTaskShowNotesPreview = src.kanbanTaskShowNotesPreview === true;
 	out.kanbanTaskShowSubtaskProgress = src.kanbanTaskShowSubtaskProgress !== false;
 	out.kanbanTaskShowPlainCheckboxProgress = src.kanbanTaskShowPlainCheckboxProgress !== false;

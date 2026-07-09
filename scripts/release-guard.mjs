@@ -94,6 +94,23 @@ function cssRules(relativePath) {
 	}));
 }
 
+function assertNoCssPropertyDeclarations(relativePath, propertyNames, label) {
+	const text = stripCssComments(readText(relativePath));
+	const forbiddenProperties = new Set(propertyNames.map(property => property.toLowerCase()));
+	for (const rule of text.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+		const body = rule[2];
+		const ruleBodyStart = (rule.index ?? 0) + rule[0].indexOf('{') + 1;
+		for (const declaration of body.matchAll(/(^|;)\s*([-\w]+)\s*:/g)) {
+			const rawProperty = declaration[2];
+			const property = rawProperty.toLowerCase();
+			if (!forbiddenProperties.has(property)) continue;
+
+			const declarationIndex = ruleBodyStart + declaration.index + declaration[0].indexOf(rawProperty);
+			fail(`${relativePath}:${lineNumberAt(text, declarationIndex)}: ${label}: found ${property}`);
+		}
+	}
+}
+
 function assertCssRuleContains(relativePath, selector, requiredDeclarations, label) {
 	const matchingRules = cssRules(relativePath).filter(candidate => candidate.selectors.includes(selector));
 	if (matchingRules.length === 0) {
@@ -267,6 +284,11 @@ function checkCssScorecard() {
 	for (const [pattern, label] of bannedCssPatterns) {
 		assertNoMatch('styles.css', pattern, label);
 	}
+	assertNoCssPropertyDeclarations(
+		'styles.css',
+		['clip-path', '-webkit-clip-path'],
+		'avoid clip-path because Obsidian compatibility checks flag css-clip-path',
+	);
 
 	assertNoDuplicateCssDeclarations('styles.css');
 

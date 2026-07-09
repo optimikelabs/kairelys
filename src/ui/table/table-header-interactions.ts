@@ -17,6 +17,7 @@ import {
 } from '../../types/table';
 import { t } from '../../core/i18n';
 import { getOwnerDocument, isHTMLElement } from '../../core/dom-compat';
+import { setAccessibleLabelWithoutTooltip } from '../accessibility-label';
 import {
 	applyTableColumnAlignmentClass,
 	applyTableColumnGeometryClass,
@@ -274,7 +275,7 @@ function renderTableAdminHeaderCell(cell: HTMLElement, column: TableColumn, sett
 	}
 	if (column.key === TABLE_TASK_TYPE_COLUMN_KEY) {
 		cell.addClass('operon-table-task-type-header-cell');
-		cell.setAttribute('aria-label', t('settings', 'tableTaskTypeColumn'));
+		setAccessibleLabelWithoutTooltip(cell, t('settings', 'tableTaskTypeColumn'));
 		setIcon(iconEl, 'database');
 		return;
 	}
@@ -290,7 +291,7 @@ function renderTableHeaderLabel(
 	const field = settings ? getTableTaskField(column.key, settings) : null;
 	const fieldLabel = column.label?.trim() || (settings ? getTableTaskFieldLabel(column.key, settings) : column.key);
 	const iconOnly = settings ? shouldUseIconOnlyColumn(column, settings) : false;
-	cell.setAttribute('aria-label', fieldLabel);
+	setAccessibleLabelWithoutTooltip(cell, fieldLabel);
 	if (iconOnly) {
 		bindOperonHoverTooltip(cell, {
 			content: fieldLabel,

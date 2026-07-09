@@ -2,6 +2,7 @@ import { setIcon } from 'obsidian';
 import { t } from '../../core/i18n';
 import type { OperonSettings } from '../../types/settings';
 import { type TablePreset, type TableSortDirection, type TableSortRule } from '../../types/table';
+import { setAccessibleLabelWithoutTooltip } from '../accessibility-label';
 import { createFloatingPanel, requestFloatingInputFocus } from '../field-pickers/common';
 import { showSearchableFieldPicker } from '../field-pickers/searchable-field-picker';
 import { buildTableTaskFieldCatalog } from './table-field-catalog';
@@ -45,7 +46,7 @@ export function showTableGroupSortPopover(options: TableGroupSortPopoverOptions)
 	);
 
 	panel.setAttribute('role', 'dialog');
-	panel.setAttribute('aria-label', t('table', 'groupSort'));
+	setAccessibleLabelWithoutTooltip(panel, t('table', 'groupSort'));
 
 	let render = (_focusKey?: string): void => undefined;
 	const commit = (
@@ -293,13 +294,12 @@ function renderTableFieldPickerButton(
 			type: 'button',
 			'aria-haspopup': 'listbox',
 			'aria-expanded': 'false',
-			'aria-label': options.label,
 			'data-operon-table-group-sort-focus': options.focusKey,
 		},
 	});
+	setAccessibleLabelWithoutTooltip(button, options.label);
 	button.disabled = options.disabled === true;
 	const label = getTableFieldPickerLabel(options.catalog, options.value, options.placeholder);
-	button.title = label;
 	button.createSpan({ cls: 'operon-field-picker-trigger-label', text: label });
 	const iconEl = button.createSpan('operon-field-picker-trigger-icon');
 	setIcon(iconEl, 'chevron-down');
@@ -336,8 +336,8 @@ function renderDirectionSelect(
 ): HTMLSelectElement {
 	const select = container.createEl('select', {
 		cls: 'operon-table-group-sort-direction-select',
-		attr: { 'aria-label': ariaLabel },
 	});
+	setAccessibleLabelWithoutTooltip(select, ariaLabel);
 	select.createEl('option', { value: 'asc', text: getTableSortDirectionLabel('asc') });
 	select.createEl('option', { value: 'desc', text: getTableSortDirectionLabel('desc') });
 	select.value = value;
@@ -356,9 +356,9 @@ function renderIconButton(
 		cls: 'operon-table-group-sort-icon-button',
 		attr: {
 			type: 'button',
-			'aria-label': label,
 		},
 	});
+	setAccessibleLabelWithoutTooltip(button, label);
 	if (focusKey) button.dataset.operonTableGroupSortFocus = focusKey;
 	button.disabled = disabled;
 	setIcon(button, icon);

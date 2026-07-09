@@ -2148,6 +2148,8 @@ export default class OperonPlugin extends Plugin {
 				(dateKey) => this.openDailyNoteFromDateKey(dateKey),
 				(filterSet) => this.duplicateFilterSetAndRefresh(filterSet),
 				(filterSetId) => this.deleteFilterSetAndRefresh(filterSetId),
+				(target) => this.openRelatedViewTarget(target),
+				(target) => this.createRelatedViewPresetAndOpen(target),
 			)
 		);
 
@@ -2386,6 +2388,10 @@ export default class OperonPlugin extends Plugin {
 					onDeleteTaskSession: (session) => this.deleteTableTaskSessionAndRefresh(session),
 					onStatusIconClick: (taskId) => this.handleCalendarStatusIconClick(taskId),
 					onContextualAction: (taskId, actionId, context, invocation) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
+					getProjectSerialDisplay: (operonId, task) => task
+						? this.getReadingProjectSerialDisplayForTask(operonId, task)
+						: this.getProjectSerialDisplayForTask(operonId),
+					getProjectSerialSignature: () => this.getProjectSerialSignature(),
 					isTaskPinned: (taskId) => this.pinnedCache?.isPinned(taskId) === true,
 					hasSubtasks: (taskId) => this.indexer.secondary.getChildIds(taskId).size > 0,
 				},
@@ -3610,7 +3616,7 @@ export default class OperonPlugin extends Plugin {
 
 	private async createRelatedViewPresetAndOpen(target: RelatedViewCreateTarget): Promise<void> {
 		if (target.type === 'calendar') {
-			const preset = this.createRelatedCalendarPreset(target.variant, target.filterSetId);
+			const preset = this.createRelatedCalendarPreset(target.variant, target.filterSetId, target.presetName);
 			this.settings.calendarPresets.push(preset);
 			if (!this.settings.calendarDefaultPresetId) {
 				this.settings.calendarDefaultPresetId = this.settings.calendarPresets[0]?.id ?? null;
@@ -3622,7 +3628,7 @@ export default class OperonPlugin extends Plugin {
 			return;
 		}
 		if (target.type === 'kanban') {
-			const preset = this.createRelatedKanbanPreset(target.filterSetId);
+			const preset = this.createRelatedKanbanPreset(target.filterSetId, target.presetName);
 			this.settings.kanbanPresets.push(preset);
 			if (!this.settings.kanbanDefaultPresetId) {
 				this.settings.kanbanDefaultPresetId = this.settings.kanbanPresets[0]?.id ?? null;
@@ -3633,7 +3639,7 @@ export default class OperonPlugin extends Plugin {
 			await this.openKanbanView({ presetId: preset.id });
 			return;
 		}
-		const preset = this.createRelatedTablePreset(target.filterSetId);
+		const preset = this.createRelatedTablePreset(target.filterSetId, target.presetName);
 		await this.enqueueTablePresetMutation(async () => {
 			const snapshot = this.snapshotTablePresetSettings();
 			this.settings.tablePresets.push(preset);
@@ -3655,6 +3661,7 @@ export default class OperonPlugin extends Plugin {
 	private createRelatedCalendarPreset(
 		variant: Extract<RelatedViewCreateTarget, { type: 'calendar' }>['variant'],
 		filterSetId: string | null,
+		presetName?: string,
 	): CalendarPreset {
 		const defaults = cloneDefaultCalendarPresets();
 		const template = variant === 'multiWeek'
@@ -3663,7 +3670,7 @@ export default class OperonPlugin extends Plugin {
 		return {
 			...template,
 			id: createCalendarPresetId(),
-			name: buildUniqueRelatedPresetName(this.getRelatedCalendarPresetName(variant), this.settings.calendarPresets),
+			name: buildUniqueRelatedPresetName(presetName ?? this.getRelatedCalendarPresetName(variant), this.settings.calendarPresets),
 			surfaceType: variant,
 			filterSetId,
 			externalCalendarVisibility: { ...template.externalCalendarVisibility },
@@ -3676,12 +3683,12 @@ export default class OperonPlugin extends Plugin {
 		return t('table', 'relatedViewsCalendarTimeGridPresetName');
 	}
 
-	private createRelatedKanbanPreset(filterSetId: string | null): KanbanPreset {
+	private createRelatedKanbanPreset(filterSetId: string | null, presetName?: string): KanbanPreset {
 		const template = cloneDefaultKanbanPresets()[0];
 		return {
 			...template,
 			id: createKanbanPresetId(),
-			name: buildUniqueRelatedPresetName(t('table', 'relatedViewsKanbanDefaultPipelinePresetName'), this.settings.kanbanPresets),
+			name: buildUniqueRelatedPresetName(presetName ?? t('table', 'relatedViewsKanbanDefaultPipelinePresetName'), this.settings.kanbanPresets),
 			pipelineId: this.resolveDefaultKanbanPipelineId(),
 			filterSetId,
 			sortRules: template.sortRules.map(rule => ({ ...rule })),
@@ -3694,12 +3701,12 @@ export default class OperonPlugin extends Plugin {
 			?? null;
 	}
 
-	private createRelatedTablePreset(filterSetId: string | null): TablePreset {
+	private createRelatedTablePreset(filterSetId: string | null, presetName?: string): TablePreset {
 		const preset = createDefaultTablePreset();
 		return {
 			...preset,
 			id: createTablePresetId(),
-			name: buildUniqueRelatedPresetName(t('table', 'relatedViewsTableDefaultPresetName'), this.settings.tablePresets),
+			name: buildUniqueRelatedPresetName(presetName ?? t('table', 'relatedViewsTableDefaultPresetName'), this.settings.tablePresets),
 			filterSetId,
 			columns: preset.columns.map(column => ({ ...column })),
 			sortRules: preset.sortRules.map(rule => ({ ...rule })),
@@ -4014,6 +4021,9 @@ export default class OperonPlugin extends Plugin {
 		});
 		if (plan.changedKeys.length === 0) {
 			if (this.isKanbanTaskAtDropTarget(task, pipeline, preset.swimlaneBy, context)) {
+				if (manualOrderCells) {
+					await this.storage.kanbanOrder.replaceCells(preset.id, manualOrderCells);
+				}
 				this.refreshViews();
 				return;
 			}
@@ -4046,7 +4056,6 @@ export default class OperonPlugin extends Plugin {
 			}
 			throw new Error(`Kanban drop failed: persisted task did not reach target cell (${context.taskId})`);
 		}
-		this.refreshViews();
 	}
 
 	private isKanbanTaskAtDropTarget(
@@ -5925,6 +5934,10 @@ export default class OperonPlugin extends Plugin {
 			onOpenPresetSettings: (presetId) => this.openTablePresetSettingsModal(presetId, () => this.resolveTablePresetSettingsLeafForEmbed()),
 			onSavePresetPatch: (patch) => this.saveTablePresetPatchAndRefresh(patch),
 			onSaveFilterSet: (filterSet) => this.saveFilterSetAndRefresh(filterSet),
+			getProjectSerialDisplay: (operonId, task) => task
+				? this.getReadingProjectSerialDisplayForTask(operonId, task)
+				: this.getProjectSerialDisplayForTask(operonId),
+			getProjectSerialSignature: () => this.getProjectSerialSignature(),
 			isTaskPinned: (taskId) => this.pinnedCache?.isPinned(taskId) === true,
 			hasSubtasks: (taskId) => this.indexer.secondary.getChildIds(taskId).size > 0,
 		};
@@ -8096,7 +8109,7 @@ export default class OperonPlugin extends Plugin {
 					return;
 				}
 				if (leaf?.view instanceof OperonTableView) {
-					leaf.view.render();
+					leaf.view.markDirty();
 				}
 			})
 		);

@@ -26,6 +26,15 @@ type BoundTooltipTarget = HTMLElement & {
 	_operonFloatingTooltip?: HTMLElement | null;
 };
 
+// Obsidian renders its own black tooltip for any element carrying title or
+// aria-label. Move those into the sr-only label pattern so only Operon
+// tooltips remain visible while screen readers keep the accessible name.
+function suppressNativeTooltip(target: HTMLElement): void {
+	target.removeAttribute('title');
+	const nativeAriaLabel = target.getAttribute('aria-label');
+	if (nativeAriaLabel) setAccessibleLabelWithoutTooltip(target, nativeAriaLabel);
+}
+
 function resolveOperonHoverTooltipColor(taskColor: OperonHoverTooltipColor): string | null {
 	const resolved = typeof taskColor === 'function' ? taskColor() : taskColor;
 	return resolved?.trim() || null;
@@ -60,6 +69,7 @@ export function wrapWithOperonHoverTooltip(
 ): HTMLElement {
 	const wrapper = createOperonHoverTooltipShell(options, target);
 	wrapper.classList.add('operon-hover-tooltip-anchor');
+	suppressNativeTooltip(target);
 	wrapper.appendChild(target);
 	wrapper.appendChild(createTooltip(options.title, options.content, undefined, undefined, wrapper));
 	return wrapper;
@@ -71,6 +81,7 @@ export function wrapWithOperonHoverContent(
 ): HTMLElement {
 	const wrapper = createOperonHoverTooltipShell(options, target);
 	wrapper.classList.add('operon-hover-tooltip-anchor');
+	suppressNativeTooltip(target);
 	wrapper.appendChild(target);
 	wrapper.appendChild(createTooltip(options.title, options.content, options.contentEl, options.tooltipClassName, wrapper));
 	if (options.openOnClick) {
@@ -89,7 +100,7 @@ export function bindOperonHoverTooltip(
 ): void {
 	const typedTarget = target as BoundTooltipTarget;
 	typedTarget._operonHoverCleanup?.();
-	target.removeAttribute('title');
+	suppressNativeTooltip(target);
 
 	if (!options.title && !options.content && !options.contentEl) return;
 	const ownerWindow = getOwnerWindow(target);

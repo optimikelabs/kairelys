@@ -2,6 +2,7 @@ import type { App } from 'obsidian';
 import { t } from '../../../core/i18n';
 import { createButton, requestFloatingInputFocus, scrollChildIntoView } from '../common';
 import { createCustomFieldPanel, type CustomFieldPickerBaseOptions } from './common';
+import { setAccessibleLabelWithoutTooltip } from '../../accessibility-label';
 
 const CUSTOM_LIST_PAGE_SIZE = 20;
 const CUSTOM_LIST_LOAD_MORE_SCROLL_THRESHOLD_PX = 48;
@@ -158,9 +159,9 @@ export function showCustomListFieldPicker(
 				text: '×',
 				attr: {
 					type: 'button',
-					'aria-label': t('taskEditor', 'removeValue', { value: labelText }),
 				},
 			});
+			setAccessibleLabelWithoutTooltip(remove, t('taskEditor', 'removeValue', { value: labelText }));
 			remove.addEventListener('click', () => {
 				selectedValues = selectedValues.filter(existing => existing !== value);
 				renderSelected();

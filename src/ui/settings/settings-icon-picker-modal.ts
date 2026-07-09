@@ -3,6 +3,7 @@ import { t } from '../../core/i18n';
 import { getOwnerWindow } from '../../core/dom-compat';
 import { normalizeTaskIconValue } from '../../core/task-icon-value';
 import { searchLucideIcons } from '../field-pickers/icon-search';
+import { setAccessibleLabelWithoutTooltip } from '../accessibility-label';
 
 interface SettingsIconPickerModalOptions {
 	title?: string;
@@ -201,7 +202,7 @@ export class SettingsIconPickerModal extends Modal {
 			const iconWrap = item.createDiv('operon-icon-picker-icon');
 			const icon = getIcon(iconId);
 			if (icon) iconWrap.appendChild(icon);
-			item.setAttribute('aria-label', iconId);
+			setAccessibleLabelWithoutTooltip(item, iconId);
 
 			item.addEventListener('mousemove', () => {
 				if (this.activeIndex === absoluteIndex) return;

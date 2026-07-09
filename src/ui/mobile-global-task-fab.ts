@@ -2,6 +2,7 @@ import { App, Component, Platform, setIcon } from 'obsidian';
 import { clearWindowTimeout, createOwnerElement, getOwnerBody, getOwnerDocument, getOwnerWindow, isHTMLElement, setWindowTimeout, type WindowTimeoutHandle } from '../core/dom-compat';
 import { t } from '../core/i18n';
 import { OperonSettings, type MobileGlobalTaskFabPosition } from '../types/settings';
+import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
 
 const MOBILE_GLOBAL_TASK_FAB_EDGE_MARGIN_PX = 14;
 const MOBILE_GLOBAL_TASK_FAB_DRAG_THRESHOLD_PX = 8;
@@ -109,8 +110,7 @@ export class MobileGlobalTaskFab extends Component {
 	private refreshLabel(): void {
 		if (!this.buttonEl) return;
 		const label = t('commands', 'openTaskCreator');
-		this.buttonEl.setAttribute('aria-label', label);
-		this.buttonEl.setAttribute('title', label);
+		setAccessibleLabelWithoutTooltip(this.buttonEl, label);
 	}
 
 	private refreshVisibility(hidden: boolean): void {

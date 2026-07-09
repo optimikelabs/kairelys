@@ -2,6 +2,7 @@ import type { IndexedTask } from '../../types/fields';
 import type { OperonSettings } from '../../types/settings';
 import type { TableColumn } from '../../types/table';
 import { asyncHandler } from '../../core/async-action';
+import { setAccessibleLabelWithoutTooltip } from '../accessibility-label';
 import { bindOperonHoverTooltip } from '../operon-hover-tooltip';
 import {
 	CHECKBOX_PROGRESS_COLUMN_KEY,
@@ -53,7 +54,7 @@ export function renderTableProgressCell(
 	const fieldLabel = getTableTaskFieldLabel(options.column.key, options.settings);
 	if (!track) {
 		if (!options.iconOnly) {
-			cell.setAttribute('aria-label', `${fieldLabel}: --`);
+			setAccessibleLabelWithoutTooltip(cell, `${fieldLabel}: --`);
 			cell.createSpan({ cls: 'operon-table-empty-value', text: '--' });
 		}
 		return;
@@ -62,7 +63,7 @@ export function renderTableProgressCell(
 	const color = resolveTableProgressCellColor(options.column, track, options.task, options.settings);
 	const ariaLabel = `${fieldLabel}: ${track.tooltip}`;
 	const actionHandler = options.task.checkbox === 'open' ? options.onActivate : undefined;
-	cell.setAttribute('aria-label', ariaLabel);
+	setAccessibleLabelWithoutTooltip(cell, ariaLabel);
 	if (options.iconOnly) {
 		const actionShell = actionHandler
 			? createTableProgressActionShell(cell, 'icon')
@@ -125,7 +126,7 @@ function createTableProgressActionButton(
 		cls: 'operon-table-progress-action',
 		attr: { type: 'button' },
 	});
-	button.setAttribute('aria-label', ariaLabel);
+	setAccessibleLabelWithoutTooltip(button, ariaLabel);
 	button.setAttribute('aria-describedby', ensureTableProgressElementId(progressEl));
 	button.addEventListener('pointerdown', stopTableProgressActionEvent);
 	button.addEventListener('dblclick', stopTableProgressActionEvent);
@@ -175,7 +176,7 @@ function applyTableProgressColor(element: HTMLElement, color: string | null): vo
 
 function applyTableProgressAccessibility(element: HTMLElement, track: TaskProgressTrack, ariaLabel: string): void {
 	element.setAttribute('role', 'progressbar');
-	element.setAttribute('aria-label', ariaLabel);
+	setAccessibleLabelWithoutTooltip(element, ariaLabel);
 	element.setAttribute('aria-valuemin', '0');
 	element.setAttribute('aria-valuemax', '100');
 	element.setAttribute('aria-valuenow', String(track.percent));

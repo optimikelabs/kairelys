@@ -29,6 +29,21 @@ export function shouldMaterializeKanbanCell(
  * cell height limit rules: a finite maxVisibleTasks caps the visible cards,
  * otherwise only the initial render batch is counted.
  */
+/**
+ * Detects a clamped scroll restore: the browser silently limits
+ * scrollLeft/scrollTop assignments to the current content size, so a
+ * position that lands short of the target means the grid was not fully
+ * sized yet. The tolerance absorbs fractional scroll positions.
+ */
+export function isKanbanScrollRestoreClamped(
+	target: { left: number; top: number },
+	actual: { left: number; top: number },
+	tolerancePx = 1,
+): boolean {
+	return Math.abs(actual.left - target.left) > tolerancePx
+		|| Math.abs(actual.top - target.top) > tolerancePx;
+}
+
 export function estimateKanbanCellPlaceholderHeightPx(options: {
 	taskCount: number;
 	maxVisibleTasks: number;

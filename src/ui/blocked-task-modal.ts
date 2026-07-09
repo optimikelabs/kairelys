@@ -112,7 +112,7 @@ export class BlockedTaskModal extends Modal {
 		onClick: () => void,
 	): HTMLButtonElement {
 		const button = container.createEl('button', {
-			attr: { type: 'button', 'aria-label': label },
+			attr: { type: 'button' },
 			cls: 'operon-blocked-task-row-action',
 		});
 		const iconEl = button.createSpan('operon-blocked-task-row-action-icon');

@@ -4,6 +4,7 @@ import { t } from '../../core/i18n';
 import type { FilterSet, OperonSettings } from '../../types/settings';
 import { cloneTablePreset, type TablePreset, type TablePresetPatch, type TableSortDirection, type TableSortRule, type TableSummaryFunction, type TableSummaryRule } from '../../types/table';
 import type { FilterModalEvalDeps } from '../filter-set-modal';
+import { setAccessibleLabelWithoutTooltip } from '../accessibility-label';
 import { showSearchableFieldPicker } from '../field-pickers/searchable-field-picker';
 import { bindOperonHoverTooltip } from '../operon-hover-tooltip';
 import { renderPresetFilterActions } from '../preset-filter-actions';
@@ -234,10 +235,10 @@ export class TablePresetQuickSettingsModal extends Modal {
 		const orderSelect = row.createEl('select', {
 			cls: 'operon-table-preset-grouping-order',
 			attr: {
-				'aria-label': t('table', 'groupOrder'),
 				'data-operon-table-grouping-focus': options.focusOrderKey,
 			},
 		});
+		setAccessibleLabelWithoutTooltip(orderSelect, t('table', 'groupOrder'));
 		orderSelect.createEl('option', { value: 'asc', text: getTableSortDirectionLabel('asc') });
 		orderSelect.createEl('option', { value: 'desc', text: getTableSortDirectionLabel('desc') });
 		orderSelect.value = options.orderValue;
@@ -333,10 +334,10 @@ export class TablePresetQuickSettingsModal extends Modal {
 				text: getTableSortDirectionLabel(rule.direction),
 				attr: {
 					type: 'button',
-					'aria-label': t('table', 'sortBy'),
 					'data-operon-table-preset-sort-focus': `sort-direction-${index}`,
 				},
 			});
+			setAccessibleLabelWithoutTooltip(directionButton, t('table', 'sortBy'));
 			directionButton.addEventListener('click', event => {
 				event.preventDefault();
 				this.updateSortRules(preset, sortRules.map((entry, entryIndex) => entryIndex === index
@@ -349,10 +350,10 @@ export class TablePresetQuickSettingsModal extends Modal {
 				text: rule.empty === 'first' ? t('table', 'sortEmptyFirst') : t('table', 'sortEmptyLast'),
 				attr: {
 					type: 'button',
-					'aria-label': rule.empty === 'first' ? t('table', 'sortEmptyFirst') : t('table', 'sortEmptyLast'),
 					'data-operon-table-preset-sort-focus': `sort-empty-${index}`,
 				},
 			});
+			setAccessibleLabelWithoutTooltip(emptyButton, rule.empty === 'first' ? t('table', 'sortEmptyFirst') : t('table', 'sortEmptyLast'));
 			emptyButton.addEventListener('click', event => {
 				event.preventDefault();
 				this.updateSortRules(preset, sortRules.map((entry, entryIndex) => entryIndex === index
@@ -424,13 +425,12 @@ export class TablePresetQuickSettingsModal extends Modal {
 				type: 'button',
 				'aria-haspopup': 'listbox',
 				'aria-expanded': 'false',
-				'aria-label': options.label,
 			},
 		});
+		setAccessibleLabelWithoutTooltip(button, options.label);
 		button.setAttribute(options.focusAttribute, options.focusKey);
 		button.disabled = options.disabled === true;
 		const label = getTableFieldPickerLabel(options.catalog, options.value, options.placeholder);
-		button.title = label;
 		button.createSpan({ cls: 'operon-field-picker-trigger-label', text: label });
 		const iconEl = button.createSpan('operon-field-picker-trigger-icon');
 		setIcon(iconEl, 'chevron-down');
@@ -477,8 +477,8 @@ export class TablePresetQuickSettingsModal extends Modal {
 				.map(entry => entry.key));
 			const fieldSelect = row.createEl('select', {
 				cls: 'operon-table-preset-summary-select',
-				attr: { 'aria-label': t('table', 'summaryFieldSelectAria') },
 			});
+			setAccessibleLabelWithoutTooltip(fieldSelect, t('table', 'summaryFieldSelectAria'));
 			for (const field of catalog) {
 				if (usedByOtherRules.has(field.key)) continue;
 				fieldSelect.createEl('option', { value: field.key, text: field.label });
@@ -493,8 +493,8 @@ export class TablePresetQuickSettingsModal extends Modal {
 
 			const functionSelect = row.createEl('select', {
 				cls: 'operon-table-preset-summary-select',
-				attr: { 'aria-label': t('table', 'summaryFunctionSelectAria') },
 			});
+			setAccessibleLabelWithoutTooltip(functionSelect, t('table', 'summaryFunctionSelectAria'));
 			for (const summaryFunction of getTableSummaryFunctionsForField(rule.key, settings)) {
 				functionSelect.createEl('option', {
 					value: summaryFunction,
@@ -637,8 +637,9 @@ export class TablePresetQuickSettingsModal extends Modal {
 	): HTMLButtonElement {
 		const button = container.createEl('button', {
 			cls: 'operon-table-preset-settings-footer-button operon-table-preset-settings-icon-button',
-			attr: { type: 'button', 'aria-label': options.label },
+			attr: { type: 'button' },
 		});
+		setAccessibleLabelWithoutTooltip(button, options.label);
 		if (options.danger) button.addClass('mod-warning');
 		if (options.active) button.addClass('is-active');
 		if (options.monospace) button.addClass('is-monospace');
@@ -695,8 +696,9 @@ export class TablePresetQuickSettingsModal extends Modal {
 	): void {
 		const button = row.createEl('button', {
 			cls: 'operon-table-preset-column-action',
-			attr: { type: 'button', 'aria-label': label },
+			attr: { type: 'button' },
 		});
+		setAccessibleLabelWithoutTooltip(button, label);
 		if (focusKey) button.dataset.operonTablePresetSortFocus = focusKey;
 		setIcon(button, icon);
 		button.disabled = disabled;

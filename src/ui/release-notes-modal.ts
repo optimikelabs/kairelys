@@ -1,4 +1,4 @@
-import { Modal, normalizePath, TFile } from 'obsidian';
+import { Modal, normalizePath, setIcon, TFile } from 'obsidian';
 import type { App } from 'obsidian';
 import { runAsyncAction } from '../core/async-action';
 import { t } from '../core/i18n';
@@ -9,6 +9,7 @@ import {
 } from '../core/release-notes';
 import type { OperonReleaseNote } from '../core/release-notes';
 import { OPERON_DOCS_TARGET_ROOT } from '../systems/operon-docs-sync';
+import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
 
 interface OperonReleaseNotesModalOptions {
 	onClose?: () => void | Promise<void>;
@@ -42,6 +43,19 @@ export class OperonReleaseNotesModal extends Modal {
 
 		contentEl.createDiv('operon-release-notes-divider');
 		const footerEl = contentEl.createDiv('operon-release-notes-footer');
+		const supportButtonEl = footerEl.createEl('button', {
+			cls: 'operon-release-notes-support',
+			attr: { type: 'button' },
+		});
+		setIcon(supportButtonEl.createSpan('operon-release-notes-support-icon'), 'coffee');
+		supportButtonEl.createSpan({
+			text: t('buttons', 'buyMeACoffee'),
+			cls: 'operon-release-notes-support-label',
+		});
+		supportButtonEl.addEventListener('click', (event) => {
+			event.preventDefault();
+			openExternalUrl('https://buymeacoffee.com/hasanyilmaz');
+		});
 		footerEl.createEl('button', {
 			text: t('buttons', 'stayInFlow'),
 			cls: 'mod-cta operon-release-notes-thanks',
@@ -107,9 +121,9 @@ export class OperonReleaseNotesModal extends Modal {
 				href: youtubeUrl,
 				rel: 'noopener noreferrer',
 				target: '_blank',
-				'aria-label': t('modals', 'releaseNotesOpenVideo'),
 			},
 		});
+		setAccessibleLabelWithoutTooltip(linkEl, t('modals', 'releaseNotesOpenVideo'));
 		const thumbnailEl = linkEl.createDiv('operon-release-note-youtube-thumbnail');
 		const videoId = getYoutubeVideoId(youtubeUrl);
 		if (videoId) {

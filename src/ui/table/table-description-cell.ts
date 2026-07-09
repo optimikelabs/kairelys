@@ -1,4 +1,5 @@
 import type { App } from 'obsidian';
+import { setAccessibleLabelWithoutTooltip } from '../accessibility-label';
 import { bindOperonHoverTooltip } from '../operon-hover-tooltip';
 import {
 	isTaskDescriptionWikilinkEventTarget,
@@ -46,6 +47,26 @@ export function renderTableDescriptionCellContent(
 	let displayValue = options.value;
 	let editing = false;
 
+	const buildEditableAccessibleLabel = (value: string): string => {
+		const valueLabel = value.trim();
+		return valueLabel ? `${options.fieldLabel}: ${valueLabel}. ${options.editLabel}` : `${options.fieldLabel}. ${options.editLabel}`;
+	};
+
+	const shouldSyncEditableAccessibleLabel = (): boolean => options.iconOnly
+		? !!options.onIconOnlyOpen
+		: options.editable && !!options.onCommit;
+
+	const clearEditableAccessibleLabel = (): void => {
+		cell.removeAttribute('aria-label');
+		cell.removeAttribute('aria-labelledby');
+		delete cell.dataset.operonAccessibleLabelId;
+	};
+
+	const syncEditableAccessibleLabel = (value: string): void => {
+		cell.removeAttribute('aria-readonly');
+		setAccessibleLabelWithoutTooltip(cell, buildEditableAccessibleLabel(value));
+	};
+
 	const renderDisplay = (value: string): void => {
 		displayValue = value;
 		editing = false;
@@ -61,6 +82,9 @@ export function renderTableDescriptionCellContent(
 					...options.iconOnly,
 					focusable: options.onIconOnlyOpen ? false : undefined,
 				});
+			}
+			if (shouldSyncEditableAccessibleLabel()) {
+				syncEditableAccessibleLabel(displayValue);
 			}
 			return;
 		}
@@ -92,6 +116,9 @@ export function renderTableDescriptionCellContent(
 		} else {
 			clearInlineTextCellTooltip(cell);
 		}
+		if (shouldSyncEditableAccessibleLabel()) {
+			syncEditableAccessibleLabel(displayValue);
+		}
 	};
 
 	const startEdit = (): void => {
@@ -99,15 +126,16 @@ export function renderTableDescriptionCellContent(
 		editing = true;
 		clearInlineTextCellTooltip(cell);
 		cell.empty();
+		clearEditableAccessibleLabel();
 		cell.addClass('is-editing');
 		const inputClasses = ['operon-table-description-input', options.inputClassName].filter(Boolean).join(' ');
 		const input = cell.createEl('input', {
 			cls: inputClasses,
 			attr: {
 				type: 'text',
-				'aria-label': options.fieldLabel,
 			},
 		});
+		setAccessibleLabelWithoutTooltip(input, options.fieldLabel);
 		input.value = displayValue;
 
 		let finished = false;
@@ -155,12 +183,6 @@ export function renderTableDescriptionCellContent(
 			cell.setAttribute('aria-readonly', 'true');
 			return;
 		}
-		const valueLabel = displayValue.trim();
-		cell.removeAttribute('aria-readonly');
-		cell.setAttribute(
-			'aria-label',
-			valueLabel ? `${options.fieldLabel}: ${valueLabel}. ${options.editLabel}` : `${options.fieldLabel}. ${options.editLabel}`,
-		);
 		cell.addEventListener('click', event => {
 			event.preventDefault();
 			event.stopPropagation();
@@ -180,12 +202,6 @@ export function renderTableDescriptionCellContent(
 		return;
 	}
 
-	const valueLabel = displayValue.trim();
-	cell.removeAttribute('aria-readonly');
-	cell.setAttribute(
-		'aria-label',
-		valueLabel ? `${options.fieldLabel}: ${valueLabel}. ${options.editLabel}` : `${options.fieldLabel}. ${options.editLabel}`,
-	);
 	cell.addEventListener('click', event => {
 		if (isTaskDescriptionWikilinkEventTarget(event.target, cell)) return;
 		event.preventDefault();

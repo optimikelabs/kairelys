@@ -107,6 +107,7 @@ function isSpreadsheetFormulaLikeCell(value: string): boolean {
 
 function escapeMarkdownTableCell(value: string): string {
 	return value
+		.replace(/\\/gu, '\\\\')
 		.replace(/\r\n?/gu, '\n')
 		.replace(/\n/gu, '<br>')
 		.replace(/\|/gu, '\\|');

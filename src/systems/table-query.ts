@@ -15,6 +15,7 @@ import {
 	type TableCachedGroupValue,
 	type TableCachedSortValue,
 	type TableSortValueKind,
+	type TableValueResolverOptions,
 	type TableValueResolver,
 } from '../ui/table/table-value-cache';
 import { enginePerfLog, enginePerfNow } from '../core/engine-perf';
@@ -104,6 +105,7 @@ export function queryTableRows(options: {
 	precomputedSearchedTasks?: readonly IndexedTask[];
 	precomputedRows?: readonly IndexedTask[];
 	summaryMode?: TableQuerySummaryMode;
+	valueResolverOptions?: TableValueResolverOptions;
 }): TableQueryResult {
 	const startedAt = enginePerfNow();
 	const { preset, filterSet, tasks, priorities, pinnedCache } = options;
@@ -125,7 +127,7 @@ export function queryTableRows(options: {
 		? scopeFilteredTasks.filter(task => options.searchMatcher?.(task, normalizedSearchQuery) ?? true)
 		: scopeFilteredTasks;
 	const searchedAt = enginePerfNow();
-	const valueResolver = createTableValueResolver(tasks, options.settings);
+	const valueResolver = createTableValueResolver(tasks, options.settings, options.valueResolverOptions);
 	const priorityRank = buildTablePriorityRank(priorities);
 	const rows = options.precomputedRows
 		? [...options.precomputedRows]

@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Validation
 
+## [2.0.1] - 2026-07-09
+
+### New
+- Added **Project Serial** as a readonly Operon Table column, so saved tables can show project serial identities with detailed chips, compact icons, search, grouping, sorting, and export support.
+- Added **Settings support actions** for GitHub Sponsors and Buy Me a Coffee, making it easier to support ongoing Operon development.
+- Added default-on **Calendar** and **Kanban** settings that let users turn off hover add buttons when they prefer less visual interruption while keeping other task creation paths available.
+
+### Improved
+- Improved the **release notes popup** with a coffee support button and a calmer release heading card.
+- Improved **related-view launchers** so new Calendar, Kanban, and Table views created with a saved filter use that filter's name while still avoiding duplicate preset names.
+
+### Fixed
+- Fixed **Operon Table** Markdown export so task values with backslashes before pipe characters stay inside the intended table cell.
+- Fixed **Operon Table** picker cells so the first click after activating a Table leaf from another pane opens the picker instead of being swallowed or disappearing.
+- Fixed an Obsidian CSS compatibility warning in **Operon Table** admin headers.
+- Fixed **Operon Table** editable cells, Table controls, and Operon controls across filters, pickers, popovers, settings, and modals showing accessibility labels or native Obsidian hover tooltips, so only Operon's own tooltips appear while accessible labels stay intact.
+- Fixed **Kanban** card drops so post-drop refreshes preserve the board scroll position instead of jumping back to the top.
+
+### Validation
+- Local validation passed `npm run check:local`, including strict linting, production build, release guard, and 1152/1152 Phase 5 regression checks.
+
 ## [2.0.0] - 2026-07-07
 
 Operon 2 introduces **Operon Table**, a unified view for managing inline tasks and file tasks side by side. It gives you one configurable place to scan your tasks, adjust fields, build saved views, and embed the result in notes.

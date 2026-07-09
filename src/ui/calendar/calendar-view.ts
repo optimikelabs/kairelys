@@ -6634,6 +6634,7 @@ export class CalendarView extends ItemView {
 		dateKey: string,
 		onChoose: () => void,
 	): void {
+		if (!this.getSettings().calendarShowHoverAddButton) return;
 		if (!this.callbacks.onAllDaySlotSelection) return;
 		const overlay = cell.createDiv('operon-calendar-cell-add-overlay');
 		const button = overlay.createEl('button', {

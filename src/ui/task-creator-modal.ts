@@ -1577,10 +1577,7 @@ export class TaskCreatorModal extends Modal {
 		this.templateButtonEl.removeAttribute('title');
 		this.templateButtonEl.removeAttribute('aria-label');
 		if (Platform.isPhone) {
-			this.templateButtonEl.setAttribute('aria-label', templateAccessibleLabel);
-			if (selectedTemplate) {
-				this.templateButtonEl.setAttribute('title', selectedTemplate.name);
-			}
+			setAccessibleLabelWithoutTooltip(this.templateButtonEl, templateAccessibleLabel);
 		}
 		if (selectedTemplate) {
 			window.requestAnimationFrame(() => {

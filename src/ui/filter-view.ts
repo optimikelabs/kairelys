@@ -50,6 +50,8 @@ import {
 	type OptimisticTaskPatchInput,
 } from '../systems/optimistic-status-patch';
 import type { InlineRepeatCompletionMode } from '../storage/repeat-series-store';
+import { renderRelatedViewsLauncher } from './related-views';
+import type { RelatedViewCreateTarget, RelatedViewOpenTarget } from '../types/related-views';
 
 export const FILTER_VIEW_TYPE = 'operon-filter-view';
 const FILTER_PERF_DEBUG = false;
@@ -120,6 +122,8 @@ export class FilterView extends ItemView {
 	private openDailyNote?: (dateKey: string) => void | Promise<void>;
 	private duplicateFilterSet?: (filterSet: FilterSet) => Promise<void>;
 	private deleteFilterSet?: (filterSetId: string) => Promise<void>;
+	private onOpenRelatedView?: (target: RelatedViewOpenTarget) => void | Promise<void>;
+	private onCreateRelatedView?: (target: RelatedViewCreateTarget) => void | Promise<void>;
 	private currentFilterSetId: string | null = null;
 	private lastRenderSignature: string | null = null;
 	private layoutRoot: HTMLElement | null = null;
@@ -127,6 +131,7 @@ export class FilterView extends ItemView {
 	private filterPickerEl: HTMLElement | null = null;
 	private filterPickerButtonEl: HTMLButtonElement | null = null;
 	private filterPickerMenuEl: HTMLElement | null = null;
+	private relatedViewsButtonEl: HTMLButtonElement | null = null;
 	private addFilterBtnEl: HTMLButtonElement | null = null;
 	private settingsBtnEl: HTMLButtonElement | null = null;
 	private searchInputEl: HTMLInputElement | null = null;
@@ -174,6 +179,8 @@ export class FilterView extends ItemView {
 		openDailyNote?: (dateKey: string) => void | Promise<void>,
 		duplicateFilterSet?: (filterSet: FilterSet) => Promise<void>,
 		deleteFilterSet?: (filterSetId: string) => Promise<void>,
+		onOpenRelatedView?: (target: RelatedViewOpenTarget) => void | Promise<void>,
+		onCreateRelatedView?: (target: RelatedViewCreateTarget) => void | Promise<void>,
 	) {
 		super(leaf);
 		this.indexer = indexer;
@@ -206,6 +213,8 @@ export class FilterView extends ItemView {
 		this.openDailyNote = openDailyNote;
 		this.duplicateFilterSet = duplicateFilterSet;
 		this.deleteFilterSet = deleteFilterSet;
+		this.onOpenRelatedView = onOpenRelatedView;
+		this.onCreateRelatedView = onCreateRelatedView;
 		this.currentFilterSetId =
 			this.resolvePreferredFilterSetId(this.getLeafFilterSetId())
 			?? this.resolvePreferredFilterSetId(settings.leftRailDefaultFilterViewId)
@@ -365,10 +374,11 @@ export class FilterView extends ItemView {
 			defaultExpandAll: globalShowSubtasks,
 			showOnlyOpenSubtasks: globalShowOnlyOpenSubtasks,
 			showSubtaskAction: this.settings.filterTaskShowSubtaskAction,
-			};
-			this.ensureLayout(container);
-			this.headerEl?.removeClass('is-hidden');
-			this.syncSelectOptions();
+		};
+		this.ensureLayout(container);
+		this.headerEl?.removeClass('is-hidden');
+		this.syncSelectOptions();
+		this.renderFilterRelatedViewsButton();
 		if (this.addFilterBtnEl) {
 			const addFilterLabel = t('filterSets', 'addFilter');
 			bindOperonHoverTooltip(this.addFilterBtnEl, {
@@ -727,6 +737,7 @@ export class FilterView extends ItemView {
 				this.setFilterPickerOpen(false);
 			}
 		});
+		this.renderFilterRelatedViewsButton();
 		this.createSearchInput(this.headerEl);
 		this.addFilterBtnEl = this.headerEl.createEl('button', {
 			cls: 'operon-filter-add-btn operon-task-chip-action',
@@ -758,6 +769,26 @@ export class FilterView extends ItemView {
 			this.render();
 		});
 		this.searchInputEl = input;
+	}
+
+	private renderFilterRelatedViewsButton(): void {
+		this.relatedViewsButtonEl?.remove();
+		this.relatedViewsButtonEl = null;
+		if (!this.headerEl || !this.filterPickerEl) return;
+		const filterSet = this.getCurrentFilterSet();
+		if (!filterSet) return;
+		const button = renderRelatedViewsLauncher({
+			container: this.headerEl,
+			settings: this.getSettings(),
+			source: { type: 'filter', preset: { id: filterSet.id, name: filterSet.name } },
+			buttonClass: 'operon-filter-related-views-button',
+			closeBeforeOpen: () => this.setFilterPickerOpen(false),
+			onOpenRelatedView: target => this.onOpenRelatedView?.(target),
+			onCreateRelatedView: target => this.onCreateRelatedView?.(target),
+		});
+		if (!button) return;
+		this.headerEl.insertBefore(button, this.filterPickerEl.nextSibling);
+		this.relatedViewsButtonEl = button;
 	}
 
 	private syncSearchPlaceholder(totalCount: number): void {

@@ -13,6 +13,37 @@ const RELEASE_NOTE_LIMIT = 5;
 
 export const OPERON_RELEASE_NOTES: OperonReleaseNote[] = [
 	{
+		version: '2.0.1',
+		date: '2026-07-09',
+		title: 'Operon 2.0.1 - Table and Tooltip Fixes',
+		showOnUpdate: true,
+		body: `
+### New
+- Added **Project Serial** as a readonly Operon Table column, so saved tables can show project serial identities with detailed chips, compact icons, search, grouping, sorting, and export support.
+- Added **Settings support actions** for GitHub Sponsors and Buy Me a Coffee, making it easier to support ongoing Operon development.
+- Added default-on **Calendar** and **Kanban** settings that let users turn off hover add buttons when they prefer less visual interruption while keeping other task creation paths available.
+
+### Improved
+- Improved the **release notes popup** with a coffee support button and a calmer release heading card.
+- Improved **related-view launchers** so new Calendar, Kanban, and Table views created with a saved filter use that filter's name while still avoiding duplicate preset names.
+
+### Fixed
+- Fixed **Operon Table** Markdown export so task values with backslashes before pipe characters stay inside the intended table cell.
+- Fixed **Operon Table** picker cells so the first click after activating a Table leaf from another pane opens the picker instead of being swallowed or disappearing.
+- Fixed an Obsidian CSS compatibility warning in **Operon Table** admin headers.
+- Fixed **Operon Table** editable cells, Table controls, and Operon controls across filters, pickers, popovers, settings, and modals showing accessibility labels or native Obsidian hover tooltips, so only Operon's own tooltips appear while accessible labels stay intact.
+- Fixed **Kanban** card drops so post-drop refreshes preserve the board scroll position instead of jumping back to the top.
+
+### Updated Docs
+- [[DOCS-112 Table cells display and behavior|Table cells: display and behavior]]
+- [[DOCS-106 Table columns|Table columns]]
+- [[DOCS-105 Table overview|Table overview]]
+- [[DOCS-097 Project serials|Project serials]]
+- [[DOCS-030 Kanban overview|Kanban overview]]
+- And 2 more updated docs.
+`.trim(),
+	},
+	{
 		version: '2.0.0',
 		date: '2026-07-07',
 		title: 'Operon Table: A Unified View for Inline and File Tasks',

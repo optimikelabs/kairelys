@@ -7,7 +7,7 @@ import {
 	formatCompactTableTaskSource,
 	formatTableTaskSource,
 } from './table-value-adapter';
-import { createTableValueResolver } from './table-value-cache';
+import { createTableValueResolver, type TableValueResolverOptions } from './table-value-cache';
 
 type TableSearchSettings = Pick<OperonSettings, 'keyMappings'>;
 type TableTaskSearchMatcher = (task: IndexedTask, normalizedQuery: string) => boolean;
@@ -18,12 +18,16 @@ export interface TableTaskSearchMatcherCache {
 		settings: TableSearchSettings;
 		generation: number | string;
 		columns: readonly TableColumn[];
+		valueResolverOptions?: TableValueResolverOptions;
+		valueResolverSignature?: string;
 	}): TableTaskSearchMatcher;
 	prewarm(input: {
 		tasks: readonly IndexedTask[];
 		settings: TableSearchSettings;
 		generation: number | string;
 		columns: readonly TableColumn[];
+		valueResolverOptions?: TableValueResolverOptions;
+		valueResolverSignature?: string;
 	}, options: {
 		startIndex: number;
 		timeBudgetMs: number;
@@ -58,11 +62,13 @@ export function createTableTaskSearchMatcherCache(): TableTaskSearchMatcherCache
 		settings: TableSearchSettings;
 		generation: number | string;
 		columns: readonly TableColumn[];
+		valueResolverOptions?: TableValueResolverOptions;
+		valueResolverSignature?: string;
 	}): TableTaskSearchMatcherBundle => {
-		const signature = buildTableTaskSearchMatcherSignature(input.tasks, input.settings, input.generation, input.columns);
+		const signature = buildTableTaskSearchMatcherSignature(input.tasks, input.settings, input.generation, input.columns, input.valueResolverSignature);
 		if (cachedBundle && cachedSignature === signature) return cachedBundle;
 		cachedSignature = signature;
-		cachedBundle = buildTableTaskSearchMatcherBundle(input.tasks, input.settings, input.columns);
+		cachedBundle = buildTableTaskSearchMatcherBundle(input.tasks, input.settings, input.columns, input.valueResolverOptions);
 		return cachedBundle;
 	};
 	return {
@@ -100,17 +106,19 @@ export function buildTableTaskSearchMatcher(
 	tasks: readonly IndexedTask[],
 	settings: TableSearchSettings,
 	columns: readonly TableColumn[],
+	valueResolverOptions?: TableValueResolverOptions,
 ): TableTaskSearchMatcher {
-	return buildTableTaskSearchMatcherBundle(tasks, settings, columns).matcher;
+	return buildTableTaskSearchMatcherBundle(tasks, settings, columns, valueResolverOptions).matcher;
 }
 
 function buildTableTaskSearchMatcherBundle(
 	tasks: readonly IndexedTask[],
 	settings: TableSearchSettings,
 	columns: readonly TableColumn[],
+	valueResolverOptions?: TableValueResolverOptions,
 ): TableTaskSearchMatcherBundle {
 	const allTasks = [...tasks];
-	const valueResolver = createTableValueResolver(allTasks, settings);
+	const valueResolver = createTableValueResolver(allTasks, settings, valueResolverOptions);
 	const visibleColumnKeys = columns.filter(column => column.hidden !== true).map(column => column.key);
 	const documentCache = new Map<string, { text: string; tokens: string[] }>();
 	let cachedQuery = '';
@@ -166,9 +174,11 @@ export function buildTableTaskSearchMatcherSignature(
 	settings: TableSearchSettings,
 	generation: number | string,
 	columns: readonly TableColumn[],
+	valueResolverSignature = '',
 ): string {
 	return [
 		String(generation),
+		valueResolverSignature,
 		String(tasks.length),
 		buildTableSearchVisibleColumnSignature(columns),
 		buildTableSearchKeyMappingSignature(settings),

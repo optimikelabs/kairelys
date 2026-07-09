@@ -1,4 +1,5 @@
 import { setIcon } from 'obsidian';
+import { setAccessibleLabelWithoutTooltip } from '../accessibility-label';
 import {
 	createFloatingPanel,
 	type FloatingHostOptions,
@@ -88,7 +89,7 @@ export function showSearchableOptionPicker<TOption extends SearchableOptionPicke
 	input.setAttribute('aria-autocomplete', 'list');
 	input.setAttribute('aria-controls', listId);
 	input.setAttribute('aria-expanded', 'true');
-	input.setAttribute('aria-label', options.ariaLabel);
+	setAccessibleLabelWithoutTooltip(input, options.ariaLabel);
 
 	const list = panel.createDiv([
 		'operon-searchable-option-picker-list',
@@ -96,7 +97,7 @@ export function showSearchableOptionPicker<TOption extends SearchableOptionPicke
 	].filter(Boolean).join(' '));
 	list.id = listId;
 	list.setAttribute('role', 'listbox');
-	list.setAttribute('aria-label', options.ariaLabel);
+	setAccessibleLabelWithoutTooltip(list, options.ariaLabel);
 
 	let matches: TOption[] = [];
 	let activeIndex = 0;

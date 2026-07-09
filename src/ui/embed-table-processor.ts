@@ -1,6 +1,7 @@
 import { MarkdownRenderChild, Notice, setIcon, TFile, type App, type MarkdownPostProcessorContext } from 'obsidian';
 import type { OperonIndexer } from '../indexer/indexer';
 import type { PinnedCache } from '../storage/pinned-cache';
+import type { ProjectSerialDisplay } from '../core/project-serials';
 import type { IndexedTask } from '../types/fields';
 import { cloneFilterSet, type FilterSet, type OperonSettings, type TaskFinderDefaultScopeKey } from '../types/settings';
 import type { TrackerSession } from '../types/tracker';
@@ -24,7 +25,7 @@ import { filterTasksForCalendar } from '../systems/calendar-filter-materializati
 import { t } from '../core/i18n';
 import { localNow } from '../core/local-time';
 import { normalizeTaskFieldColor } from '../core/task-color-source';
-import { getTableTaskField, getTableTaskFieldLabel, isEditableTableTaskFieldKey } from './table/table-field-catalog';
+import { PROJECT_SERIAL_TABLE_FIELD_KEY, getTableTaskField, getTableTaskFieldLabel, isEditableTableTaskFieldKey } from './table/table-field-catalog';
 import {
 	formatTableTaskSource,
 } from './table/table-value-adapter';
@@ -123,9 +124,10 @@ import { openTaskFieldPicker } from './task-field-picker-dispatch';
 import { showTextFieldPopover } from './text-field-popover';
 import { buildTrackerSessionEditContext, TrackerSessionEditModal } from './tracker-session-edit-modal';
 import { formatDurationHuman } from '../systems/tracker-utils';
-import { closeFloatingPanelsForRoot } from './field-pickers/common';
+import { closeFloatingPanelsForRoot, snapshotFloatingRectAnchor } from './field-pickers/common';
 import { closeIconOnlyChipPreviewsForRoot } from './icon-only-chip-preview';
 import { getOwnerDocument, getOwnerWindow } from '../core/dom-compat';
+import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
 import {
 	applyTaskSearchBoxShortcutCommand,
 	getTaskSearchBoxRecentModifiedCutoff,
@@ -170,6 +172,8 @@ export interface EmbedTableDeps {
 	onOpenPresetSettings?: (presetId: string) => void;
 	onSavePresetPatch?: (patch: TablePresetPatch) => Promise<void>;
 	onSaveFilterSet?: (filterSet: FilterSet) => Promise<void>;
+	getProjectSerialDisplay?: (operonId: string, task?: IndexedTask) => ProjectSerialDisplay | null;
+	getProjectSerialSignature?: () => string;
 	isTaskPinned?: (taskId: string) => boolean;
 	hasSubtasks?: (taskId: string) => boolean;
 }
@@ -205,6 +209,7 @@ interface EmbedTableInstance {
 	currentRenderState: EmbeddedTableRenderState | null;
 	activePickerClose: (() => void) | null;
 	keepActivePickerOnRender: boolean;
+	suppressActivePickerCloseOnScrollToken: number;
 	headerInteractionState: TableHeaderInteractionState;
 	pendingCellKey: string | null;
 	pendingFocusKey: string | null;
@@ -530,6 +535,7 @@ function createEmbedTableInstance(
 		currentRenderState: null,
 		activePickerClose: null,
 		keepActivePickerOnRender: false,
+		suppressActivePickerCloseOnScrollToken: 0,
 		headerInteractionState: createTableHeaderInteractionState(),
 		pendingCellKey: null,
 		pendingFocusKey: null,
@@ -643,6 +649,8 @@ function renderEmbedTable(instance: EmbedTableInstance, deps: EmbedTableDeps): v
 			settings,
 			generation: deps.indexer.getGeneration(),
 			columns: taskColumns,
+			valueResolverOptions: { getProjectSerialDisplay: deps.getProjectSerialDisplay },
+			valueResolverSignature: deps.getProjectSerialSignature?.() ?? '',
 		})
 		: undefined;
 	const matcherResolvedAt = enginePerfNow();
@@ -693,6 +701,7 @@ function renderEmbedTable(instance: EmbedTableInstance, deps: EmbedTableDeps): v
 		precomputedRows: precomputedRowsForQuery,
 		taskIdFilter: searchContext.taskIdFilter,
 		summaryMode: shouldDeferSummaries ? 'skip' : 'evaluate',
+		valueResolverOptions: { getProjectSerialDisplay: deps.getProjectSerialDisplay },
 	});
 	const queryResolvedAt = enginePerfNow();
 	if (!normalizedSearchQuery && !cachedNoSearchResult) {
@@ -785,6 +794,7 @@ function renderEmbedTable(instance: EmbedTableInstance, deps: EmbedTableDeps): v
 	if (result.rows.length === 0) {
 		renderEmbedTableEmptyState(root, result.counts.scoped > 0 && isTableSearchScopeActive(instance.searchScope, instance.parentSearchSelection, instance.searchQuery));
 	}
+	suppressEmbedTableActivePickerCloseForProgrammaticScroll(instance);
 	if (instance.horizontalScrollerEl) {
 		instance.horizontalScrollerEl.scrollLeft = instance.scrollLeft;
 	}
@@ -840,6 +850,7 @@ function buildEmbedTableRenderSignature(
 				? `${item.kind}:${item.groupKey}:${item.depth}`
 				: 'summary').join(','),
 		locationIndexSignature,
+		deps.getProjectSerialSignature?.() ?? '',
 		buildTableRelevantSettingsSignature(deps.getSettings()),
 		canWriteEmbedTable(deps) ? 'write' : 'readonly',
 	].join('|');
@@ -864,6 +875,7 @@ function buildEmbedTableQuerySignature(
 		Array.from(instance.collapsedGroupKeys).sort().join('\u0000'),
 		JSON.stringify(preset),
 		locationIndexSignature,
+		deps.getProjectSerialSignature?.() ?? '',
 		buildTableRelevantSettingsSignature(settings),
 		canWriteEmbedTable(deps) ? 'write' : 'readonly',
 	].join('|');
@@ -916,12 +928,12 @@ function renderEmbedTableToolbar(
 		attr: {
 			type: 'search',
 			placeholder: searchPlaceholder,
-			'aria-label': searchPlaceholder,
 			autocomplete: 'off',
 			spellcheck: 'false',
 			maxlength: String(TABLE_SEARCH_MAX_QUERY_LENGTH),
 		},
 	});
+	setAccessibleLabelWithoutTooltip(searchInput, searchPlaceholder);
 	searchInput.value = displaySearchQuery;
 	searchInput.addEventListener('compositionstart', () => {
 		instance.isSearchComposing = true;
@@ -966,9 +978,9 @@ function renderEmbedTableToolbar(
 			cls: 'operon-table-search-clear',
 			attr: {
 				type: 'button',
-				'aria-label': t('table', 'clearSearch'),
 			},
 		});
+		setAccessibleLabelWithoutTooltip(clearButton, t('table', 'clearSearch'));
 		setIcon(clearButton, 'x');
 		clearButton.addEventListener('click', event => {
 			event.preventDefault();
@@ -1006,12 +1018,11 @@ function renderEmbedTablePresetPickerButton(
 		cls: 'operon-table-toolbar-icon-button operon-table-preset-switcher-button operon-table-embed-toolbar-action',
 		attr: {
 			type: 'button',
-			'aria-label': `${t('table', 'selectPreset')}: ${activeLabel}`,
 			'aria-haspopup': 'listbox',
 			'aria-expanded': 'false',
 		},
 	});
-	button.title = activeLabel;
+	setAccessibleLabelWithoutTooltip(button, `${t('table', 'selectPreset')}: ${activeLabel}`);
 	setIcon(button.createSpan('operon-table-preset-switcher-button-icon'), 'table-2');
 	bindOperonHoverTooltip(button, {
 		content: t('table', 'selectPreset'),
@@ -1051,9 +1062,9 @@ function renderEmbedTablePresetSettingsButton(controls: HTMLElement, preset: Tab
 		cls: 'operon-table-toolbar-icon-button',
 		attr: {
 			type: 'button',
-			'aria-label': t('table', 'editPreset'),
 		},
 	});
+	setAccessibleLabelWithoutTooltip(button, t('table', 'editPreset'));
 	setIcon(button, 'settings-2');
 	bindOperonHoverTooltip(button, {
 		content: t('table', 'editPreset'),
@@ -1079,11 +1090,11 @@ function renderEmbedTableFilterPopoverButton(
 		cls: 'operon-table-toolbar-icon-button operon-table-filter-popover-button',
 		attr: {
 			type: 'button',
-			'aria-label': t('table', 'filter'),
 			'aria-haspopup': 'dialog',
 			'aria-expanded': 'false',
 		},
 	});
+	setAccessibleLabelWithoutTooltip(button, t('table', 'filter'));
 	button.toggleClass('is-active', !!preset.filterSetId);
 	setIcon(button, 'funnel');
 	bindOperonHoverTooltip(button, {
@@ -1109,11 +1120,11 @@ function renderEmbedTableGroupSortPopoverButton(
 		cls: 'operon-table-toolbar-icon-button operon-table-group-sort-button operon-table-embed-toolbar-action',
 		attr: {
 			type: 'button',
-			'aria-label': t('table', 'groupSort'),
 			'aria-haspopup': 'dialog',
 			'aria-expanded': 'false',
 		},
 	});
+	setAccessibleLabelWithoutTooltip(button, t('table', 'groupSort'));
 	button.toggleClass('is-active', !!preset.groupBy || !!preset.subgroupBy || preset.sortRules.length > 0);
 	setIcon(button, 'arrow-up-down');
 	bindOperonHoverTooltip(button, {
@@ -1186,7 +1197,7 @@ function openEmbedTableFilterPopover(
 	let isClosed = false;
 	popover.id = popoverId;
 	popover.setAttribute('role', 'dialog');
-	popover.setAttribute('aria-label', t('table', 'filter'));
+	setAccessibleLabelWithoutTooltip(popover, t('table', 'filter'));
 	button.setAttribute('aria-expanded', 'true');
 	button.setAttribute('aria-controls', popoverId);
 
@@ -1394,12 +1405,27 @@ function renderEmbedTableShell(
 	bodyScroller.addEventListener('scroll', () => {
 		activeCellHighlight?.clear();
 		closeEmbedTableTransientUi(instance.el);
-		closeEmbedTableActivePicker(instance);
+		if (instance.suppressActivePickerCloseOnScrollToken === 0) {
+			closeEmbedTableActivePicker(instance);
+		} else {
+			instance.suppressActivePickerCloseOnScrollToken = 0;
+		}
 		canvas.style.setProperty('--operon-table-group-scroll-left', `${bodyScroller.scrollLeft}px`);
 		instance.scrollTop = bodyScroller.scrollTop;
 		instance.scrollLeft = bodyScroller.scrollLeft;
 		scheduleEmbedTableVisibleRowsRender(instance, deps);
 	});
+}
+
+function suppressEmbedTableActivePickerCloseForProgrammaticScroll(instance: EmbedTableInstance): void {
+	if (!instance.keepActivePickerOnRender || !instance.activePickerClose || !instance.bodyScrollerEl) return;
+	const token = instance.suppressActivePickerCloseOnScrollToken + 1;
+	instance.suppressActivePickerCloseOnScrollToken = token;
+	getOwnerWindow(instance.bodyScrollerEl).setTimeout(() => {
+		if (instance.suppressActivePickerCloseOnScrollToken === token) {
+			instance.suppressActivePickerCloseOnScrollToken = 0;
+		}
+	}, 160);
 }
 
 function getCurrentEmbedTablePreset(instance: EmbedTableInstance, deps: EmbedTableDeps): TablePreset {
@@ -1746,14 +1772,15 @@ function renderEmbedTableGroupRow(
 	const groupLabel = resolveTableGroupDisplayLabel(group);
 	const parentLabel = parentGroup ? resolveTableGroupDisplayLabel(parentGroup) : null;
 	const accessibleGroupLabel = parentLabel ? `${parentLabel} > ${groupLabel}` : groupLabel;
+	const groupToggleLabel = `${t('table', collapsed ? 'expandGroup' : 'collapseGroup')}: ${accessibleGroupLabel} (${formatTableTaskCount(group.count)})`;
 	const button = row.createEl('button', {
 		cls: 'operon-table-group-toggle',
 		attr: {
 			type: 'button',
 			'aria-expanded': String(!collapsed),
-			'aria-label': `${t('table', collapsed ? 'expandGroup' : 'collapseGroup')}: ${accessibleGroupLabel} (${formatTableTaskCount(group.count)})`,
 		},
 	});
+	setAccessibleLabelWithoutTooltip(button, groupToggleLabel);
 	const iconEl = button.createSpan('operon-table-group-icon');
 	setIcon(iconEl, collapsed ? 'chevron-right' : 'chevron-down');
 	renderEmbedTableGroupLabelContent(button, groupLabel, parentLabel);
@@ -1872,6 +1899,7 @@ function buildEmbedTableSearchScopeKey(
 		instance.presetId,
 		filterSetSignature,
 		buildTableRelevantSettingsSignature(settings),
+		deps.getProjectSerialSignature?.() ?? '',
 		JSON.stringify(instance.searchScope),
 		instance.searchScope.showRecentModified ? `recentModifiedCutoff=${recentModifiedCutoff}` : '',
 		instance.parentSearchSelection ? `${instance.parentSearchSelection.mode}:${instance.parentSearchSelection.parentId}` : '',
@@ -1909,6 +1937,7 @@ function resolveEmbedTableSortedSearchBaseRows(
 		precomputedScopedTasks: input.searchContext.scopedTasks,
 		precomputedScopeFilteredTasks: input.searchContext.scopeFilteredTasks,
 		summaryMode: 'skip',
+		valueResolverOptions: { getProjectSerialDisplay: deps.getProjectSerialDisplay },
 	});
 	instance.sortedRowsCache = {
 		key: input.cacheKey,
@@ -2258,7 +2287,8 @@ function scheduleEmbedTableSearchPrewarm(
 		return;
 	}
 	const generation = deps.indexer.getGeneration();
-	const prewarmKey = buildTableTaskSearchMatcherSignature(tasks, settings, generation, columns);
+	const projectSerialSignature = deps.getProjectSerialSignature?.() ?? '';
+	const prewarmKey = buildTableTaskSearchMatcherSignature(tasks, settings, generation, columns, projectSerialSignature);
 	if (instance.completedSearchPrewarmKey === prewarmKey || instance.searchPrewarmKey === prewarmKey) return;
 	cancelEmbedTableSearchPrewarm(instance);
 	instance.searchPrewarmKey = prewarmKey;
@@ -2294,6 +2324,8 @@ function runEmbedTableSearchPrewarmChunk(
 		settings,
 		generation,
 		columns,
+		valueResolverOptions: { getProjectSerialDisplay: deps.getProjectSerialDisplay },
+		valueResolverSignature: deps.getProjectSerialSignature?.() ?? '',
 	}, {
 		startIndex: instance.searchPrewarmIndex,
 		timeBudgetMs: TABLE_SEARCH_PREWARM_TIME_BUDGET_MS,
@@ -2521,6 +2553,9 @@ function renderEmbedTableCell(
 		});
 		return;
 	}
+	if (column.key === PROJECT_SERIAL_TABLE_FIELD_KEY && !displayValue.trim()) {
+		return;
+	}
 	const editable = isEditableTableTaskFieldKey(column.key, renderState.settings);
 	decorateEmbedTableEditableTaskCell(cell, task, column.key, displayValue, renderState, deps, editable);
 	if (shouldUseEmbedTableIconOnlyColumn(column, renderState.settings)) {
@@ -2710,7 +2745,7 @@ function renderEmbedTableDurationCell(
 	cell.addClass('is-editable');
 	cell.dataset.editCellKey = cellKey;
 	cell.tabIndex = 0;
-	cell.setAttribute('aria-label', `${getTableTaskFieldLabel('duration', renderState.settings)}. ${t('taskEditor', 'addSession')}`);
+	setAccessibleLabelWithoutTooltip(cell, `${getTableTaskFieldLabel('duration', renderState.settings)}. ${t('taskEditor', 'addSession')}`);
 	syncEmbedTablePendingCellState(cell, cellKey, findEmbedTableInstance(cell));
 	const openAdd = () => {
 		const instance = findEmbedTableInstance(cell);
@@ -2772,9 +2807,9 @@ function renderEmbedTableDurationSessionChip(
 		cls: 'operon-table-duration-session-chip operon-table-cell-chip operon-chip operon-live-preview-chip operon-inline-compact-chip operon-task-chip operon-table-editable-chip',
 		attr: {
 			type: 'button',
-			'aria-label': t('taskEditor', 'editSession'),
 		},
 	});
+	setAccessibleLabelWithoutTooltip(chip, t('taskEditor', 'editSession'));
 	chip.setText(formatDurationHuman(session.durationSeconds));
 	chip.addEventListener('click', event => {
 		event.preventDefault();
@@ -2807,8 +2842,8 @@ function decorateEmbedTableEditableTaskCell(
 	const fieldLabel = getTableTaskFieldLabel(key, renderState.settings);
 	const valueLabel = value.trim();
 	const editCellLabel = t('table', 'editCellAria');
-	cell.setAttribute(
-		'aria-label',
+	setAccessibleLabelWithoutTooltip(
+		cell,
 		valueLabel ? `${fieldLabel}: ${valueLabel}. ${editCellLabel}` : `${fieldLabel}. ${editCellLabel}`,
 	);
 	syncEmbedTablePendingCellState(cell, cellKey, instance);
@@ -2822,7 +2857,7 @@ function decorateEmbedTableEditableTaskCell(
 			settings: renderState.settings,
 			allTasks,
 			canonicalKey: key,
-			anchor: cell,
+			anchor: snapshotFloatingRectAnchor(cell),
 			currentFieldValues: task.fieldValues,
 			currentTags: task.tags,
 			currentTaskId: task.operonId,
@@ -2841,14 +2876,40 @@ function decorateEmbedTableEditableTaskCell(
 			onClose: () => {
 				if (activeInstance.activePickerClose === closePicker) {
 					activeInstance.activePickerClose = null;
+					activeInstance.keepActivePickerOnRender = false;
 				}
 			},
 		});
+		if (!closePicker) return;
+		activeInstance.keepActivePickerOnRender = true;
 		activeInstance.activePickerClose = closePicker;
 	};
+	let suppressPointerClick = false;
+	let suppressPointerClickToken = 0;
+	cell.addEventListener('pointerdown', event => {
+		if (event.button !== 0) return;
+		suppressPointerClick = true;
+		const token = suppressPointerClickToken + 1;
+		suppressPointerClickToken = token;
+		event.preventDefault();
+		event.stopPropagation();
+		openPicker();
+		getOwnerWindow(cell).setTimeout(() => {
+			if (suppressPointerClickToken === token) {
+				suppressPointerClick = false;
+			}
+		}, 2000);
+	});
 	cell.addEventListener('click', event => {
 		event.preventDefault();
 		event.stopPropagation();
+		if (suppressPointerClick && event.detail > 0) {
+			suppressPointerClick = false;
+			suppressPointerClickToken++;
+			return;
+		}
+		suppressPointerClick = false;
+		suppressPointerClickToken++;
 		openPicker();
 	});
 	cell.addEventListener('keydown', event => {
@@ -3155,7 +3216,7 @@ function renderEmbedTableSourceCell(
 	if (shouldUseEmbedTableIconOnlyColumn(column, renderState.settings)) {
 		cell.addClass('is-editable');
 		cell.tabIndex = 0;
-		cell.setAttribute('aria-label', t('table', 'openSource', { source: fullSource }));
+		setAccessibleLabelWithoutTooltip(cell, t('table', 'openSource', { source: fullSource }));
 		renderEmbedTableIconOnlyCell(cell, task, column, fullSource, renderState, deps, { focusable: false });
 		const openSource = (): void => deps.openTaskSource(task.operonId);
 		cell.addEventListener('click', event => {
@@ -3175,7 +3236,7 @@ function renderEmbedTableSourceCell(
 		cls: 'operon-table-source-button',
 		attr: { type: 'button' },
 	});
-	button.setAttribute('aria-label', t('table', 'openSource', { source: fullSource }));
+	setAccessibleLabelWithoutTooltip(button, t('table', 'openSource', { source: fullSource }));
 	const iconEl = button.createSpan('operon-table-source-icon');
 	setIcon(iconEl, task.primary.format === 'inline' ? 'text-cursor-input' : 'file-text');
 	button.createSpan({ cls: 'operon-table-source-label', text: value || '--' });

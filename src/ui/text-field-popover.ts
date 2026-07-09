@@ -3,6 +3,7 @@ import { asHTMLElement, getActiveDocument, getOwnerWindow } from '../core/dom-co
 import { t } from '../core/i18n';
 import { normalizeTaskFieldColor } from '../core/task-color-source';
 import { createFloatingPanel, type FloatingPanelCloseReason } from './field-pickers/common';
+import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
 
 export interface TextFieldPopoverOptions {
 	app: App;
@@ -105,9 +106,9 @@ export function showTextFieldPopover(options: TextFieldPopoverOptions): () => vo
 		cls: 'operon-text-field-popover-close',
 		attr: {
 			type: 'button',
-			'aria-label': t('buttons', 'close'),
 		},
 	});
+	setAccessibleLabelWithoutTooltip(closeButton, t('buttons', 'close'));
 	setIcon(closeButton, 'x');
 	closeButton.addEventListener('click', event => {
 		event.preventDefault();
@@ -196,10 +197,10 @@ function createTextareaTextFieldEditorSurface(
 		attr: {
 			rows: '6',
 			spellcheck: 'true',
-			'aria-label': options.title,
 			placeholder: options.placeholder ?? '',
 		},
 	});
+	setAccessibleLabelWithoutTooltip(editor, options.title);
 	editor.addEventListener('keydown', event => {
 		if (event.key !== 'Escape') return;
 		event.preventDefault();

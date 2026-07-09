@@ -3,6 +3,7 @@ import type { IndexedTask } from '../../types/fields';
 import type { OperonSettings } from '../../types/settings';
 import type { TableSummaryFunction } from '../../types/table';
 import { t } from '../../core/i18n';
+import { setAccessibleLabelWithoutTooltip } from '../accessibility-label';
 import { createFloatingPanel, requestFloatingInputFocus } from '../field-pickers/common';
 import { getTableTaskFieldLabel } from './table-field-catalog';
 import {
@@ -69,7 +70,7 @@ export function showTableSummaryPicker(options: TableSummaryPickerOptions): () =
 			repositionOnWindowResize: true,
 		},
 	);
-	panel.setAttribute('aria-label', t('table', 'summaryPickerAria', { field: fieldLabel }));
+	setAccessibleLabelWithoutTooltip(panel, t('table', 'summaryPickerAria', { field: fieldLabel }));
 
 	const searchWrap = panel.createDiv('operon-table-summary-picker-search');
 	const searchIcon = searchWrap.createSpan('operon-table-summary-picker-search-icon');

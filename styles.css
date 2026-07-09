@@ -202,6 +202,18 @@ body.operon-tweak-compact-sidebar-tab-icons:not(.is-mobile) .mod-sidedock .works
 	font-weight: 700;
 }
 
+.operon-settings-action-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.operon-settings-action-icon,
+.operon-settings-action-icon svg {
+	width: 16px;
+	height: 16px;
+}
+
 .operon-release-notes-settings-card > .setting-item {
 	padding: 12px 0 0;
 	border-top: 1px solid var(--background-modifier-border);
@@ -243,10 +255,9 @@ body.operon-tweak-compact-sidebar-tab-icons:not(.is-mobile) .mod-sidedock .works
 .operon-release-note-header {
 	margin: 0 0 16px;
 	padding: 10px 13px 11px;
-	border: 1px solid var(--background-modifier-border);
-	border-left: 3px solid var(--interactive-accent);
+	border: 1px solid color-mix(in srgb, var(--interactive-accent) 42%, var(--background-modifier-border));
 	border-radius: 8px;
-	background: color-mix(in srgb, var(--background-secondary) 92%, var(--interactive-accent) 8%);
+	background: color-mix(in srgb, var(--background-secondary) 97%, var(--interactive-accent) 3%);
 }
 
 .operon-release-note-version {
@@ -432,9 +443,50 @@ body.operon-tweak-compact-sidebar-tab-icons:not(.is-mobile) .mod-sidedock .works
 .operon-release-notes-footer {
 	display: flex;
 	flex: 0 0 auto;
+	flex-wrap: wrap;
 	justify-content: center;
 	gap: 10px;
 	padding: 0 0 2px;
+}
+
+.operon-release-notes-support {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	min-height: 38px;
+	padding: 6px 14px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	background: var(--background-secondary);
+	color: var(--text-normal);
+	cursor: pointer;
+	font-weight: 800;
+	transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+
+.operon-release-notes-support-icon,
+.operon-release-notes-support-icon svg {
+	width: 16px;
+	height: 16px;
+}
+
+.operon-release-notes-support-icon {
+	color: var(--text-muted);
+	transition: color 120ms ease;
+}
+
+.operon-release-notes-support:hover,
+.operon-release-notes-support:focus-visible {
+	border-color: color-mix(in srgb, var(--interactive-accent) 55%, var(--background-modifier-border));
+	background: color-mix(in srgb, var(--interactive-accent) 8%, var(--background-secondary));
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 10%, transparent);
+	color: var(--text-normal);
+}
+
+.operon-release-notes-support:hover .operon-release-notes-support-icon,
+.operon-release-notes-support:focus-visible .operon-release-notes-support-icon {
+	color: var(--interactive-accent);
 }
 
 .operon-release-notes-thanks {
@@ -28747,11 +28799,14 @@ button.operon-table-search-selected-parent-clear svg {
 }
 
 .operon-table-admin-header-cell:not(.operon-table-task-type-header-cell) .operon-table-header-label {
+	position: absolute;
 	overflow: hidden;
 	width: 1px;
 	height: 1px;
+	margin: -1px;
+	padding: 0;
+	border: 0;
 	clip: rect(0 0 0 0);
-	clip-path: inset(50%);
 	white-space: nowrap;
 }
 

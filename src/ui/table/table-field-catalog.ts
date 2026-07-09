@@ -27,6 +27,8 @@ export interface TableTaskField {
 	aliases: string[];
 }
 
+export const PROJECT_SERIAL_TABLE_FIELD_KEY = 'projectSerial';
+
 type TableTaskFieldCatalogSettings = Pick<OperonSettings, 'keyMappings'>;
 
 const TABLE_FIELD_LABEL_OVERRIDES: Record<string, string> = {
@@ -62,6 +64,7 @@ export const TABLE_EDITABLE_TASK_FIELD_KEYS = new Set([
 
 const SYNTHETIC_TABLE_FIELDS: Array<Omit<TableTaskField, 'aliases'>> = [
 	{ key: 'taskType', label: 'Task Type', type: 'text', group: 'source', icon: 'database', readonly: true },
+	{ key: PROJECT_SERIAL_TABLE_FIELD_KEY, label: 'Project Serial', type: 'text', group: 'identity', icon: 'fingerprint', readonly: true },
 	{ key: 'description', label: 'Task', type: 'text', group: 'task', icon: 'list-todo', readonly: false },
 	{ key: 'checkbox', label: 'Checkbox', type: 'checkbox', group: 'workflow', icon: 'square-check-big', readonly: true },
 	{ key: CHECKBOX_PROGRESS_COLUMN_KEY, label: 'Checkbox Progress', type: 'number', group: 'workflow', icon: 'list-checks', readonly: true },
@@ -118,8 +121,12 @@ function buildTableTaskFieldCatalogUncached(settings: TableTaskFieldCatalogSetti
 	const keyMappings = settings.keyMappings ?? [];
 
 	for (const field of SYNTHETIC_TABLE_FIELDS) {
+		const icon = field.key === PROJECT_SERIAL_TABLE_FIELD_KEY
+			? getConfiguredKeyMappingIcon('operonId', keyMappings) || field.icon
+			: field.icon;
 		addField(fields, seen, {
 			...field,
+			icon,
 			aliases: buildAliases(field.key, field.label),
 		});
 	}

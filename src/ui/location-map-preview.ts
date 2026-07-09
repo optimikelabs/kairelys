@@ -1,4 +1,4 @@
-import { App, Component, MarkdownRenderer, Notice, setIcon, setTooltip } from 'obsidian';
+import { App, Component, MarkdownRenderer, Notice, setIcon } from 'obsidian';
 import { getOwnerWindow } from '../core/dom-compat';
 import { parseLocationCoordinate } from '../core/location-coordinates';
 import { buildLocationPreviewBaseMarkdown, isMapsPluginEnabled } from '../core/location-base-map';
@@ -6,6 +6,7 @@ import { t } from '../core/i18n';
 import { normalizeTaskFieldColor } from '../core/task-color-source';
 import { OperonSettings } from '../types/settings';
 import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
+import { bindOperonHoverTooltip } from './operon-hover-tooltip';
 import {
 	createFloatingPanel,
 	positionFloatingElement,
@@ -444,10 +445,10 @@ function createLocationPreviewTextButton(
 		text,
 		attr: {
 			type: 'button',
-			'aria-label': label,
 		},
 	});
-	setTooltip(button, label);
+	setAccessibleLabelWithoutTooltip(button, label);
+	bindOperonHoverTooltip(button, { content: label, taskColor: null });
 	button.addEventListener('pointerdown', stopLocationPreviewControlEvent);
 	button.addEventListener('mousedown', stopLocationPreviewControlEvent);
 	button.addEventListener('click', event => {
@@ -461,7 +462,7 @@ function setLocationPreviewButtonIconAndLabel(button: HTMLButtonElement, icon: s
 	button.empty();
 	setIcon(button, icon);
 	setAccessibleLabelWithoutTooltip(button, label);
-	setTooltip(button, label);
+	bindOperonHoverTooltip(button, { content: label, taskColor: null });
 }
 
 function stopLocationPreviewControlEvent(event: Event): void {

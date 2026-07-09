@@ -1,4 +1,4 @@
-import { App, Notice, Platform, setIcon, setTooltip, TFile } from 'obsidian';
+import { App, Notice, Platform, setIcon, TFile } from 'obsidian';
 import { asyncHandler, runAsyncAction } from '../core/async-action';
 import { asHTMLElement, getActiveDocument, getOwnerWindow } from '../core/dom-compat';
 import { t } from '../core/i18n';
@@ -14,6 +14,7 @@ import {
 import { IndexedTask } from '../types/fields';
 import { KeyMapping } from '../types/settings';
 import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
+import { bindOperonHoverTooltip } from './operon-hover-tooltip';
 import { ConfirmActionModal } from './confirm-action-modal';
 import { EmbeddedMarkdownSourceEditor } from './embedded-markdown-source-editor';
 import { createFloatingPanel, type FloatingPanelCloseReason } from './field-pickers/common';
@@ -388,9 +389,9 @@ function createTextareaPlainCheckboxEditorSurface(
 		attr: {
 			rows: '8',
 			spellcheck: 'true',
-			'aria-label': t('tooltips', 'plainCheckboxEditorText'),
 		},
 	});
+	setAccessibleLabelWithoutTooltip(editor, t('tooltips', 'plainCheckboxEditorText'));
 	editor.addEventListener('input', onChange);
 	editor.addEventListener('keydown', event => {
 		if (event.key !== 'Tab') return;
@@ -930,7 +931,7 @@ function setPlainCheckboxButtonIconAndLabel(button: HTMLButtonElement, icon: str
 	button.empty();
 	setIcon(button, icon);
 	setAccessibleLabelWithoutTooltip(button, label);
-	setTooltip(button, label);
+	bindOperonHoverTooltip(button, { content: label, taskColor: null });
 }
 
 function stopPlainCheckboxControlEvent(event: Event): void {

@@ -4,6 +4,7 @@ import { normalizeTaskIconValue } from '../../core/task-icon-value';
 import { findStatusDef } from '../../types/pipeline';
 import type { OperonSettings } from '../../types/settings';
 import { bindOperonHoverTooltip } from '../operon-hover-tooltip';
+import { setAccessibleLabelWithoutTooltip } from '../accessibility-label';
 
 type TableValueIconSettings = Pick<OperonSettings, 'pipelines' | 'priorities'>;
 
@@ -78,7 +79,7 @@ export function renderTableIconOnlyCell(cell: HTMLElement, options: TableIconOnl
 	const icon = cell.createSpan('operon-table-icon-only-button');
 	icon.tabIndex = options.focusable === false ? -1 : 0;
 	icon.setAttribute('role', 'img');
-	icon.setAttribute('aria-label', options.ariaLabel);
+	setAccessibleLabelWithoutTooltip(icon, options.ariaLabel);
 	if (options.color) {
 		icon.style.setProperty('--operon-table-icon-only-color', options.color);
 		icon.style.setProperty('--operon-live-hover-border', options.color);

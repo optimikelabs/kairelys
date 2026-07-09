@@ -5,8 +5,9 @@ import type { OperonSettings } from '../../types/settings';
 import type { TableColumn } from '../../types/table';
 import { resolveTaskDateTone, resolveTaskDateToneColor, type TaskDateTone } from '../../core/task-date-tone';
 import { normalizeTaskIconValue } from '../../core/task-icon-value';
+import { setAccessibleLabelWithoutTooltip } from '../accessibility-label';
 import { resolveTableColumnCellAccent } from './table-column-color';
-import { getTableTaskField } from './table-field-catalog';
+import { PROJECT_SERIAL_TABLE_FIELD_KEY, getTableTaskField } from './table-field-catalog';
 import { resolveTableValueCellIcon } from './table-icon-only-cell';
 import { resolveTableLocationCellVisual, type TableLocationCellResolver, type TableLocationCellVisual } from './table-location-cell';
 
@@ -113,6 +114,7 @@ function isTableListChipField(key: string, options: TableCellChipRenderOptions):
 }
 
 function isTableValueIconField(key: string, options: TableCellChipRenderOptions): boolean {
+	if (key === PROJECT_SERIAL_TABLE_FIELD_KEY) return true;
 	if (key === 'status' || key === 'priority') return true;
 	if (!options.settings) return false;
 	const field = getTableTaskField(key, options.settings);
@@ -208,7 +210,7 @@ function renderTableLocationChipContent(
 	chip.addClass('operon-chip-clickable');
 	chip.tabIndex = 0;
 	chip.setAttribute('role', 'button');
-	chip.setAttribute('aria-label', visual.label);
+	setAccessibleLabelWithoutTooltip(chip, visual.label);
 	chip.addEventListener('click', event => {
 		event.preventDefault();
 		event.stopPropagation();

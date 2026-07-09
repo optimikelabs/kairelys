@@ -86,6 +86,7 @@ import { closeFloatingPanelsForRoot } from './field-pickers/common';
 import { bindOperonHoverTooltip } from './operon-hover-tooltip';
 import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
 import { createInlineTaskCompactChipElement } from './compact-task-layout';
+import { openExternalUrl } from './external-link-actions';
 import {
 	CALENDAR_SIDEBAR_TASK_POOL_INITIAL_LIMIT,
 	CALENDAR_SIDEBAR_TASK_POOL_SEARCH_LIMIT,
@@ -885,6 +886,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 
 		return [
 			this.buildReleaseNotesOverviewDefinition(),
+			this.buildSupportDevelopmentOverviewDefinition(),
 			...groupedSettings,
 		];
 	}
@@ -1501,7 +1503,20 @@ export class OperonSettingsTab extends PluginSettingTab {
 							.onClick(() => {
 								new OperonReleaseNotesModal(this.app, getReleaseNotesForManualView()).open();
 							});
+						this.decorateSettingsActionButtonIcon(button.buttonEl, 'sparkles');
 					});
+			},
+		};
+	}
+
+	private buildSupportDevelopmentOverviewDefinition(): SettingDefinition {
+		return {
+			name: t('settings', 'supportDevelopmentCardTitle'),
+			desc: t('settings', 'supportDevelopmentCardDesc'),
+			searchable: false,
+			render: setting => {
+				setting.settingEl.addClass('operon-support-development-overview-setting');
+				this.configureSupportDevelopmentSetting(setting);
 			},
 		};
 	}
@@ -2378,6 +2393,9 @@ export class OperonSettingsTab extends PluginSettingTab {
 		if (SETTINGS_SEARCH_WORKSPACE_TWEAK_KEYS.has(key)) {
 			this.applyPendingSettingsChange();
 		}
+		if (key === 'calendarShowHoverAddButton' || key === 'kanbanShowHoverAddButton') {
+			this.applyPendingSettingsChange();
+		}
 		if (key === 'kanbanTaskShowNotesPreview') {
 			this.applyPendingSettingsChange();
 		}
@@ -2605,6 +2623,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 		} else {
 			this.renderReleaseNotesSettingsCard(containerEl, { includeToggle: true });
 		}
+		this.renderSupportDevelopmentSettingsItem(containerEl);
 		this.renderGeneralBasicsTab(containerEl);
 		this.renderOperonDocsSettings(containerEl);
 		this.renderGeneralSystemTab(containerEl);
@@ -2622,16 +2641,53 @@ export class OperonSettingsTab extends PluginSettingTab {
 			text: t('settings', 'releaseNotesCardDesc'),
 			cls: 'operon-release-notes-settings-card-desc',
 		});
-		headerEl.createEl('button', {
+		const buttonEl = headerEl.createEl('button', {
 			text: t('settings', 'releaseNotesViewRecent'),
 			cls: 'operon-release-notes-settings-card-button',
 			attr: { type: 'button' },
-		}).addEventListener('click', () => {
+		});
+		this.decorateSettingsActionButtonIcon(buttonEl, 'sparkles');
+		buttonEl.addEventListener('click', () => {
 			new OperonReleaseNotesModal(this.app, getReleaseNotesForManualView()).open();
 		});
 
 		if (!options.includeToggle) return;
 		this.renderReleaseNotesUpdateToggle(cardEl);
+	}
+
+	private renderSupportDevelopmentSettingsItem(containerEl: HTMLElement): void {
+		const setting = new Setting(containerEl);
+		setting.settingEl.addClass('operon-support-development-overview-setting');
+		this.configureSupportDevelopmentSetting(setting);
+	}
+
+	private configureSupportDevelopmentSetting(setting: Setting): void {
+		setting
+			.setName(t('settings', 'supportDevelopmentCardTitle'))
+			.setDesc(t('settings', 'supportDevelopmentCardDesc'))
+			.addButton(button => {
+				button
+					.setButtonText(t('buttons', 'sponsor'))
+					.onClick(() => {
+						openExternalUrl('https://github.com/sponsors/hasanyilmaz');
+					});
+				this.decorateSettingsActionButtonIcon(button.buttonEl, 'heart');
+			})
+			.addButton(button => {
+				button
+					.setButtonText(t('buttons', 'buyMeACoffee'))
+					.onClick(() => {
+						openExternalUrl('https://buymeacoffee.com/hasanyilmaz');
+					});
+				this.decorateSettingsActionButtonIcon(button.buttonEl, 'coffee');
+			});
+	}
+
+	private decorateSettingsActionButtonIcon(buttonEl: HTMLElement, icon: string): void {
+		buttonEl.addClass('operon-settings-action-button');
+		const iconEl = buttonEl.createSpan('operon-settings-action-icon');
+		setIcon(iconEl, icon);
+		buttonEl.prepend(iconEl);
 	}
 
 	private renderReleaseNotesUpdateToggle(containerEl: HTMLElement): void {
@@ -3837,7 +3893,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 			const resultsEl = inputWrapEl.createDiv('operon-parent-child-inheritance-results');
 			resultsEl.id = searchListId;
 			resultsEl.setAttribute('role', 'listbox');
-			resultsEl.setAttribute('aria-label', t('settings', 'parentChildTaskInheritanceSearch'));
+			setAccessibleLabelWithoutTooltip(resultsEl, t('settings', 'parentChildTaskInheritanceSearch'));
 			const addButton = createSettingsAddButton(addRowEl, t('settings', 'addParentChildInheritanceField'));
 			addButton.disabled = true;
 			let visibleOptions: ChildTaskInheritanceFieldOption[] = [];
@@ -5776,6 +5832,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 		});
 
 		this.renderBoundToggleSetting(generalSection, t('calendar', 'showWeekLabelOnFirstDay'), t('calendar', 'showWeekLabelOnFirstDayDesc'), 'calendarShowWeekLabelOnFirstDay');
+		this.renderBoundToggleSetting(generalSection, t('calendar', 'showHoverAddButton'), t('calendar', 'showHoverAddButtonDesc'), 'calendarShowHoverAddButton');
 
 		this.renderBoundDropdownSetting(generalSection, t('calendar', 'dayTitleAction'), t('calendar', 'dayTitleActionDesc'), 'calendarDayTitleAction', {
 			value: this.settings.calendarDayTitleAction,
@@ -6180,6 +6237,7 @@ export class OperonSettingsTab extends PluginSettingTab {
 			fallback: DEFAULT_SETTINGS.kanbanMaxVisibleTasksPerCell,
 			step: '1',
 		});
+		this.renderBoundToggleSetting(generalSection, t('settings', 'kanbanShowHoverAddButton'), t('settings', 'kanbanShowHoverAddButtonDesc'), 'kanbanShowHoverAddButton');
 		this.renderBoundToggleSetting(generalSection, t('settings', 'kanbanTaskShowNotesPreview'), t('settings', 'kanbanTaskShowNotesPreviewDesc'), 'kanbanTaskShowNotesPreview');
 		this.renderBoundToggleSetting(generalSection, t('settings', 'kanbanTaskShowSubtaskProgress'), t('settings', 'kanbanTaskShowSubtaskProgressDesc'), 'kanbanTaskShowSubtaskProgress');
 		this.renderBoundToggleSetting(generalSection, t('settings', 'kanbanTaskShowPlainCheckboxProgress'), t('settings', 'kanbanTaskShowPlainCheckboxProgressDesc'), 'kanbanTaskShowPlainCheckboxProgress');
@@ -10980,9 +11038,9 @@ export class OperonSettingsTab extends PluginSettingTab {
 					type: 'radio',
 					name: 'operon-file-task-migration-rule',
 					value: type,
-					'aria-label': label,
 				},
 			});
+			setAccessibleLabelWithoutTooltip(radio, label);
 			radio.checked = selectedType === type;
 			radio.addEventListener('change', () => {
 				if (radio.checked) selectType(type);

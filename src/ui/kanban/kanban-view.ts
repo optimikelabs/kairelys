@@ -123,6 +123,7 @@ import {
 } from '../../systems/kanban-render-signature';
 import {
 	estimateKanbanCellPlaceholderHeightPx,
+	isKanbanScrollRestoreClamped,
 	shouldMaterializeKanbanCell,
 } from '../../systems/kanban-cell-materialization';
 
@@ -143,6 +144,9 @@ const KANBAN_MOBILE_CARD_SCROLL_INTENT_PX = 10;
 const KANBAN_MOBILE_CARD_HORIZONTAL_SCROLL_INTENT_PX = 5;
 const KANBAN_MOBILE_CARD_CLICK_SUPPRESSION_MS = 350;
 const KANBAN_MOBILE_CARD_SCROLL_SNAP_SETTLE_MS = 420;
+const KANBAN_DROP_SCROLL_ANCHOR_SINGLE_RENDER_PASSES = 1;
+const KANBAN_DROP_SCROLL_ANCHOR_DOUBLE_RENDER_PASSES = 2;
+const KANBAN_DROP_SCROLL_ANCHOR_TTL_MS = 2000;
 const KANBAN_SEARCH_BOX_DISABLED_KEYS = new Set<TaskFinderDefaultScopeKey>();
 const KANBAN_LANE_COLUMN_MIN_WIDTH_PX = 96;
 const KANBAN_SEARCH_REFRESH_DEBOUNCE_MS = 180;
@@ -273,6 +277,13 @@ interface KanbanScrollState {
 	top: number;
 }
 
+interface KanbanDropScrollAnchor {
+	state: KanbanScrollState;
+	scope: string;
+	remainingRestores: number;
+	expiresAt: number;
+}
+
 interface KanbanSearchFocusState {
 	selectionStart: number | null;
 	selectionEnd: number | null;
@@ -344,7 +355,6 @@ interface KanbanCellRenderFinalizer {
 
 interface KanbanDeferredCellEntry {
 	cell: HTMLElement;
-	estimatedHeightPx: number;
 	materialize: () => KanbanCellRenderFinalizer;
 }
 
@@ -376,6 +386,7 @@ export class KanbanView extends ItemView {
 	private optimisticMoveExpiryTimer: { win: Window; id: number } | null = null;
 	private optimisticMoves = new Map<string, KanbanOptimisticMove>();
 	private lastBoardScrollState: KanbanScrollState = { left: 0, top: 0 };
+	private pendingDropScrollAnchor: KanbanDropScrollAnchor | null = null;
 	private pendingSearchFocusState: KanbanSearchFocusState | null = null;
 	private temporarilyExpandedAutoCollapsedStatusTokens = new Set<string>();
 	private temporarilyExpandedAutoCollapsedLaneTokens = new Set<string>();
@@ -456,6 +467,7 @@ export class KanbanView extends ItemView {
 		this.temporarilyExpandedAutoCollapsedStatusTokens.clear();
 		this.temporarilyExpandedAutoCollapsedLaneTokens.clear();
 		this.resetKanbanSearchScope();
+		this.clearDropScrollAnchor();
 		this.lastRenderSignature = null;
 		this.state = {
 			...this.ensureState(),
@@ -485,6 +497,7 @@ export class KanbanView extends ItemView {
 		this.cancelPendingManualDropIndicatorUpdate();
 		this.clearKanbanSearchRefreshTimer();
 		this.clearOptimisticMoveExpiryTimer();
+		this.clearDropScrollAnchor();
 		this.hideHoverMenu(true);
 	}
 
@@ -1395,15 +1408,21 @@ export class KanbanView extends ItemView {
 					this.renderCollapsedCellSummary(cell, taskCount);
 					continue;
 				}
+				// The placeholder height must exist before restoreBoardScrollState
+				// runs below, otherwise the restored scrollTop clamps against a
+				// near-empty grid and the board jumps to the top after a drop.
+				const estimatedHeightPx = estimateKanbanCellPlaceholderHeightPx({
+					taskCount: tasks.length,
+					maxVisibleTasks: maxVisibleTasksPerCell,
+					renderBatchSize: KANBAN_CARD_RENDER_BATCH_SIZE,
+					cardHeightPx: KANBAN_ESTIMATED_CARD_HEIGHT_PX,
+					cardGapPx: KANBAN_ESTIMATED_CARD_GAP_PX,
+				});
+				if (estimatedHeightPx > 0) {
+					cell.style.minHeight = `${estimatedHeightPx}px`;
+				}
 				deferredCells.push({
 					cell,
-					estimatedHeightPx: estimateKanbanCellPlaceholderHeightPx({
-						taskCount: tasks.length,
-						maxVisibleTasks: maxVisibleTasksPerCell,
-						renderBatchSize: KANBAN_CARD_RENDER_BATCH_SIZE,
-						cardHeightPx: KANBAN_ESTIMATED_CARD_HEIGHT_PX,
-						cardGapPx: KANBAN_ESTIMATED_CARD_GAP_PX,
-					}),
 					materialize: () => {
 						cell.style.removeProperty('min-height');
 						this.bindCellQuickAdd(cell, column, lane, board.preset);
@@ -1567,9 +1586,6 @@ export class KanbanView extends ItemView {
 		}, { root: gridViewport, rootMargin: `${KANBAN_CELL_MATERIALIZE_MARGIN_PX}px` });
 		this.kanbanLazyObservers.push(observer);
 		for (const entry of pendingCells) {
-			if (entry.estimatedHeightPx > 0) {
-				entry.cell.style.minHeight = `${entry.estimatedHeightPx}px`;
-			}
 			this.pendingCellMaterializers.set(entry.cell, entry.materialize);
 			observer.observe(entry.cell);
 		}
@@ -2332,6 +2348,13 @@ export class KanbanView extends ItemView {
 		preset: KanbanPreset,
 	): void {
 		this.draggedCardContext = null;
+		const applyImmediateDrop = shouldApplyImmediateKanbanCardDrop(targetCell.classList.contains('is-collapsed'));
+		this.beginDropScrollAnchor(
+			targetCell,
+			applyImmediateDrop
+				? KANBAN_DROP_SCROLL_ANCHOR_SINGLE_RENDER_PASSES
+				: KANBAN_DROP_SCROLL_ANCHOR_DOUBLE_RENDER_PASSES,
+		);
 		this.materializeKanbanCellIfPending(targetCell);
 		targetCell.removeClass('is-drop-target');
 		this.clearManualDropIndicator(targetCell);
@@ -2341,24 +2364,22 @@ export class KanbanView extends ItemView {
 			&& context.sourceLaneKey === context.targetLaneKey
 		) {
 			dragged.cardEl.removeClass('is-dragging');
+			this.clearDropScrollAnchor();
 			return;
 		}
 		if (!this.callbacks.onCardDrop) {
 			dragged.cardEl.removeClass('is-dragging');
+			this.clearDropScrollAnchor();
 			return;
 		}
-
 		this.registerOptimisticMove(context);
-		if (shouldApplyImmediateKanbanCardDrop(targetCell.classList.contains('is-collapsed'))) {
+		if (applyImmediateDrop) {
 			this.applyImmediateCardDrop(targetCell, dragged.cardEl, targetBeforeTaskId);
 		} else {
 			dragged.cardEl.removeClass('is-dragging');
 			this.render();
 		}
 		void Promise.resolve(this.callbacks.onCardDrop(context))
-			.then(() => {
-				this.markDirty();
-			})
 			.catch(error => {
 				console.error('Operon: Kanban card drop failed', error);
 				new Notice(t('notifications', 'kanbanActionFailed'));
@@ -2447,6 +2468,7 @@ export class KanbanView extends ItemView {
 		lane: KanbanLane,
 		preset: KanbanPreset,
 	): void {
+		if (!this.getSettings().kanbanShowHoverAddButton) return;
 		if (!this.callbacks.onCellAction) return;
 		const overlay = cell.createDiv('operon-kanban-cell-add-overlay');
 		const button = overlay.createEl('button', {
@@ -3680,6 +3702,11 @@ export class KanbanView extends ItemView {
 	private captureBoardScrollState(container: HTMLElement): void {
 		const board = asHTMLElement(container.querySelector('.operon-kanban-grid-viewport'), container);
 		if (!board) return;
+		const dropAnchor = this.getActiveDropScrollAnchor();
+		if (dropAnchor) {
+			this.lastBoardScrollState = { ...dropAnchor.state };
+			return;
+		}
 		this.lastBoardScrollState = {
 			left: board.scrollLeft,
 			top: board.scrollTop,
@@ -3687,14 +3714,79 @@ export class KanbanView extends ItemView {
 	}
 
 	private restoreBoardScrollState(board: HTMLElement): void {
-		const { left, top } = this.lastBoardScrollState;
-		if (left === 0 && top === 0) return;
+		const dropAnchor = this.getActiveDropScrollAnchor();
+		const { left, top } = dropAnchor?.state ?? this.lastBoardScrollState;
+		if (!dropAnchor && left === 0 && top === 0) return;
 		board.scrollLeft = left;
 		board.scrollTop = top;
+		this.lastBoardScrollState = { left, top };
+		if (dropAnchor) {
+			// A clamped restore means the grid content was not tall enough yet
+			// (deferred cells still pending); keep the anchor alive so a later
+			// pass can re-apply the position before the TTL expires.
+			if (isKanbanScrollRestoreClamped(
+				{ left, top },
+				{ left: board.scrollLeft, top: board.scrollTop },
+			)) {
+				return;
+			}
+			dropAnchor.remainingRestores -= 1;
+			if (dropAnchor.remainingRestores <= 0) {
+				this.clearDropScrollAnchor();
+			}
+		}
+	}
+
+	private beginDropScrollAnchor(root: HTMLElement, restorePasses: number): void {
+		const board = root.closest<HTMLElement>('.operon-kanban-grid-viewport')
+			?? asHTMLElement(this.contentEl.querySelector('.operon-kanban-grid-viewport'), this.contentEl);
+		if (!board) return;
+		const state = {
+			left: board.scrollLeft,
+			top: board.scrollTop,
+		};
+		this.lastBoardScrollState = { ...state };
+		this.pendingDropScrollAnchor = {
+			state,
+			scope: this.buildDropScrollAnchorScope(),
+			remainingRestores: Math.max(1, restorePasses),
+			expiresAt: Date.now() + KANBAN_DROP_SCROLL_ANCHOR_TTL_MS,
+		};
+	}
+
+	private getActiveDropScrollAnchor(): KanbanDropScrollAnchor | null {
+		const anchor = this.pendingDropScrollAnchor;
+		if (!anchor) return null;
+		if (
+			anchor.remainingRestores <= 0
+			|| anchor.expiresAt < Date.now()
+			|| anchor.scope !== this.buildDropScrollAnchorScope()
+		) {
+			this.clearDropScrollAnchor();
+			return null;
+		}
+		return anchor;
+	}
+
+	private clearDropScrollAnchor(): void {
+		this.pendingDropScrollAnchor = null;
+	}
+
+	private buildDropScrollAnchorScope(): string {
+		const state = this.ensureState();
+		return JSON.stringify({
+			presetId: state.presetId,
+			searchQuery: state.searchQuery,
+			collapsedStatusIds: state.collapsedStatusIds,
+			collapsedLaneKeys: state.collapsedLaneKeys,
+			parentSearchSelection: this.parentSearchSelection,
+			searchScope: this.searchScope,
+		});
 	}
 
 	private bindBoardScrollStateTracking(gridViewport: HTMLElement): void {
 		gridViewport.addEventListener('scroll', () => {
+			if (this.getActiveDropScrollAnchor()) return;
 			this.lastBoardScrollState = {
 				left: gridViewport.scrollLeft,
 				top: gridViewport.scrollTop,

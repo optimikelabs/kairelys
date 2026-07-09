@@ -1,4 +1,5 @@
 import { parseLocalTimestamp } from '../../core/local-time';
+import type { ProjectSerialDisplay } from '../../core/project-serials';
 import type { IndexedTask } from '../../types/fields';
 import type { OperonSettings } from '../../types/settings';
 import { formatTableTaskValueForDisplay } from './table-display';
@@ -9,6 +10,7 @@ import {
 	type TableTaskLookup,
 } from './table-value-adapter';
 import { createTaskProgressLookup, type TaskProgressTrack, type TaskProgressTrackKind } from '../task-progress-tracks';
+import { PROJECT_SERIAL_TABLE_FIELD_KEY } from './table-field-catalog';
 
 export const TABLE_NO_GROUP_VALUE_KEY = '__table_no_value__';
 
@@ -35,6 +37,10 @@ export interface TableValueCacheStats {
 	groupMisses: number;
 }
 
+export interface TableValueResolverOptions {
+	getProjectSerialDisplay?: (operonId: string, task?: IndexedTask) => ProjectSerialDisplay | null;
+}
+
 export interface TableValueResolver {
 	readonly taskLookup: TableTaskLookup;
 	getRawValue(task: IndexedTask, key: string): string;
@@ -53,6 +59,7 @@ export interface TableValueResolver {
 export function createTableValueResolver(
 	tasks: readonly IndexedTask[],
 	settings?: TableValueCacheSettings,
+	options: TableValueResolverOptions = {},
 ): TableValueResolver {
 	const taskLookup = createTableTaskLookup(tasks);
 	const progressLookup = createTaskProgressLookup(tasks);
@@ -80,7 +87,9 @@ export function createTableValueResolver(
 				return cached;
 			}
 			stats.rawMisses++;
-			const value = progressLookup.resolveRawValue(task, key) ?? getTableTaskRawValue(task, key);
+			const value = key === PROJECT_SERIAL_TABLE_FIELD_KEY
+				? options.getProjectSerialDisplay?.(task.operonId, task)?.label ?? ''
+				: progressLookup.resolveRawValue(task, key) ?? getTableTaskRawValue(task, key);
 			rawValues.set(cacheKey, value);
 			return value;
 		},

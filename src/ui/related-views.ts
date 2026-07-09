@@ -13,6 +13,7 @@ import type {
 	RelatedViewType,
 } from '../types/related-views';
 import { bindOperonHoverTooltip } from './operon-hover-tooltip';
+import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
 
 type RelatedViewSettings = Pick<
 	OperonSettings,
@@ -33,10 +34,10 @@ export function buildRelatedViewGroups(
 	settings: RelatedViewSettings,
 	source: RelatedViewSource,
 ): RelatedViewGroup[] {
-	const activeFilterSetId = resolveRelatedViewFilterSetId(settings, source.preset);
+	const activeFilterSetId = resolveRelatedViewSourceFilterSetId(settings, source);
 	if (activeFilterSetId === undefined) return [];
 	const groups: RelatedViewGroup[] = [
-		...buildActiveFilterGroup(settings, activeFilterSetId),
+		...(source.type === 'filter' ? [] : buildActiveFilterGroup(settings, activeFilterSetId)),
 		{
 			type: 'calendar',
 			items: buildRelatedViewItems(settings, 'calendar', settings.calendarPresets, activeFilterSetId, source),
@@ -57,14 +58,15 @@ export function buildRelatedCreateTargets(
 	settings: RelatedViewSettings,
 	source: RelatedViewSource,
 ): RelatedViewCreateTarget[] {
-	const activeFilterSetId = resolveRelatedViewFilterSetId(settings, source.preset);
+	const activeFilterSetId = resolveRelatedViewSourceFilterSetId(settings, source);
 	if (activeFilterSetId === undefined) return [];
+	const inheritedPresetName = getInheritedCreatePresetName(settings, activeFilterSetId);
 	return [
-		{ type: 'calendar', variant: 'timeGrid', filterSetId: activeFilterSetId },
-		{ type: 'calendar', variant: 'timeTrackerGrid', filterSetId: activeFilterSetId },
-		{ type: 'calendar', variant: 'multiWeek', filterSetId: activeFilterSetId },
-		{ type: 'kanban', variant: 'defaultPipeline', filterSetId: activeFilterSetId },
-		{ type: 'table', variant: 'defaultTable', filterSetId: activeFilterSetId },
+		{ type: 'calendar', variant: 'timeGrid', filterSetId: activeFilterSetId, ...inheritedPresetName },
+		{ type: 'calendar', variant: 'timeTrackerGrid', filterSetId: activeFilterSetId, ...inheritedPresetName },
+		{ type: 'calendar', variant: 'multiWeek', filterSetId: activeFilterSetId, ...inheritedPresetName },
+		{ type: 'kanban', variant: 'defaultPipeline', filterSetId: activeFilterSetId, ...inheritedPresetName },
+		{ type: 'table', variant: 'defaultTable', filterSetId: activeFilterSetId, ...inheritedPresetName },
 	];
 }
 
@@ -108,11 +110,11 @@ export function renderRelatedViewsLauncher(options: RelatedViewsLauncherOptions)
 		cls: buttonClasses.join(' '),
 		attr: {
 			type: 'button',
-			'aria-label': label,
 			'aria-haspopup': 'menu',
 			'aria-expanded': 'false',
 		},
 	});
+	setAccessibleLabelWithoutTooltip(button, label);
 	setIcon(button, 'external-link');
 	if (!button.querySelector('svg')) {
 		setIcon(button, 'square-arrow-out-up-right');
@@ -164,13 +166,13 @@ function showRelatedViewsMenu(anchor: HTMLElement, options: RelatedViewsLauncher
 	const createTargets = options.onCreateRelatedView
 		? buildRelatedCreateTargets(options.settings, options.source)
 		: [];
-		if (createTargets.length > 0) {
-			menu.addSeparator();
+	if (createTargets.length > 0) {
+		menu.addSeparator();
+		menu.addItem(item => item
+			.setTitle(getRelatedCreateGroupLabel(createTargets))
+			.setIsLabel(true));
+		for (const createTarget of createTargets) {
 			menu.addItem(item => item
-				.setTitle(getRelatedCreateGroupLabel(createTargets))
-				.setIsLabel(true));
-			for (const createTarget of createTargets) {
-				menu.addItem(item => item
 				.setTitle(getRelatedCreateLabel(createTarget))
 				.setIcon(getRelatedCreateIcon(createTarget))
 				.onClick(() => createRelatedView(options, createTarget)));
@@ -180,8 +182,7 @@ function showRelatedViewsMenu(anchor: HTMLElement, options: RelatedViewsLauncher
 }
 
 function getRelatedViewsMenuLabel(settings: RelatedViewSettings, source: RelatedViewSource): string {
-	const hasActiveFilter = buildRelatedViewGroups(settings, source)
-		.some(group => group.type === 'filter');
+	const hasActiveFilter = !!resolveRelatedViewSourceFilterSetId(settings, source);
 	return t('table', hasActiveFilter ? 'relatedViewsMenuLabelWithFilter' : 'relatedViewsMenuLabel');
 }
 
@@ -258,7 +259,27 @@ function buildActiveFilterGroup(
 	}];
 }
 
-function resolveRelatedViewFilterSetId(settings: RelatedViewSettings, preset: RelatedFilterablePreset): string | null | undefined {
+function resolveRelatedViewSourceFilterSetId(settings: RelatedViewSettings, source: RelatedViewSource): string | null | undefined {
+	if (source.type === 'filter') {
+		const filterSetId = source.preset.id.trim();
+		if (!filterSetId) return undefined;
+		if (isSpecialDynamicFilterSetId(filterSetId)) return undefined;
+		return settings.filterSets.some(filterSet => filterSet.id === filterSetId) ? filterSetId : undefined;
+	}
+	return resolveRelatedViewPresetFilterSetId(settings, source.preset);
+}
+
+function getInheritedCreatePresetName(
+	settings: RelatedViewSettings,
+	filterSetId: string | null,
+): { presetName?: string } {
+	if (!filterSetId) return {};
+	const filterSet = settings.filterSets.find(entry => entry.id === filterSetId);
+	if (!filterSet) return {};
+	return { presetName: getFilterSetDisplayName(filterSet) };
+}
+
+function resolveRelatedViewPresetFilterSetId(settings: RelatedViewSettings, preset: RelatedFilterablePreset): string | null | undefined {
 	const filterSetId = preset.filterSetId?.trim() || null;
 	if (!filterSetId) return null;
 	if (isSpecialDynamicFilterSetId(filterSetId)) return undefined;
@@ -274,7 +295,7 @@ function buildRelatedViewItems(
 ): RelatedViewItem[] {
 	return presets
 		.filter(preset => !(source.type === type && preset.id === source.preset.id))
-		.filter(preset => resolveRelatedViewFilterSetId(settings, preset) === filterSetId)
+		.filter(preset => resolveRelatedViewPresetFilterSetId(settings, preset) === filterSetId)
 		.map(preset => ({
 			type,
 			presetId: preset.id,
