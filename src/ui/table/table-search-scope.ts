@@ -30,7 +30,6 @@ import {
 	isTaskSearchScopeKeyActive,
 	limitSearchParentCandidates,
 	renderParentSearchDropdown,
-	renderSearchScopeButtonStrip,
 	renderSearchScopePopover,
 	syncSearchScopeControlWrapClasses,
 	type SearchParentSelection,
@@ -55,14 +54,6 @@ export const TABLE_SEARCH_BOX_DEFAULT_SCOPE: TaskSearchBoxScopeState = {
 
 export const TABLE_SEARCH_BOX_DISABLED_KEYS = new Set<TaskFinderDefaultScopeKey>();
 export const TABLE_SEARCH_SCOPE_GROUPS = SEARCH_SCOPE_CONTROL_GROUPS;
-export const TABLE_SEARCH_QUICK_SCOPE_KEYS: readonly TaskFinderDefaultScopeKey[] = [
-	'projectTasks',
-	'projectTree',
-	'overdue',
-	'happensToday',
-	'recentModified',
-];
-
 export type TableParentSearchSelection = SearchParentSelection;
 export type TableParentSearchUiState = SearchParentUiState;
 
@@ -276,27 +267,6 @@ export function renderTableSearchScopePopover(options: {
 		onRefocus: options.onRefocus,
 		selectedParentClearControl: { kind: 'icon', icon: 'x' },
 		stopClearPropagation: true,
-	});
-}
-
-export function renderTableSearchQuickScopeButtons(options: {
-	container: HTMLElement;
-	scope: TaskSearchBoxScopeState;
-	settings: Pick<OperonSettings, 'taskFinderShortcuts' | 'taskFinderRecentModifiedDays'>;
-	onToggle: (key: TaskFinderDefaultScopeKey) => void;
-	onRefocus: () => void;
-}): void {
-	const quickWrap = options.container.createDiv('operon-table-search-quick-buttons');
-	renderSearchScopeButtonStrip({
-		container: quickWrap,
-		scope: options.scope,
-		settings: options.settings,
-		keys: TABLE_SEARCH_QUICK_SCOPE_KEYS,
-		buttonClassName: 'operon-table-search-quick-button',
-		disabledKeys: TABLE_SEARCH_BOX_DISABLED_KEYS,
-		unavailableTooltip: t('table', 'searchScopeUnavailable'),
-		onToggle: options.onToggle,
-		onRefocus: options.onRefocus,
 	});
 }
 

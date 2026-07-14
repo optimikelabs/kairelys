@@ -1,12 +1,15 @@
 export interface OperonStoragePaths {
 	pluginDir: string;
 	dataPackagePath: string;
+	tablePresetFileMigrationBackupRootPath: string;
 	state: {
 		repeatSeriesPath: string;
 		activeTrackersPath: string;
 		pinnedTasksPath: string;
 		projectSerialsPath: string;
 		fieldRenameJournalPath: string;
+		tablePresetFileMigrationJournalPath: string;
+		tablePresetFileMigrationReceiptPath: string;
 	};
 	runtime: {
 		indexPath: string;
@@ -25,12 +28,15 @@ export function buildOperonStoragePaths(
 	return {
 		pluginDir,
 		dataPackagePath: joinVaultPath(pluginDir, 'data.json'),
+		tablePresetFileMigrationBackupRootPath: joinVaultPath(pluginDir, 'data', 'migrations', 'table-presets-v1'),
 		state: {
 			repeatSeriesPath: joinVaultPath(pluginDir, 'state', 'repeat-series.json'),
 			activeTrackersPath: joinVaultPath(pluginDir, 'state', 'active-trackers.json'),
 			pinnedTasksPath: joinVaultPath(pluginDir, 'state', 'pinned-tasks.json'),
 			projectSerialsPath: joinVaultPath(pluginDir, 'state', 'project-serials.json'),
 			fieldRenameJournalPath: joinVaultPath(pluginDir, 'state', 'field-rename-journal.json'),
+			tablePresetFileMigrationJournalPath: joinVaultPath(pluginDir, 'state', 'table-preset-file-migration.json'),
+			tablePresetFileMigrationReceiptPath: joinVaultPath(pluginDir, 'state', 'table-preset-file-migration-receipt.json'),
 		},
 		runtime: {
 			indexPath: joinVaultPath(pluginDir, 'runtime', 'index.json'),

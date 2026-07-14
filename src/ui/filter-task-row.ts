@@ -22,10 +22,38 @@ export interface FilterTaskRowCallbacks extends ReadingTaskRowCallbacks {
 	getRenderedTask?: (task: IndexedTask) => IndexedTask;
 }
 
+export function shouldAutoExpandFilterTaskSubtasks(
+	rootTaskId: string,
+	callbacks: FilterTaskRowCallbacks,
+	showOnlyOpenSubtasks: boolean,
+	limit: number,
+	visibleTaskIds?: Set<string>,
+): boolean {
+	if (limit <= 0) return false;
+	const workflowStatusIdentityIndex = buildWorkflowStatusIdentityIndex(callbacks.getPipelines());
+	let count = 0;
+	const visit = (parentId: string, ancestors: Set<string>): void => {
+		if (count > limit) return;
+		for (const childId of callbacks.getChildIds(parentId)) {
+			if (childId === parentId || ancestors.has(childId)) continue;
+			if (visibleTaskIds && !visibleTaskIds.has(childId)) continue;
+			const childTask = callbacks.getIndexedTask(childId);
+			if (!childTask) continue;
+			if (showOnlyOpenSubtasks && !isOpenSubtask(childTask, callbacks, workflowStatusIdentityIndex)) continue;
+			count += 1;
+			if (count > limit) return;
+			visit(childId, new Set([...ancestors, childId]));
+			if (count > limit) return;
+		}
+	};
+	visit(rootTaskId, new Set([rootTaskId]));
+	return count > 0 && count <= limit;
+}
+
 interface FilterTaskRowOptions {
 	allowExpand?: boolean;
 	ancestorIds?: Set<string>;
-	defaultExpandAll?: boolean;
+	defaultExpandAll?: boolean | ((task: IndexedTask) => boolean);
 	showOnlyOpenSubtasks?: boolean;
 	showSubtaskAction?: boolean;
 	subtaskSorts?: FilterSortSpec[];
@@ -45,6 +73,9 @@ export function buildFilterTaskRowElement(
 	const ancestorIds = options?.ancestorIds ?? new Set<string>();
 	const workflowStatusIdentityIndex = options?.workflowStatusIdentityIndex
 		?? buildWorkflowStatusIdentityIndex(callbacks.getPipelines());
+	const defaultExpandAll = typeof options?.defaultExpandAll === 'function'
+		? options.defaultExpandAll(task)
+		: options?.defaultExpandAll === true;
 	const wrapper = el('div', 'operon-filter-task-entry', owner);
 	const childIds = allowExpand
 		? sortSubtaskIds(
@@ -69,7 +100,7 @@ export function buildFilterTaskRowElement(
 	const childProgress = hasChildren
 		? buildChildProgress(task, childIds, callbacks, canUseDirectStats, workflowStatusIdentityIndex)
 		: null;
-	if (hasChildren && options?.defaultExpandAll === true) {
+	if (hasChildren && defaultExpandAll) {
 		const marker = `__filter_init_${task.operonId}`;
 		if (!expandedTaskIds.has(marker)) {
 			expandedTaskIds.add(task.operonId);
@@ -132,7 +163,7 @@ export function buildFilterTaskRowElement(
 								callbacks,
 								expandedTaskIds,
 								new Set([...ancestorIds, task.operonId]),
-								options?.defaultExpandAll === true,
+								defaultExpandAll,
 								options?.showOnlyOpenSubtasks === true,
 								options?.subtaskSorts,
 								options?.subtaskSortContext,
@@ -211,7 +242,7 @@ export function buildFilterTaskRowElement(
 				callbacks,
 				expandedTaskIds,
 				new Set([...ancestorIds, task.operonId]),
-				options?.defaultExpandAll === true,
+				defaultExpandAll,
 				options?.showOnlyOpenSubtasks === true,
 				options?.subtaskSorts,
 				options?.subtaskSortContext,

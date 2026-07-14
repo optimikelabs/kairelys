@@ -106,6 +106,8 @@ import {
 	resolveTimedHorizontalVisibleStartIndex,
 } from './timed-horizontal-window';
 import type { RelatedFilterablePreset, RelatedViewCreateTarget, RelatedViewOpenTarget } from '../../types/related-views';
+import { getCalendarPresetPickerLabel, showCalendarPresetPicker } from './calendar-preset-picker';
+import { getFavoriteCalendarPresets, isFavoriteCalendarPreset } from './calendar-preset-visibility';
 
 export const CALENDAR_VIEW_TYPE = 'operon-calendar-view';
 const CALENDAR_SIDEBAR_SECTION_ORDER = ['calendars', 'taskPool'] as const;
@@ -125,6 +127,10 @@ const CALENDAR_MOBILE_EMPTY_SWIPE_OWNERSHIP_DOMINANCE_RATIO = 1;
 const CALENDAR_MOBILE_EMPTY_SWIPE_DISTANCE_PX = 36;
 const CALENDAR_MOBILE_EMPTY_SWIPE_DOMINANCE_RATIO = 1.35;
 const CALENDAR_MOBILE_EMPTY_SWIPE_ANIMATION_MS = 120;
+const isDesktopCalendarPlatform = (): boolean => !(Platform.isMobile
+	|| Platform.isMobileApp
+	|| Platform.isPhone
+	|| Platform.isTablet);
 const CALENDAR_MOBILE_EMPTY_SELECTION_LONG_PRESS_MS = 260;
 const CALENDAR_MOBILE_SLOT_CREATE_SCROLL_RESTORE_WINDOW_MS = 4000;
 const CALENDAR_MOBILE_SCROLL_RESTORE_STABILIZATION_DELAYS_MS = [60, 180, 360, 720] as const;
@@ -855,6 +861,7 @@ export class CalendarView extends ItemView {
 	private sidebarResizeCleanup: (() => void) | null = null;
 	private sidebarSectionsLayoutCleanup: (() => void) | null = null;
 	private toolbarLayoutCleanup: (() => void) | null = null;
+	private activePresetPickerClose: (() => void) | null = null;
 	private layoutRefreshCleanup: (() => void) | null = null;
 	private layoutRefreshFrame: number | null = null;
 	private calendarNavigationKeydownHandler: ((event: KeyboardEvent) => void) | null = null;
@@ -994,6 +1001,7 @@ export class CalendarView extends ItemView {
 		this.clearTimedHorizontalGestureTimers();
 		this.clearSidebarResizeDrag();
 		this.hideCalendarHoverMenu(true);
+		this.closeActivePresetPicker();
 		closeFloatingPanelsForRoot(this.contentEl);
 		closeIconOnlyChipPreviewsForRoot(this.contentEl);
 		this.expandedHiddenTimeKey = null;
@@ -1739,6 +1747,7 @@ export class CalendarView extends ItemView {
 		this.clearRenderTimers();
 		this.hideCalendarHoverMenu(true);
 		const container = this.contentEl;
+		this.closeActivePresetPicker();
 		closeFloatingPanelsForRoot(container);
 		closeIconOnlyChipPreviewsForRoot(container);
 		this.surfaceScrollEl = null;
@@ -6684,6 +6693,7 @@ export class CalendarView extends ItemView {
 		bindOperonHoverTooltip(settingsButton, { content: t('calendar', 'editCurrentCalendarPreset'), taskColor: null });
 		settingsButton.addEventListener('click', (event) => {
 			event.preventDefault();
+			this.closeActivePresetPicker();
 			void this.callbacks.onOpenPresetSettings?.(preset.id);
 		});
 		return actions;
@@ -6721,7 +6731,11 @@ export class CalendarView extends ItemView {
 		const sectionsWrapper = container.createDiv('operon-calendar-sidebar-pools-wrapper');
 		const presetSection = sectionsWrapper.createDiv('operon-calendar-sidebar-section operon-calendar-sidebar-calendars-section operon-calendar-sidebar-managed-section');
 		presetSection.classList.toggle('is-open', state.calendarsOpen);
-		const presetToggle = presetSection.createEl('button', {
+		const useDesktopPresetShortcuts = isDesktopCalendarPlatform();
+		const presetHeader = useDesktopPresetShortcuts
+			? presetSection.createDiv('operon-calendar-sidebar-preset-header')
+			: presetSection;
+		const presetToggle = presetHeader.createEl('button', {
 			cls: 'operon-calendar-sidebar-task-pool-toggle',
 			attr: { type: 'button', 'aria-expanded': String(state.calendarsOpen) },
 		});
@@ -6731,35 +6745,39 @@ export class CalendarView extends ItemView {
 		presetToggle.addEventListener('click', () => {
 			void this.toggleSidebarSection('calendars');
 		});
+		if (useDesktopPresetShortcuts) {
+			this.renderCalendarPresetPickerButton(presetHeader, preset, 'sidebar');
+		}
 		if (state.calendarsOpen) {
-			const presetList = presetSection.createDiv('operon-calendar-sidebar-preset-list operon-calendar-sidebar-section-scroll');
-			const visiblePresets = this.getSettings().calendarPresets;
-			for (const entry of visiblePresets) {
-				const row = presetList.createDiv('operon-calendar-sidebar-preset-row');
-				row.classList.toggle('is-active', entry.id === preset.id);
+			const settings = this.getSettings();
+			const allPresets = settings.calendarPresets;
+			const visiblePresets = useDesktopPresetShortcuts
+				? getFavoriteCalendarPresets(allPresets, settings.presetFavorites)
+				: allPresets;
+			if (visiblePresets.length > 0) {
+				const presetList = presetSection.createDiv('operon-calendar-sidebar-preset-list operon-calendar-sidebar-section-scroll');
+				for (const entry of visiblePresets) {
+					const presetIndex = Math.max(0, allPresets.findIndex(preset => preset.id === entry.id));
+					const row = presetList.createDiv('operon-calendar-sidebar-preset-row');
+					row.classList.toggle('is-active', entry.id === preset.id);
 
-				const button = row.createEl('button', {
-					text: entry.name,
-					cls: 'operon-calendar-sidebar-preset-button',
-					attr: { type: 'button' },
-				});
-				button.addEventListener('click', () => {
-					void this.updateLeafState({
-						...state,
-						presetId: entry.id,
+					const button = row.createEl('button', {
+						text: getCalendarPresetPickerLabel(entry, presetIndex),
+						cls: 'operon-calendar-sidebar-preset-button',
+						attr: { type: 'button' },
 					});
-				});
+					button.addEventListener('click', () => {
+						void this.updateLeafState({ presetId: entry.id });
+					});
 
-				button.addEventListener('keydown', (event) => {
-					if (event.key !== 'Enter' && event.key !== ' ') return;
-					event.preventDefault();
-					void this.updateLeafState({
-						...state,
-						presetId: entry.id,
+					button.addEventListener('keydown', (event) => {
+						if (event.key !== 'Enter' && event.key !== ' ') return;
+						event.preventDefault();
+						void this.updateLeafState({ presetId: entry.id });
 					});
-				});
 				}
 			}
+		}
 
 		this.renderSidebarTaskPool(sectionsWrapper, preset, visibleDates);
 		this.bindSidebarSectionLayout(sectionsWrapper);
@@ -7955,21 +7973,74 @@ export class CalendarView extends ItemView {
 			void this.shiftCalendarAnchorByDays(presetSpanDays);
 		}, t('calendar', 'nextSpan'), t('calendar', 'nextSpanTooltip'));
 
-		const presetSelect = controlsGroup.createEl('select', { cls: 'operon-calendar-preset-select' });
-		for (const entry of this.getSettings().calendarPresets) {
-			const option = presetSelect.createEl('option', { text: entry.name });
-			option.value = entry.id;
-			option.selected = entry.id === preset.id;
-		}
-		presetSelect.addEventListener('change', () => {
-			void this.updateLeafState({
-				...state,
-				presetId: presetSelect.value,
-			});
-		});
+		this.renderCalendarPresetPickerButton(controlsGroup, preset, 'toolbar');
 		this.renderCalendarQuickActions(controlsGroup, preset, 'toolbar');
 
 		this.applyToolbarLayoutMode(toolbar, titleGroup, navGroup, controlsGroup);
+	}
+
+	private renderCalendarPresetPickerButton(
+		container: HTMLElement,
+		activePreset: CalendarRenderPreset,
+		surface: 'toolbar' | 'sidebar',
+	): void {
+		const settings = this.getSettings();
+		const presets = settings.calendarPresets;
+		const button = container.createEl('button', {
+			cls: 'operon-calendar-toolbar-button operon-calendar-preset-picker-button is-icon-only',
+			attr: {
+				type: 'button',
+				'aria-haspopup': 'listbox',
+				'aria-expanded': 'false',
+			},
+		});
+		button.classList.toggle(
+			'has-active-nonfavorite-preset',
+			surface === 'sidebar' && !isFavoriteCalendarPreset(activePreset, settings.presetFavorites),
+		);
+		const activePresetIndex = Math.max(0, presets.findIndex(entry => entry.id === activePreset.id));
+		const activeLabel = getCalendarPresetPickerLabel(activePreset, activePresetIndex);
+		const accessibleLabel = `${t('tooltips', 'selectCalendarPreset')}: ${activeLabel}`;
+		setIcon(button, 'calendar-days');
+		setAccessibleLabelWithoutTooltip(button, accessibleLabel);
+		bindOperonHoverTooltip(button, {
+			content: accessibleLabel,
+			taskColor: null,
+			preferredVertical: 'above',
+		});
+		button.addEventListener('click', event => {
+			event.preventDefault();
+			event.stopPropagation();
+			this.closeActivePresetPicker();
+			button.setAttribute('aria-expanded', 'true');
+			let closePicker: (() => void) | null = null;
+			closePicker = showCalendarPresetPicker(button, {
+				value: activePreset.id,
+				presets,
+				onSelect: presetId => {
+					void this.updateLeafState({ presetId });
+				},
+				onClose: () => {
+					if (button.isConnected) {
+						button.setAttribute('aria-expanded', 'false');
+						button.focus({ preventScroll: true });
+					}
+					if (closePicker && this.activePresetPickerClose === closePicker) {
+						this.activePresetPickerClose = null;
+					}
+				},
+				floatingHost: container.ownerDocument.body,
+				floatingScrollHost: container.ownerDocument.defaultView ?? window,
+				matchWidth: 280,
+			});
+			this.activePresetPickerClose = closePicker;
+		});
+	}
+
+	private closeActivePresetPicker(): void {
+		const close = this.activePresetPickerClose;
+		this.activePresetPickerClose = null;
+		close?.();
 	}
 
 	private renderCalendarRelatedViewsButton(container: HTMLElement, preset: RelatedFilterablePreset): HTMLButtonElement | null {
@@ -7978,7 +8049,10 @@ export class CalendarView extends ItemView {
 			settings: this.getSettings(),
 			source: { type: 'calendar', preset },
 			buttonClass: 'operon-calendar-related-views-button',
-			closeBeforeOpen: () => closeFloatingPanelsForRoot(this.contentEl),
+			closeBeforeOpen: () => {
+				this.closeActivePresetPicker();
+				closeFloatingPanelsForRoot(this.contentEl);
+			},
 			onOpenRelatedView: target => this.callbacks.onOpenRelatedView?.(target),
 			onCreateRelatedView: target => this.callbacks.onCreateRelatedView?.(target),
 		});

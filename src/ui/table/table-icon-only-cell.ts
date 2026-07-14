@@ -21,6 +21,40 @@ export interface TableIconOnlyCellOptions {
 	showTooltip?: boolean;
 }
 
+export type TableCompactDatetimeCellOptions = Omit<TableIconOnlyCellOptions, 'icon'> & {
+	value: string;
+};
+
+export function formatTableCompactDatetimeValue(value: string): string {
+	const match = /(?:^|[T\s])(\d{2}):(\d{2})(?::\d{2})?(?:$|[.+-])/u.exec(value.trim());
+	return match ? `${match[1]}:${match[2]}` : value.trim();
+}
+
+export function renderTableCompactDatetimeCell(
+	cell: HTMLElement,
+	options: TableCompactDatetimeCellOptions,
+): HTMLElement {
+	cell.addClass('operon-table-icon-only-cell');
+	const control = cell.createSpan('operon-table-icon-only-button operon-table-compact-datetime');
+	control.tabIndex = options.focusable === false ? -1 : 0;
+	setAccessibleLabelWithoutTooltip(control, options.ariaLabel);
+	if (options.color) {
+		control.style.setProperty('--operon-table-icon-only-color', options.color);
+		control.style.setProperty('--operon-live-hover-border', options.color);
+		control.style.setProperty('--operon-task-chip-hover-accent', options.color);
+	}
+	control.setText(formatTableCompactDatetimeValue(options.value));
+	if (options.showTooltip !== false) {
+		bindOperonHoverTooltip(control, {
+			title: options.title,
+			content: options.content,
+			taskColor: options.color,
+			preferredHorizontal: 'center',
+		});
+	}
+	return control;
+}
+
 export function formatTableIconOnlyTooltipContent(value: string): string {
 	return value.trim() || '--';
 }

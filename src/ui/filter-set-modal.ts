@@ -16,7 +16,7 @@ import {
 } from '../core/filter-evaluator';
 import { getConfiguredKeyMappingIcon } from '../core/key-mapping-icons';
 import { PinnedCache } from '../storage/pinned-cache';
-import { buildFilterTaskRowElement, FilterTaskRowCallbacks } from './filter-task-row';
+import { buildFilterTaskRowElement, FilterTaskRowCallbacks, shouldAutoExpandFilterTaskSubtasks } from './filter-task-row';
 import { t } from '../core/i18n';
 import { OperonIndexer } from '../indexer/indexer';
 import type { ProjectSerialDisplay } from '../core/project-serials';
@@ -38,6 +38,7 @@ import {
 	DYNAMIC_SUBTASKS_FILTER_DEFAULT_ICON,
 	isDynamicFileTaskFilterSet,
 	isDynamicSubtasksFilterSet,
+	isSpecialDynamicFilterSet,
 } from '../core/dynamic-file-task-filter';
 import { showOperonDayPickerPopover } from './field-pickers/day-picker-popover';
 import { showDatetimePicker } from './field-pickers/datetime-picker';
@@ -46,6 +47,10 @@ import { showFilterConditionPicker } from './field-pickers/filter-condition-pick
 import { showSearchableFieldPicker, type SearchableFieldPickerOption } from './field-pickers/searchable-field-picker';
 import { getManagedCustomFieldOptions } from '../core/managed-task-fields';
 import { CANONICAL_KEY_MAP } from '../types/keys';
+import { isPresetFavorite } from '../core/preset-favorites';
+import { createPresetFavoriteButton } from './preset-favorite-button';
+import { runSettingsAsync } from './settings/async-settings-action';
+import { openSettingsOptionPickerModal } from './settings/settings-option-picker-modal';
 
 function generateConditionId(): string {
 	return 'cond_' + Math.random().toString(36).slice(2, 10);
@@ -53,6 +58,19 @@ function generateConditionId(): string {
 
 function generateGroupId(): string {
 	return 'grp_' + Math.random().toString(36).slice(2, 10);
+}
+
+export function bindSettingsModalPickerTrigger(element: HTMLElement, openPicker: () => void): void {
+	element.addEventListener('pointerdown', event => {
+		event.preventDefault();
+		event.stopPropagation();
+		openPicker();
+	});
+	element.addEventListener('click', event => {
+		event.preventDefault();
+		event.stopPropagation();
+		if (event.detail === 0) openPicker();
+	});
 }
 
 function isFilterGroupNode(node: FilterNode): node is FilterGroup {
@@ -225,6 +243,8 @@ export interface FilterSetModalOptions {
 	showCountBadge?: boolean;
 	quickActions?: FilterSetModalQuickActions;
 	getSettings?: () => OperonSettings;
+	onToggleFavorite?: (filterSetId: string) => Promise<void>;
+	pickerPresentation?: 'floating' | 'modal';
 }
 
 export interface FilterSetModalQuickActions {
@@ -478,6 +498,29 @@ export class FilterSetModal extends Modal {
 		const chevron = wrap.createSpan('operon-filter-select-chevron');
 		setIcon(chevron, 'chevron-down');
 		select.addEventListener('change', () => onChange(select.value));
+		if (this.options.pickerPresentation === 'modal') {
+			bindSettingsModalPickerTrigger(select, () => {
+				const currentOptions = Array.from(select.options).map(option => ({
+					value: option.value,
+					label: option.text,
+				}));
+				const selectedLabel = currentOptions.find(option => option.value === select.value)?.label
+					?? currentOptions[0]?.label
+					?? t('filterSets', 'conditionFieldPickerLabel');
+				openSettingsOptionPickerModal(this.app, {
+					title: selectedLabel,
+					value: select.value,
+					options: currentOptions,
+					placeholder: t('filterSets', 'conditionFieldSearchPlaceholder'),
+					ariaLabel: selectedLabel,
+					noMatchesText: t('filterSets', 'conditionFieldNoMatches'),
+					onSelect: option => {
+						select.value = option.value;
+						onChange(option.value);
+					},
+				});
+			});
+		}
 		return select;
 	}
 
@@ -521,9 +564,23 @@ export class FilterSetModal extends Modal {
 		};
 		updateButton(value);
 
-		button.addEventListener('click', event => {
-			event.preventDefault();
+		const openPicker = (): void => {
 			if (button.disabled) return;
+			if (this.options.pickerPresentation === 'modal') {
+				openSettingsOptionPickerModal(this.app, {
+					title: options.label,
+					value: currentValue,
+					options: fields.map(field => ({ ...field, value: field.field })),
+					placeholder: t('filterSets', 'conditionFieldSearchPlaceholder'),
+					ariaLabel: options.label,
+					noMatchesText: t('filterSets', 'conditionFieldNoMatches'),
+					onSelect: option => {
+						onChange(option.field);
+						updateButton(option.field);
+					},
+				});
+				return;
+			}
 			button.setAttribute('aria-expanded', 'true');
 			showSearchableFieldPicker(button, {
 				value: currentValue,
@@ -544,7 +601,15 @@ export class FilterSetModal extends Modal {
 				repositionOnScroll: true,
 				repositionOnWindowResize: true,
 			});
-		});
+		};
+		if (this.options.pickerPresentation === 'modal') {
+			bindSettingsModalPickerTrigger(button, openPicker);
+		} else {
+			button.addEventListener('click', event => {
+				event.preventDefault();
+				openPicker();
+			});
+		}
 
 		return button;
 	}
@@ -1144,7 +1209,27 @@ export class FilterSetModal extends Modal {
 		};
 		updateFieldButton();
 
-		fieldButton.addEventListener('click', () => {
+		const openConditionFieldPicker = (): void => {
+			if (this.options.pickerPresentation === 'modal') {
+				openSettingsOptionPickerModal(this.app, {
+					title: t('filterSets', 'conditionFieldPickerLabel'),
+					value: cond.field,
+					options: fieldOptions.map(option => ({ ...option, value: option.field })),
+					placeholder: t('filterSets', 'conditionFieldSearchPlaceholder'),
+					ariaLabel: t('filterSets', 'conditionFieldPickerLabel'),
+					noMatchesText: t('filterSets', 'conditionFieldNoMatches'),
+					onSelect: option => {
+						cond.field = option.field;
+						cond.fieldType = option.type;
+						cond.operator = '';
+						cond.value = undefined;
+						updateFieldButton();
+						rebuildOpSel();
+						this.syncMirroredFilterFields();
+					},
+				});
+				return;
+			}
 			fieldButton.setAttribute('aria-expanded', 'true');
 			showFilterConditionPicker(fieldButton, {
 				value: cond.field,
@@ -1162,7 +1247,12 @@ export class FilterSetModal extends Modal {
 					fieldButton.setAttribute('aria-expanded', 'false');
 				},
 			});
-		});
+		};
+		if (this.options.pickerPresentation === 'modal') {
+			bindSettingsModalPickerTrigger(fieldButton, openConditionFieldPicker);
+		} else {
+			fieldButton.addEventListener('click', openConditionFieldPicker);
+		}
 
 		// --- Operator dropdown ---
 		const opSel = this.createModalSelect(row, [], cond.operator, (value) => {
@@ -1624,11 +1714,12 @@ export class FilterSetModal extends Modal {
 
 	private renderQuickActions(left: HTMLElement, right: HTMLElement): void {
 		const actions = this.options.quickActions;
-		if (!actions) return;
+		const canRenderFavorite = Boolean(this.options.onToggleFavorite) && !isSpecialDynamicFilterSet(this.filterSet);
+		if (!actions && !canRenderFavorite) return;
 
-		if (actions.copyEmbedCode || actions.duplicate) {
+		if (actions?.copyEmbedCode || actions?.duplicate || canRenderFavorite) {
 			const quickGroup = left.createDiv('operon-filter-footer-quick-actions');
-			if (actions.copyEmbedCode) {
+			if (actions?.copyEmbedCode) {
 				this.createFooterActionButton(quickGroup, {
 					label: t('filterSets', 'copyEmbedCode'),
 					text: '</>',
@@ -1637,7 +1728,7 @@ export class FilterSetModal extends Modal {
 					errorContext: 'filter modal embed copy failed',
 				});
 			}
-			if (actions.duplicate) {
+			if (actions?.duplicate) {
 				this.createFooterActionButton(quickGroup, {
 					label: t('filterSets', 'duplicateFilter'),
 					icon: 'copy',
@@ -1645,9 +1736,26 @@ export class FilterSetModal extends Modal {
 					errorContext: 'filter modal duplicate failed',
 				});
 			}
+			if (canRenderFavorite) {
+				const settings = this.options.getSettings?.() ?? null;
+				const isStoredFilter = settings?.filterSets.some(entry => entry.id === this.filterSet.id) === true;
+				const isFavorite = settings !== null && isPresetFavorite(settings.presetFavorites, 'filter', this.filterSet.id);
+				createPresetFavoriteButton({
+					containerEl: quickGroup,
+					className: 'operon-filter-modal-button operon-filter-footer-action-button',
+					active: isFavorite,
+					disabled: !isStoredFilter,
+					onClick: () => {
+						void runSettingsAsync('filter favorite failed', async () => {
+							await this.options.onToggleFavorite?.(this.filterSet.id);
+							this.renderModalPreservingScroll(true);
+						});
+					},
+				});
+			}
 		}
 
-		if (actions.remove) {
+		if (actions?.remove) {
 			this.createFooterActionButton(right, {
 				label: t('filterSets', 'deleteFilterConfirm'),
 				icon: 'trash-2',
@@ -1656,6 +1764,21 @@ export class FilterSetModal extends Modal {
 				errorContext: 'filter modal delete failed',
 			});
 		}
+	}
+
+	private renderModalPreservingScroll(restoreFavoriteFocus = false): void {
+		const scrollTop = this.contentEl.scrollTop;
+		const scrollLeft = this.contentEl.scrollLeft;
+		this.renderModal();
+		const restore = (): void => {
+			this.contentEl.scrollTop = scrollTop;
+			this.contentEl.scrollLeft = scrollLeft;
+		};
+		restore();
+		if (restoreFavoriteFocus) {
+			this.contentEl.querySelector<HTMLButtonElement>('.operon-preset-favorite-button')?.focus({ preventScroll: true });
+		}
+		this.contentEl.ownerDocument.defaultView?.requestAnimationFrame(restore);
 	}
 
 	private createFooterActionButton(
@@ -1733,7 +1856,12 @@ class FilterPreviewModal extends Modal {
 			this.deps.getProjectSerialSignature?.() ?? '',
 			JSON.stringify(this.filterSet),
 			this.deps.getSettings().filterShowSubtasks ? '1' : '0',
+			String(this.deps.getSettings().filterSubtaskAutoExpandLimit),
 			this.deps.getSettings().filterShowOnlyOpenSubtasks ? '1' : '0',
+			String(this.deps.getSettings().dynamicFileTaskFilterSubtaskAutoExpandLimit),
+			this.deps.getSettings().dynamicFileTaskFilterShowOnlyOpenSubtasks ? '1' : '0',
+			String(this.deps.getSettings().dynamicSubtasksFilterSubtaskAutoExpandLimit),
+			this.deps.getSettings().dynamicSubtasksFilterShowOnlyOpenSubtasks ? '1' : '0',
 			JSON.stringify(this.deps.getSettings().filterTaskCompactChips),
 			JSON.stringify([
 				this.deps.getSettings().filterTaskShowPlayAction,
@@ -1758,8 +1886,19 @@ class FilterPreviewModal extends Modal {
 		const priorities = this.deps.getPriorities();
 		const pipelines = this.deps.getPipelines();
 		const settings = this.deps.getSettings();
-		const showSubtasks = settings.filterShowSubtasks === true;
-		const showOnlyOpenSubtasks = settings.filterShowOnlyOpenSubtasks === true;
+		const dynamicFilePreview = isDynamicFileTaskFilterSet(this.filterSet);
+		const dynamicSubtasksPreview = isDynamicSubtasksFilterSet(this.filterSet);
+		const showSubtasks = dynamicFilePreview || dynamicSubtasksPreview || settings.filterShowSubtasks === true;
+		const showOnlyOpenSubtasks = dynamicFilePreview
+			? settings.dynamicFileTaskFilterShowOnlyOpenSubtasks
+			: dynamicSubtasksPreview
+				? settings.dynamicSubtasksFilterShowOnlyOpenSubtasks
+				: settings.filterShowOnlyOpenSubtasks === true;
+		const autoExpandLimit = dynamicFilePreview
+			? settings.dynamicFileTaskFilterSubtaskAutoExpandLimit
+			: dynamicSubtasksPreview
+				? settings.dynamicSubtasksFilterSubtaskAutoExpandLimit
+				: settings.filterSubtaskAutoExpandLimit;
 		if (!showSubtasks) {
 			this.expandedTaskIds.clear();
 		}
@@ -1811,7 +1950,13 @@ class FilterPreviewModal extends Modal {
 		const configuredSubtaskSorts = getFilterSortSpecs(this.filterSet);
 		const subtaskSorts = configuredSubtaskSorts.length > 0 ? configuredSubtaskSorts : undefined;
 		const taskRowOptions = {
-			defaultExpandAll: showSubtasks,
+			allowExpand: showSubtasks,
+			defaultExpandAll: (task: import('../types/fields').IndexedTask) => shouldAutoExpandFilterTaskSubtasks(
+				task.operonId,
+				callbacks,
+				showOnlyOpenSubtasks,
+				autoExpandLimit,
+			),
 			showOnlyOpenSubtasks,
 			subtaskSorts,
 			subtaskSortContext: prepareTaskSortContext(

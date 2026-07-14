@@ -438,9 +438,13 @@ function buildKanbanLanes(
 			});
 		}
 	} else {
+		const customMapping = getManagedCustomFieldOptionMapping(swimlaneBy, keyMappings);
+		const compareLaneValues = customMapping?.type === 'number'
+			? compareNumericKanbanLaneValues
+			: compareTextKanbanLaneValues;
 		const values = Array.from(laneCounts.keys())
 			.filter(value => value !== KANBAN_NO_VALUE_KEY)
-			.sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
+			.sort(compareLaneValues);
 		for (const value of values) {
 			lanes.push({
 				key: value,
@@ -465,4 +469,24 @@ function buildKanbanLanes(
 	}
 
 	return lanes;
+}
+
+function compareNumericKanbanLaneValues(left: string, right: string): number {
+	const leftValue = parseNumericSortValue(left);
+	const rightValue = parseNumericSortValue(right);
+	if (leftValue !== null && rightValue !== null) {
+		const comparison = leftValue - rightValue;
+		if (comparison !== 0) return comparison;
+	}
+	if (leftValue === null || rightValue === null) {
+		if (leftValue === null && rightValue !== null) return 1;
+		if (leftValue !== null && rightValue === null) return -1;
+	}
+	const textComparison = compareTextKanbanLaneValues(left, right);
+	if (textComparison !== 0) return textComparison;
+	return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function compareTextKanbanLaneValues(left: string, right: string): number {
+	return left.localeCompare(right, undefined, { sensitivity: 'base' });
 }

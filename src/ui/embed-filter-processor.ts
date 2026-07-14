@@ -30,10 +30,11 @@ import {
 	sortFilterTasks,
 } from '../core/filter-evaluator';
 import { PinnedCache } from '../storage/pinned-cache';
-import { buildFilterTaskRowElement, FilterTaskRowCallbacks } from './filter-task-row';
+import { buildFilterTaskRowElement, FilterTaskRowCallbacks, shouldAutoExpandFilterTaskSubtasks } from './filter-task-row';
 import { shouldResolveLocationCompactChips } from './compact-task-layout';
 import { FilterSetModal, type FilterSetModalQuickActions } from './filter-set-modal';
 import { ConfirmActionModal } from './confirm-action-modal';
+import { clonePresetFavorites, removePresetFavorite } from '../core/preset-favorites';
 import type { ContextualMenuActionHandler } from '../core/contextual-menu-engine';
 import { bindOperonHoverTooltip } from './operon-hover-tooltip';
 import { applyFilterSearch, buildFilterTreeScope, isFilterSearchActive } from '../systems/filter-search';
@@ -96,6 +97,7 @@ export interface EmbedFilterDeps {
     openDailyNote?: (dateKey: string) => void | Promise<void>;
     duplicateFilterSet?: (filterSet: FilterSet) => Promise<void>;
     deleteFilterSet?: (filterSetId: string) => Promise<void>;
+    toggleFilterFavorite?: (filterSetId: string) => Promise<void>;
 }
 
 /** Tracks live embed instances for refresh */
@@ -296,7 +298,7 @@ export function renderFilterSurface(
         instance.searchQuery.trim().toLocaleLowerCase(),
         JSON.stringify(filterSet),
         options.surfaceClassName ?? '',
-        options.showSubtasks === undefined ? 'settings-subtasks' : String(options.showSubtasks),
+        options.showSubtasks === undefined ? `settings-subtasks:${String(deps.settings.filterShowSubtasks)}:${deps.settings.filterSubtaskAutoExpandLimit}` : String(options.showSubtasks),
         options.showOnlyOpenSubtasks === undefined ? 'settings-open-subtasks' : String(options.showOnlyOpenSubtasks),
         options.includeSubtasksInSearch === true ? 'search-subtasks' : 'search-rendered-roots',
         options.preserveManualSubtaskExpansion === true ? 'preserve-manual-expansion' : 'reset-manual-expansion',
@@ -374,7 +376,15 @@ export function renderFilterSurface(
         },
     );
     const taskRowOptions = {
-        defaultExpandAll: embedShowSubtasks,
+        allowExpand: options.showSubtasks === undefined ? embedShowSubtasks : true,
+        defaultExpandAll: options.showSubtasks === undefined
+            ? (task: IndexedTask) => shouldAutoExpandFilterTaskSubtasks(
+                task.operonId,
+                callbacks,
+                embedShowOnlyOpenSubtasks,
+                embedSettings.filterSubtaskAutoExpandLimit,
+            )
+            : embedShowSubtasks,
         showOnlyOpenSubtasks: embedShowOnlyOpenSubtasks,
         showSubtaskAction: embedSettings.filterTaskShowSubtaskAction,
         subtaskSorts,
@@ -757,6 +767,8 @@ function renderHeader(
                 toggleTimer: deps.toggleTimer,
             }, {
                 quickActions: createEmbeddedFilterSetModalQuickActions(instance, filterSet, deps, () => modal?.close()),
+                getSettings: deps.getSettings,
+                onToggleFavorite: deps.toggleFilterFavorite,
             });
             modal.open();
         });
@@ -805,8 +817,17 @@ function confirmDeleteEmbeddedFilterSet(
             if (deps.deleteFilterSet) {
                 await deps.deleteFilterSet(filterSet.id);
             } else {
-                deps.settings.filterSets = deps.settings.filterSets.filter(entry => entry.id !== filterSet.id);
-                await deps.saveSettings();
+                const previousFilters = deps.settings.filterSets;
+                const previousFavorites = clonePresetFavorites(deps.settings.presetFavorites);
+                deps.settings.filterSets = previousFilters.filter(entry => entry.id !== filterSet.id);
+                deps.settings.presetFavorites = removePresetFavorite(deps.settings.presetFavorites, 'filter', filterSet.id);
+                try {
+                    await deps.saveSettings();
+                } catch (error) {
+                    deps.settings.filterSets = previousFilters;
+                    deps.settings.presetFavorites = previousFavorites;
+                    throw error;
+                }
             }
             instance.lastRenderSignature = null;
             closeModal();

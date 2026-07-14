@@ -34,6 +34,7 @@ export interface SearchableOptionPickerOptions<TOption extends SearchableOptionP
 	repositionOnWindowResize?: boolean;
 	repositionOnPanelResize?: boolean;
 	repositionOnScroll?: boolean;
+	closeOnEscape?: boolean;
 	shouldClose?: (reason: FloatingPanelCloseReason) => boolean;
 }
 
@@ -213,6 +214,7 @@ export function showSearchableOptionPicker<TOption extends SearchableOptionPicke
 	input.addEventListener('input', () => updateMatches(input.value));
 	input.addEventListener('keydown', event => {
 		if (event.key === 'Escape') {
+			if (options.closeOnEscape === false) return;
 			event.preventDefault();
 			close();
 			return;

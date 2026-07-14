@@ -1,4 +1,4 @@
-import { ItemView, Notice, Platform, WorkspaceLeaf, setIcon } from 'obsidian';
+import { FileView, Notice, Platform, TFile, WorkspaceLeaf, setIcon, type ViewStateResult } from 'obsidian';
 import type { OperonIndexer } from '../../indexer/indexer';
 import type { PinnedCache } from '../../storage/pinned-cache';
 import type { ProjectSerialDisplay } from '../../core/project-serials';
@@ -8,6 +8,7 @@ import type { TaskFinderDefaultScopeKey } from '../../types/settings';
 import type { TrackerSession } from '../../types/tracker';
 import {
 	OPERON_TABLE_VIEW_TYPE,
+	OPERON_TABLE_FILE_VIEW_TYPE,
 	TABLE_LINE_NUMBER_COLUMN_KEY,
 	TABLE_TASK_ICON_COLUMN_KEY,
 	TABLE_TASK_TYPE_COLUMN_KEY,
@@ -23,6 +24,9 @@ import {
 	resolveTablePresetFilterSet,
 	resolveTableDurationDisplayMode,
 } from '../../types/table';
+import { parseOperonTableFile } from '../../storage/table-file';
+import type { OperonTableFileDiagnostic } from '../../types/table-file';
+import type { TablePresetRegistryPatchControl } from '../../types/table-preset-registry';
 import { evaluateTableQuerySummaries, queryTableRows, type TableQueryGroup, type TableQueryResult, type TableQuerySubgroup } from '../../systems/table-query';
 import { filterTasksForCalendar } from '../../systems/calendar-filter-materialization';
 import { t } from '../../core/i18n';
@@ -67,6 +71,12 @@ import {
 	type TableGroupSortPresetPatchScope,
 } from './table-preset-model';
 import {
+	resolveTableToolbarSurfacePolicy,
+	type TableToolbarSurfacePolicy,
+} from './table-toolbar-surface-policy';
+import { renderTableToolbarComposition } from './table-toolbar-composition';
+import { resolveTablePresetPickerButtonState } from './table-preset-visibility';
+import {
 	TABLE_SEARCH_PREWARM_CHUNK_DELAY_MS,
 	TABLE_SEARCH_PREWARM_DELAY_MS,
 	TABLE_SEARCH_PREWARM_MAX_TASKS_PER_CHUNK,
@@ -97,7 +107,6 @@ import {
 	isTableActiveTextSearchClearing,
 	renderTableParentSearchDropdown,
 	renderTableSearchIcon,
-	renderTableSearchQuickScopeButtons,
 	renderTableSearchScopePopover,
 	resolveTableSearchBaseScopeTasks,
 	resolveTableParentSearchSelection,
@@ -120,13 +129,14 @@ import { formatDurationHuman } from '../../systems/tracker-utils';
 import { getOwnerDocument, getOwnerWindow } from '../../core/dom-compat';
 import type { ContextualMenuActionHandler } from '../../core/contextual-menu-engine';
 import { setAccessibleLabelWithoutTooltip } from '../accessibility-label';
-import { snapshotFloatingRectAnchor } from '../field-pickers/common';
+import { resolveSurfaceFloatingHostOptions, snapshotFloatingRectAnchor } from '../field-pickers/common';
 import { bindOperonHoverTooltip, cleanupOperonHoverTooltips } from '../operon-hover-tooltip';
 import { FilterSetModal } from '../filter-set-modal';
 import { bindTableTaskContextualHoverMenu, renderTableTaskIconButton } from './table-task-icon-button';
 import { bindTableTaskTypeEditorOpen, renderTableTaskTypeButton } from './table-task-type-button';
 import {
 	formatTableIconOnlyTooltipContent,
+	renderTableCompactDatetimeCell,
 	renderTableIconOnlyCell,
 	resolveTableIconOnlyCellIcon,
 	resolveTableValueCellIcon,
@@ -165,11 +175,19 @@ import {
 import { showLocationMapPreview } from '../location-map-preview';
 import { resolveTablePresetSearchSaveFailureRecovery } from './table-preset-search-recovery';
 
-interface OperonTableCallbacks {
+export interface OperonTableCallbacks {
+	resolveTableFile?: (path: string, source: string) => {
+		preset: TablePreset | null;
+		diagnostics: OperonTableFileDiagnostic[];
+	};
+	resolveTablePreset?: (presetId: string) => TablePreset | null;
+	getTablePresets?: () => readonly TablePreset[];
 	onOpenTaskSource?: (operonId: string) => void;
 	onOpenTaskEditor?: (operonId: string) => void;
-	onOpenPresetSettings?: (presetId: string) => void;
-	onSavePresetPatch?: (patch: TablePresetPatch) => Promise<void>;
+	onOpenPresetSettings?: (presetId: string, options?: { managementMode?: 'full' | 'current-only' }) => void;
+	onSelectPreset?: (presetId: string) => void | Promise<void>;
+	onSavePresetPatch?: (patch: TablePresetPatch, context: { surfaceToken: string }) => TablePresetRegistryPatchControl;
+	onFlushPresetWrites?: (presetId: string) => Promise<void>;
 	onSaveFilterSet?: (filterSet: FilterSet) => Promise<void>;
 	onUpdateTaskFields?: (operonId: string, payload: Record<string, string>) => void | Promise<boolean>;
 	getTaskSessions?: (operonId: string) => readonly TrackerSession[];
@@ -185,6 +203,12 @@ interface OperonTableCallbacks {
 	isTaskPinned?: (taskId: string) => boolean;
 	hasSubtasks?: (taskId: string) => boolean;
 }
+
+export interface OperonTableViewOptions {
+	mode?: 'preset' | 'file';
+}
+
+let tableSurfaceSequence = 0;
 
 interface TableRenderState {
 	preset: TablePreset;
@@ -275,7 +299,7 @@ function createEmptyTableFilterSet(name: string): FilterSet {
 	};
 }
 
-export class OperonTableView extends ItemView {
+export class OperonTableView extends FileView {
 	private state: TableLeafState = {
 		presetId: null,
 		searchQuery: '',
@@ -293,6 +317,7 @@ export class OperonTableView extends ItemView {
 	private persistStateTimer: number | null = null;
 	private searchDebounceTimer: number | null = null;
 	private tableResizeObserverCleanup: (() => void) | null = null;
+	private toolbarLayoutCleanup: (() => void) | null = null;
 	private activePickerClose: (() => void) | null = null;
 	private keepActivePickerOnRender = false;
 	private suppressActivePickerCloseOnScrollToken = 0;
@@ -302,6 +327,7 @@ export class OperonTableView extends ItemView {
 	private pendingSearchFocus: { start: number; end: number } | null = null;
 	private activeMobileInlineEdit: TableInlineEditSession | null = null;
 	private pendingMobileTextInputRender = false;
+	private pendingMobileFullRender = false;
 	private mobileViewportCleanup: (() => void) | null = null;
 	private mobileScrollGestureUntil = 0;
 	private lastGroupStateKey: string | null = null;
@@ -321,10 +347,18 @@ export class OperonTableView extends ItemView {
 	private searchPrewarmKey: string | null = null;
 	private completedSearchPrewarmKey: string | null = null;
 	private searchPrewarmIndex = 0;
-	private lastRenderedSearchActive = false;
 	private deferSummariesForSearch = false;
 	private summaryIdleTimer: number | null = null;
 	private summaryRefreshToken = 0;
+	private readonly fileMode: boolean;
+	private filePreset: TablePreset | null = null;
+	private fileSource = '';
+	private fileDiagnostics: OperonTableFileDiagnostic[] = [];
+	private fileLoadGeneration = 0;
+	private lifecycleEpoch = 0;
+	private fileLoadState: 'loading' | 'loaded' | 'invalid' = 'loading';
+	private pagePreviewSurface = false;
+	private readonly surfaceToken = `table-surface-${++tableSurfaceSequence}`;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -332,12 +366,15 @@ export class OperonTableView extends ItemView {
 		private readonly getSettings: () => OperonSettings,
 		private readonly getPinnedCache: () => PinnedCache | null,
 		private readonly callbacks: OperonTableCallbacks = {},
+		options: OperonTableViewOptions = {},
 	) {
 		super(leaf);
+		this.fileMode = options.mode === 'file';
+		this.allowNoFile = !this.fileMode;
 	}
 
 	getViewType(): string {
-		return OPERON_TABLE_VIEW_TYPE;
+		return this.fileMode ? OPERON_TABLE_FILE_VIEW_TYPE : OPERON_TABLE_VIEW_TYPE;
 	}
 
 	getDisplayText(): string {
@@ -350,24 +387,79 @@ export class OperonTableView extends ItemView {
 
 	getState(): Record<string, unknown> {
 		return {
+			...super.getState(),
 			...this.ensureState(),
 			scrollTop: this.bodyScrollerEl?.scrollTop ?? this.state.scrollTop,
 			scrollLeft: this.horizontalScrollerEl?.scrollLeft ?? this.state.scrollLeft,
 		};
 	}
 
-	async setState(state: Partial<TableLeafState> | null | undefined, _result: unknown): Promise<void> {
+	getRequestedPresetId(): string | null {
+		return this.state.presetId;
+	}
+
+	isPagePreview(): boolean {
+		return this.fileMode && this.isPagePreviewSurface();
+	}
+
+	async setState(state: Partial<TableLeafState> | null | undefined, result: ViewStateResult): Promise<void> {
+		if (this.fileMode) {
+			await super.setState(state, result);
+		}
 		const previousPresetId = this.state.presetId;
 		const nextState = this.normalizeState(state);
 		const changed = !areTableLeafStatesEqual(this.state, nextState);
 		this.state = nextState;
 		if (previousPresetId !== nextState.presetId) {
+			this.lifecycleEpoch += 1;
 			this.syncTableSearchStateFromPreset(this.getCurrentPreset(), { force: true });
 		}
 		this.syncLeafTitle();
 		if (changed && this.containerEl.isConnected) {
 			this.markDirty();
 		}
+	}
+
+	async onLoadFile(file: TFile): Promise<void> {
+		if (!this.fileMode) return;
+		await this.loadTableFile(file);
+	}
+
+	async onUnloadFile(_file: TFile): Promise<void> {
+		if (!this.fileMode) return;
+		this.lifecycleEpoch += 1;
+		this.fileLoadGeneration += 1;
+		this.fileLoadState = 'loading';
+		this.filePreset = null;
+		this.fileSource = '';
+		this.fileDiagnostics = [];
+		this.currentRenderState = null;
+	}
+
+	async onRename(file: TFile): Promise<void> {
+		if (!this.fileMode) return;
+		await this.loadTableFile(file);
+	}
+
+	async reloadCurrentTableFile(): Promise<void> {
+		if (!this.fileMode) return;
+		const file = this.file;
+		if (file) {
+			await this.loadTableFile(file);
+			return;
+		}
+		this.fileLoadGeneration += 1;
+		this.fileLoadState = 'invalid';
+		this.filePreset = null;
+		this.fileSource = '';
+		this.fileDiagnostics = [{
+			code: 'read-failed',
+			severity: 'error',
+			path: '',
+			message: t('table', 'fileNotAttached'),
+		}];
+		this.currentRenderState = null;
+		if (this.containerEl.isConnected) this.render();
 	}
 
 	async onOpen(): Promise<void> {
@@ -383,8 +475,13 @@ export class OperonTableView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.lifecycleEpoch += 1;
+		this.fileLoadGeneration += 1;
+		const presetId = this.getCurrentPreset()?.id;
+		if (presetId && !this.pagePreviewSurface) await this.callbacks.onFlushPresetWrites?.(presetId);
 		this.closeActivePicker();
 		this.pendingMobileTextInputRender = false;
+		this.pendingMobileFullRender = false;
 		this.mobileScrollGestureUntil = 0;
 		this.finishMobileInlineEdit(false);
 		this.activeMobileInlineEdit = null;
@@ -411,6 +508,7 @@ export class OperonTableView extends ItemView {
 		this.cancelSearchPrewarm();
 		this.cleanupActiveResize();
 		this.cleanupTableResizeObserver();
+		this.cleanupToolbarLayout();
 		this.cleanupMobileViewport();
 		this.searchMatcherCache.clear();
 		this.incrementalSearchCache = null;
@@ -436,10 +534,127 @@ export class OperonTableView extends ItemView {
 			this.currentRenderState = null;
 			return;
 		}
-		this.render();
+		this.scheduleRender();
+	}
+
+	applyRegistryPreset(preset: TablePreset): void {
+		if (!this.fileMode || this.filePreset?.id !== preset.id) return;
+		this.lifecycleEpoch += 1;
+		this.fileLoadGeneration += 1;
+		this.filePreset = cloneTablePreset(preset);
+		this.fileLoadState = 'loaded';
+		this.state = this.normalizeState({ ...this.state, presetId: preset.id });
+		this.syncTableSearchStateFromPreset(preset, { force: true });
+		this.renderIfVisibleOrInvalidate();
+	}
+
+	private async loadTableFile(file: TFile): Promise<void> {
+		this.lifecycleEpoch += 1;
+		const generation = this.fileLoadGeneration + 1;
+		this.fileLoadGeneration = generation;
+		const expectedPath = file.path;
+		this.fileLoadState = 'loading';
+		this.currentRenderState = null;
+		if (this.containerEl.isConnected) this.render();
+		try {
+			const source = await this.app.vault.read(file);
+			if (!this.isCurrentFileLoad(generation, expectedPath)) return;
+			this.fileSource = source;
+			const resolved = this.callbacks.resolveTableFile?.(expectedPath, source);
+			const parsed = resolved ? null : parseOperonTableFile(source, expectedPath);
+			this.filePreset = resolved?.preset ?? (parsed?.status === 'valid' ? parsed.preset : null);
+			this.fileDiagnostics = resolved?.diagnostics ?? (parsed?.diagnostics ? [...parsed.diagnostics] : []);
+			this.fileLoadState = this.filePreset ? 'loaded' : 'invalid';
+		} catch (error) {
+			if (!this.isCurrentFileLoad(generation, expectedPath)) return;
+			this.fileLoadState = 'invalid';
+			this.filePreset = null;
+			this.fileSource = '';
+			this.fileDiagnostics = [{
+				code: 'read-failed',
+				severity: 'error',
+				path: file.path,
+				message: error instanceof Error ? error.message : String(error),
+			}];
+		}
+		this.state = this.normalizeState({
+			...this.state,
+			presetId: this.filePreset?.id ?? null,
+		});
+		this.syncTableSearchStateFromPreset(this.getCurrentPreset(), { force: true });
+		this.syncLeafTitle();
+		if (this.containerEl.isConnected) this.render();
+	}
+
+	private isCurrentFileLoad(generation: number, expectedPath: string): boolean {
+		return generation === this.fileLoadGeneration && this.file?.path === expectedPath;
+	}
+
+	private renderLoadingTableFile(): void {
+		this.cleanupActiveResize();
+		this.cleanupTableResizeObserver();
+		this.cleanupToolbarLayout();
+		this.cleanupMobileViewport();
+		cleanupOperonHoverTooltips(this.contentEl);
+		this.contentEl.empty();
+		this.contentEl.removeClass('operon-table-file-error-view');
+		this.contentEl.addClass('operon-table-view', 'operon-table-file-loading-view');
+		const root = this.contentEl.createDiv('operon-table-file-error operon-table-file-loading');
+		root.setAttribute('role', 'status');
+		root.setAttribute('aria-live', 'polite');
+		const heading = root.createDiv('operon-table-file-error-heading operon-table-file-loading-heading');
+		const icon = heading.createSpan('operon-table-file-error-icon operon-table-file-loading-icon');
+		setIcon(icon, 'loader-circle');
+		heading.createEl('h2', { text: this.file?.name ?? t('table', 'title') });
+		root.createEl('p', { text: t('table', 'fileLoading') });
+	}
+
+	private renderInvalidTableFile(): void {
+		this.cleanupActiveResize();
+		this.cleanupTableResizeObserver();
+		this.cleanupToolbarLayout();
+		this.cleanupMobileViewport();
+		cleanupOperonHoverTooltips(this.contentEl);
+		this.contentEl.empty();
+		this.contentEl.removeClass('operon-table-file-loading-view');
+		this.contentEl.addClass('operon-table-view', 'operon-table-file-error-view');
+		const root = this.contentEl.createDiv('operon-table-file-error');
+		const heading = root.createDiv('operon-table-file-error-heading');
+		const icon = heading.createSpan('operon-table-file-error-icon');
+		setIcon(icon, 'file-warning');
+		heading.createEl('h2', { text: this.file?.name ?? t('table', 'title') });
+		root.createEl('p', { text: t('table', 'fileOpenFailed') });
+		if (this.fileDiagnostics.length > 0) {
+			const diagnostics = root.createEl('ul', { cls: 'operon-table-file-diagnostics' });
+			for (const entry of this.fileDiagnostics) {
+				diagnostics.createEl('li', { text: this.getTableFileDiagnosticText(entry) });
+			}
+		}
+		const source = root.createEl('pre', { cls: 'operon-table-file-source' });
+		source.createEl('code', { text: this.fileSource });
+	}
+
+	private getTableFileDiagnosticText(entry: OperonTableFileDiagnostic): string {
+		const keyByCode: Record<OperonTableFileDiagnostic['code'], string> = {
+			'invalid-json': 'fileDiagnosticInvalidJson',
+			'invalid-root': 'fileDiagnosticInvalidRoot',
+			'invalid-format': 'fileDiagnosticInvalidFormat',
+			'unsupported-version': 'fileDiagnosticUnsupportedVersion',
+			'missing-field': 'fileDiagnosticMissingField',
+			'invalid-field': 'fileDiagnosticInvalidField',
+			'unknown-field': 'fileDiagnosticUnknownField',
+			'read-failed': 'fileDiagnosticReadFailed',
+			'duplicate-id': 'fileDiagnosticDuplicateId',
+		};
+		const message = t('table', keyByCode[entry.code]);
+		return entry.field ? `${entry.field}: ${message}` : message;
 	}
 
 	render(): void {
+		if (this.hasActiveMobileInlineEdit()) {
+			this.pendingMobileFullRender = true;
+			return;
+		}
 		this.finishMobileInlineEdit(true);
 		if (!this.keepActivePickerOnRender) {
 			this.closeActivePicker();
@@ -451,6 +666,15 @@ export class OperonTableView extends ItemView {
 		}
 		this.state = this.ensureState();
 		this.syncLeafTitle();
+		this.pagePreviewSurface = this.fileMode && this.isPagePreviewSurface();
+		if (this.fileMode && this.fileLoadState === 'loading') {
+			this.renderLoadingTableFile();
+			return;
+		}
+		if (this.fileMode && this.fileLoadState === 'invalid') {
+			this.renderInvalidTableFile();
+			return;
+		}
 		const previousRenderState = this.currentRenderState;
 		const activeElement = this.contentEl.ownerDocument.activeElement;
 		const activeSearchInput = activeElement instanceof HTMLInputElement
@@ -466,8 +690,9 @@ export class OperonTableView extends ItemView {
 		}
 
 		const settings = this.getSettings();
+		const tablePresets = this.getAvailableTablePresets();
 		const projectSerialSignature = this.callbacks.getProjectSerialSignature?.() ?? '';
-		const preset = this.getCurrentPreset() ?? settings.tablePresets[0] ?? createDefaultTablePreset();
+		const preset = this.getCurrentPreset() ?? tablePresets[0] ?? createDefaultTablePreset();
 		this.syncTableSearchStateFromPreset(preset);
 		const filterSet = preset ? resolveTablePresetFilterSet(preset, settings.filterSets) : null;
 		const tasks = this.indexer.getAllTasks();
@@ -613,7 +838,7 @@ export class OperonTableView extends ItemView {
 		}
 		this.scheduleSearchPrewarm(tasks, searchContext.scopeFilteredTasks, settings, taskColumns, normalizedSearchQuery);
 
-		if (this.canReuseTableShell(previousRenderState, this.currentRenderState, normalizedSearchQuery, searchContext.parentSearchUi)) {
+		if (this.canReuseTableShell(previousRenderState, this.currentRenderState, searchContext.parentSearchUi)) {
 			this.updateExistingTableShell(result.counts.final, this.isSearchEmpty(result.counts.scoped));
 			this.lastRenderedRangeKey = null;
 			this.suppressActivePickerCloseForProgrammaticScroll();
@@ -625,7 +850,6 @@ export class OperonTableView extends ItemView {
 				this.renderVisibleRows(true);
 			}
 			this.restoreSearchFocus();
-			this.lastRenderedSearchActive = true;
 			enginePerfLog(
 				'table.render',
 				`${Math.round(enginePerfNow() - renderStartedAt)}ms`,
@@ -637,10 +861,13 @@ export class OperonTableView extends ItemView {
 			return;
 		}
 
+		this.cleanupActiveResize();
 		this.cleanupTableResizeObserver();
+		this.cleanupToolbarLayout();
 		this.cleanupMobileViewport();
 		cleanupOperonHoverTooltips(this.contentEl);
 		this.contentEl.empty();
+		this.contentEl.removeClass('operon-table-file-error-view', 'operon-table-file-loading-view');
 		this.contentEl.addClass('operon-table-view');
 		const root = this.contentEl.createDiv('operon-table-root operon-task-chip-surface');
 		this.bindMobileViewport(root);
@@ -661,7 +888,6 @@ export class OperonTableView extends ItemView {
 		}
 		this.restorePendingCellFocus();
 		this.restoreSearchFocus();
-		this.lastRenderedSearchActive = normalizedSearchQuery.length > 0;
 		enginePerfLog(
 			'table.render',
 			`${Math.round(enginePerfNow() - renderStartedAt)}ms`,
@@ -669,6 +895,10 @@ export class OperonTableView extends ItemView {
 			`rows=${result.rows.length}`,
 			`stages=tasks:${Math.round(tasksResolvedAt - renderStartedAt)},scope:${Math.round(searchContextResolvedAt - tasksResolvedAt)},matcher:${Math.round(matcherResolvedAt - searchContextResolvedAt)},query:${Math.round(queryResolvedAt - matcherResolvedAt)},dom:${Math.round(enginePerfNow() - queryResolvedAt)}`,
 		);
+	}
+
+	private isPagePreviewSurface(): boolean {
+		return this.containerEl.closest('.hover-popover, .popover.hover-popover') !== null;
 	}
 
 	private scheduleRender(): void {
@@ -693,11 +923,9 @@ export class OperonTableView extends ItemView {
 	private canReuseTableShell(
 		previous: TableRenderState | null,
 		next: TableRenderState | null,
-		normalizedSearchQuery: string,
 		parentSearchUi: TableParentSearchUiState | null,
 	): boolean {
 		if (!previous || !next || !this.bodyScrollerEl || !this.bodyCanvasEl) return false;
-		if (!this.lastRenderedSearchActive || normalizedSearchQuery.length === 0) return false;
 		if (parentSearchUi?.dropdownVisible) return false;
 		if (previous.preset.id !== next.preset.id) return false;
 		if (previous.preset.groupBy !== next.preset.groupBy) return false;
@@ -710,7 +938,6 @@ export class OperonTableView extends ItemView {
 		if (previous.columnGeometry.signature !== next.columnGeometry.signature) return false;
 		if (previous.searchControlSignature !== next.searchControlSignature) return false;
 		if (previous.shellReuseSignature !== next.shellReuseSignature) return false;
-		if (previous.normalizedSearchQuery === next.normalizedSearchQuery) return false;
 		return buildTableColumnTemplate(previous.columns) === buildTableColumnTemplate(next.columns)
 			&& buildTableSearchVisibleColumnSignature(previous.columns) === buildTableSearchVisibleColumnSignature(next.columns);
 	}
@@ -752,7 +979,8 @@ export class OperonTableView extends ItemView {
 			input.searchControlSignature,
 			input.locationIndexSignature,
 			input.projectSerialSignature,
-			JSON.stringify(input.settings.tablePresets.map(preset => [preset.id, preset.name])),
+			JSON.stringify(this.getAvailableTablePresets().map(preset => [preset.id, preset.name])),
+			JSON.stringify(input.settings.presetFavorites.table),
 			buildTableRelevantSettingsSignature(input.settings),
 		].join('|');
 	}
@@ -787,35 +1015,57 @@ export class OperonTableView extends ItemView {
 		parentSearchUi: TableParentSearchUiState | null,
 	): void {
 		const settings = this.getSettings();
-		const toolbar = root.createDiv('operon-table-toolbar');
-		const titleWrap = toolbar.createDiv('operon-table-title-wrap');
-		const iconEl = titleWrap.createSpan('operon-table-title-icon');
-		setIcon(iconEl, 'table-2');
-		titleWrap.createSpan({ cls: 'operon-table-title', text: t('table', 'title') });
-		this.renderTableRelatedViewsButton(titleWrap, preset);
-		const controls = toolbar.createDiv('operon-table-toolbar-controls');
-		this.renderTablePresetPicker(controls, settings.tablePresets, preset);
-		this.renderTableGroupSortPopoverButton(controls, preset);
-		this.renderTableFilterPopoverButton(controls, preset);
-		const editButton = controls.createEl('button', {
-			cls: 'operon-table-toolbar-icon-button',
-			attr: {
-				type: 'button',
+		const tablePresets = this.getAvailableTablePresets();
+		const surfacePolicy = this.getToolbarSurfacePolicy();
+		this.cleanupToolbarLayout();
+		const composed = renderTableToolbarComposition({
+			root,
+			surfaceTitle: t('table', 'title'),
+			activePreset: preset,
+			presets: tablePresets,
+			favorites: settings.presetFavorites,
+			policy: surfacePolicy,
+			onSelectPreset: presetId => this.selectTablePreset(presetId),
+			slots: {
+				renderRelatedViews: titleWrap => this.renderTableRelatedViewsButton(titleWrap, preset),
+				renderPresetPicker: end => this.renderTablePresetPicker(end, tablePresets, preset),
+				renderGroupSort: end => this.renderTableGroupSortPopoverButton(end, preset),
+				renderFilter: end => this.renderTableFilterPopoverButton(end, preset),
+				renderSettings: end => this.renderTablePresetSettingsButton(
+					end,
+					preset,
+					surfacePolicy.settingsManagementMode,
+				),
+				renderSearch: end => this.renderTableToolbarSearch(
+					end,
+					taskCount,
+					searchQuery,
+					parentSearchUi,
+				),
+				renderExport: end => this.renderTableExportButton(end),
 			},
 		});
-		setAccessibleLabelWithoutTooltip(editButton, t('table', 'editPreset'));
-		setIcon(editButton, 'settings-2');
-		editButton.addEventListener('click', () => {
-			this.callbacks.onOpenPresetSettings?.(preset.id);
-		});
-		renderTableSearchQuickScopeButtons({
-			container: controls,
-			scope: this.searchScope,
-			settings,
-			onToggle: key => this.toggleSearchScopeKey(key),
-			onRefocus: () => this.focusTableSearchInput(),
-		});
-		const searchWrap = controls.createDiv('operon-table-search-wrap');
+		this.toolbarLayoutCleanup = composed.disposeLayout;
+	}
+
+	private getToolbarSurfacePolicy(): TableToolbarSurfacePolicy {
+		return resolveTableToolbarSurfacePolicy(
+			this.pagePreviewSurface
+				? 'page-preview'
+				: this.fileMode
+					? 'file-leaf'
+					: 'workspace-leaf',
+		);
+	}
+
+	private renderTableToolbarSearch(
+		end: HTMLElement,
+		taskCount: number,
+		searchQuery: string,
+		parentSearchUi: TableParentSearchUiState | null,
+	): void {
+		const settings = this.getSettings();
+		const searchWrap = end.createDiv('operon-table-search-wrap');
 		syncTableSearchWrapClasses(searchWrap, this.searchScope, this.parentSearchSelection, searchQuery);
 		searchWrap.classList.toggle('has-parent-search-dropdown', !!parentSearchUi?.dropdownVisible);
 		renderTableSearchIcon(searchWrap);
@@ -907,7 +1157,27 @@ export class OperonTableView extends ItemView {
 			highlightedIndex: this.parentSearchHighlightedIndex,
 			onSelect: candidate => this.selectParentSearchCandidate(parentSearchUi?.mode ?? 'pc', candidate),
 		});
-		this.renderTableExportButton(controls);
+	}
+
+	private renderTablePresetSettingsButton(
+		end: HTMLElement,
+		preset: TablePreset,
+		managementMode: 'full' | 'current-only',
+	): void {
+		const editButton = end.createEl('button', {
+			cls: 'operon-table-toolbar-icon-button',
+			attr: { type: 'button' },
+		});
+		setAccessibleLabelWithoutTooltip(editButton, t('table', 'editPreset'));
+		setIcon(editButton, 'settings-2');
+		bindOperonHoverTooltip(editButton, {
+			content: t('table', 'editPreset'),
+			taskColor: null,
+			preferredVertical: 'above',
+		});
+		editButton.addEventListener('click', () => {
+			this.callbacks.onOpenPresetSettings?.(preset.id, { managementMode });
+		});
 	}
 
 	private renderTableRelatedViewsButton(titleWrap: HTMLElement, preset: TablePreset): void {
@@ -928,7 +1198,7 @@ export class OperonTableView extends ItemView {
 		activePreset: TablePreset,
 	): void {
 		const button = container.createEl('button', {
-			cls: 'operon-table-preset-select operon-field-picker-trigger operon-table-field-picker-trigger',
+			cls: 'operon-table-toolbar-icon-button operon-table-preset-switcher-button',
 			attr: {
 				type: 'button',
 				'aria-haspopup': 'listbox',
@@ -936,38 +1206,58 @@ export class OperonTableView extends ItemView {
 			},
 		});
 		const activeLabel = getTablePresetPickerLabel(activePreset);
+		const buttonState = resolveTablePresetPickerButtonState(
+			activePreset,
+			this.getSettings().presetFavorites,
+			t('table', 'selectPreset'),
+			activeLabel,
+		);
+		button.classList.toggle('has-active-nonfavorite-preset', buttonState.hasActiveNonFavoritePreset);
 		setAccessibleLabelWithoutTooltip(button, `${t('table', 'selectPreset')}: ${activeLabel}`);
-		button.createSpan({ cls: 'operon-field-picker-trigger-label', text: activeLabel });
-		const iconEl = button.createSpan('operon-field-picker-trigger-icon');
-		setIcon(iconEl, 'chevron-down');
+		setIcon(button.createSpan('operon-table-preset-switcher-button-icon'), 'table-2');
+		bindOperonHoverTooltip(button, {
+			content: buttonState.tooltip,
+			taskColor: null,
+			preferredVertical: 'above',
+		});
 		button.addEventListener('click', event => {
 			event.preventDefault();
+			event.stopPropagation();
 			this.closeActivePicker();
 			button.setAttribute('aria-expanded', 'true');
 			let closePicker: (() => void) | null = null;
 			closePicker = showTablePresetPicker(button, {
 				value: activePreset.id,
 				presets,
-				onSelect: presetId => {
-					void this.switchPreset(presetId);
-				},
+				onSelect: presetId => this.selectTablePreset(presetId),
 				onClose: () => {
 					if (button.isConnected) button.setAttribute('aria-expanded', 'false');
 					if (closePicker && this.activePickerClose === closePicker) {
 						this.activePickerClose = null;
 					}
 				},
-				floatingHost: container.ownerDocument.body,
-				floatingScrollHost: container.ownerDocument.defaultView ?? window,
-				matchWidth: Math.max(button.getBoundingClientRect().width, 280),
+				matchWidth: 280,
 			});
 			this.activePickerClose = closePicker;
 		});
 	}
 
+	private selectTablePreset(presetId: string): void {
+		if (this.fileMode && this.callbacks.onSelectPreset) {
+			void this.callbacks.onSelectPreset(presetId);
+			return;
+		}
+		void this.switchPreset(presetId);
+	}
+
+	private cleanupToolbarLayout(): void {
+		this.toolbarLayoutCleanup?.();
+		this.toolbarLayoutCleanup = null;
+	}
+
 	private renderTableGroupSortPopoverButton(controls: HTMLElement, preset: TablePreset): void {
 		const button = controls.createEl('button', {
-			cls: 'operon-table-group-sort-button',
+			cls: 'operon-table-toolbar-icon-button operon-table-group-sort-button',
 			attr: {
 				type: 'button',
 				'aria-haspopup': 'dialog',
@@ -976,8 +1266,12 @@ export class OperonTableView extends ItemView {
 		});
 		setAccessibleLabelWithoutTooltip(button, t('table', 'groupSort'));
 		button.toggleClass('is-active', !!preset.groupBy || !!preset.subgroupBy || preset.sortRules.length > 0);
-		setIcon(button.createSpan('operon-table-group-sort-button-icon'), 'arrow-up-down');
-		button.createSpan({ cls: 'operon-table-group-sort-button-label', text: t('table', 'groupSort') });
+		setIcon(button, 'arrow-up-down');
+		bindOperonHoverTooltip(button, {
+			content: t('table', 'groupSort'),
+			taskColor: null,
+			preferredVertical: 'above',
+		});
 		button.addEventListener('click', event => {
 			event.preventDefault();
 			event.stopPropagation();
@@ -989,11 +1283,11 @@ export class OperonTableView extends ItemView {
 		this.closeActivePicker();
 		button.setAttribute('aria-expanded', 'true');
 		const editingPreset = this.getCurrentEditingPreset();
+		const floatingOptions = resolveSurfaceFloatingHostOptions(button);
 		let closePopover: (() => void) | null = null;
 		closePopover = showTableGroupSortPopover({
-			anchor: button.getBoundingClientRect(),
-			floatingHost: button.ownerDocument.body,
-			floatingScrollHost: getOwnerWindow(button),
+			anchor: snapshotFloatingRectAnchor(button),
+			...floatingOptions,
 			preset: editingPreset.id === preset.id ? editingPreset : preset,
 			settings: this.getSettings(),
 			onChange: (updatedPreset, scope) => this.savePresetGroupSortDraft(updatedPreset, scope),
@@ -1051,10 +1345,14 @@ export class OperonTableView extends ItemView {
 		const sourceFilterSetId = currentFilter?.id ?? null;
 		const ownerDocument = getOwnerDocument(host);
 		const ownerWindow = ownerDocument.defaultView ?? window;
-		const popover = ownerDocument.body.createDiv('operon-table-filter-popover');
+		const floatingOptions = resolveSurfaceFloatingHostOptions(button);
+		const popoverHost = floatingOptions.floatingHost ?? ownerDocument.body;
+		const floatingScrollHost = floatingOptions.floatingScrollHost ?? ownerWindow;
+		const popover = popoverHost.createDiv('operon-table-filter-popover');
 		const popoverId = generateTableFilterPopoverId();
 		let editor: FilterSetModal | null = null;
 		let isClosed = false;
+		let repositionFrame: number | null = null;
 		popover.id = popoverId;
 		popover.setAttribute('role', 'dialog');
 		setAccessibleLabelWithoutTooltip(popover, t('table', 'filter'));
@@ -1071,6 +1369,8 @@ export class OperonTableView extends ItemView {
 			ownerDocument.removeEventListener('pointerdown', handleDocumentPointerDown, true);
 			ownerDocument.removeEventListener('keydown', handleDocumentKeyDown, true);
 			ownerWindow.removeEventListener('resize', close);
+			floatingScrollHost.removeEventListener('scroll', scheduleReposition, true);
+			if (repositionFrame !== null) ownerWindow.cancelAnimationFrame(repositionFrame);
 			editor?.destroyInlineConditionEditor();
 			button.setAttribute('aria-expanded', 'false');
 			button.removeAttribute('aria-controls');
@@ -1087,6 +1387,14 @@ export class OperonTableView extends ItemView {
 			if (editor?.isInlineEditorFloatingTarget(event.target)) return;
 			event.preventDefault();
 			close();
+		};
+		const reposition = (): void => this.positionTableFilterPopover(popover, button);
+		const scheduleReposition = (): void => {
+			if (repositionFrame !== null) return;
+			repositionFrame = ownerWindow.requestAnimationFrame(() => {
+				repositionFrame = null;
+				if (!isClosed && popover.isConnected) reposition();
+			});
 		};
 
 		editor = new FilterSetModal(
@@ -1110,27 +1418,40 @@ export class OperonTableView extends ItemView {
 					? this.buildFilterUsageTooltip(sourceFilterSetId)
 					: undefined,
 			});
-		this.positionTableFilterPopover(popover, button);
+		reposition();
 
 		this.keepActivePickerOnRender = true;
 		this.activePickerClose = close;
 		ownerDocument.addEventListener('pointerdown', handleDocumentPointerDown, true);
 		ownerDocument.addEventListener('keydown', handleDocumentKeyDown, true);
 		ownerWindow.addEventListener('resize', close);
+		floatingScrollHost.addEventListener('scroll', scheduleReposition, true);
 	}
 
 	private positionTableFilterPopover(popover: HTMLElement, button: HTMLElement): void {
 		const rect = button.getBoundingClientRect();
 		const ownerDocument = getOwnerDocument(button);
 		const ownerWindow = ownerDocument.defaultView ?? window;
+		const floatingOptions = resolveSurfaceFloatingHostOptions(button);
+		const floatingHost = floatingOptions.floatingHost;
+		const hostRect = floatingHost?.getBoundingClientRect();
+		const hostScrollLeft = floatingHost?.scrollLeft ?? 0;
+		const hostScrollTop = floatingHost?.scrollTop ?? 0;
 		const margin = 12;
 		const gap = 6;
-		const availableWidth = Math.max(240, ownerWindow.innerWidth - margin * 2);
+		const availableWidth = Math.max(240, (floatingHost?.clientWidth ?? ownerWindow.innerWidth) - margin * 2);
+		const availableHeight = floatingHost?.clientHeight ?? ownerWindow.innerHeight;
 		const width = Math.min(760, availableWidth);
-		const left = Math.max(margin, Math.min(rect.right - width, ownerWindow.innerWidth - width - margin));
-		const top = Math.max(margin, rect.bottom + gap);
-		const maxHeight = Math.max(240, ownerWindow.innerHeight - top - margin);
+		const anchorRight = hostRect ? rect.right - hostRect.left + hostScrollLeft : rect.right;
+		const anchorBottom = hostRect ? rect.bottom - hostRect.top + hostScrollTop : rect.bottom;
+		const left = Math.max(hostScrollLeft + margin, Math.min(
+			anchorRight - width,
+			hostScrollLeft + availableWidth - width - margin,
+		));
+		const top = Math.max(hostScrollTop + margin, anchorBottom + gap);
+		const maxHeight = Math.max(240, hostScrollTop + availableHeight - top - margin);
 		popover.style.width = `${Math.round(width)}px`;
+		popover.style.position = floatingHost ? 'absolute' : 'fixed';
 		popover.style.left = `${Math.round(left)}px`;
 		popover.style.top = `${Math.round(top)}px`;
 		popover.style.maxHeight = `${Math.round(maxHeight)}px`;
@@ -1190,10 +1511,11 @@ export class OperonTableView extends ItemView {
 		try {
 			await this.callbacks.onSaveFilterSet(filterSet);
 			if (!sourceFilterSetId) {
-				await this.callbacks.onSavePresetPatch?.({
+				const ticket = this.callbacks.onSavePresetPatch?.({
 					id: preset.id,
 					filterSetId: filterSet.id,
-				});
+				}, { surfaceToken: this.surfaceToken });
+				await ticket?.flush();
 			}
 			close();
 		} catch (error) {
@@ -1207,14 +1529,22 @@ export class OperonTableView extends ItemView {
 			cls: 'operon-table-toolbar-icon-button',
 			attr: {
 				type: 'button',
+				'aria-haspopup': 'menu',
+				'aria-expanded': 'false',
 			},
 		});
 		setAccessibleLabelWithoutTooltip(button, t('table', 'exportMenuLabel'));
 		setIcon(button, 'file-down');
+		bindOperonHoverTooltip(button, {
+			content: t('table', 'exportMenuLabel'),
+			taskColor: null,
+			preferredVertical: 'above',
+		});
 		button.addEventListener('click', event => {
 			event.preventDefault();
 			const renderState = this.currentRenderState;
 			if (!renderState) return;
+			button.setAttribute('aria-expanded', 'true');
 			showTableExportMenu({
 				anchor: button,
 				event,
@@ -1300,8 +1630,11 @@ export class OperonTableView extends ItemView {
 			setActivePickerClose: close => {
 				this.activePickerClose = close;
 			},
+			floatingHostOptions: resolveSurfaceFloatingHostOptions(this.contentEl),
 			...(this.callbacks.onOpenPresetSettings
-				? { onOpenPresetSettings: this.callbacks.onOpenPresetSettings }
+				? { onOpenPresetSettings: (presetId: string) => this.callbacks.onOpenPresetSettings?.(presetId, {
+					managementMode: this.getToolbarSurfacePolicy().settingsManagementMode,
+				}) }
 				: {}),
 		});
 	}
@@ -1344,19 +1677,20 @@ export class OperonTableView extends ItemView {
 			return;
 		}
 		this.lastRenderedRangeKey = rangeKey;
-		cleanupOperonHoverTooltips(canvas);
-		canvas.empty();
 		canvas.style.width = `${renderState.tableWidthPx}px`;
 		canvas.style.minWidth = `${renderState.tableWidthPx}px`;
 		canvas.style.height = `${items.length * rowHeight}px`;
 		canvas.style.setProperty('--operon-table-group-scroll-left', `${this.bodyScrollerEl?.scrollLeft ?? this.state.scrollLeft}px`);
 		const columnTemplate = renderState.columnGeometry.columnTemplate;
+		const nextCanvasContent = canvas.ownerDocument.createElement('div');
 
 		for (let index = startIndex; index < endIndex; index++) {
 			const item = items[index];
 			if (!item) continue;
-			this.renderVirtualRow(canvas, item, index, columnTemplate, renderState);
+			this.renderVirtualRow(nextCanvasContent, item, index, columnTemplate, renderState);
 		}
+		cleanupOperonHoverTooltips(canvas);
+		canvas.replaceChildren(...Array.from(nextCanvasContent.childNodes));
 		enginePerfLog(
 			'table.visibleRows',
 			`${Math.round(enginePerfNow() - startedAt)}ms`,
@@ -1688,12 +2022,12 @@ export class OperonTableView extends ItemView {
 		}
 		if (column.key === TABLE_TASK_ICON_COLUMN_KEY) {
 			cell.addClass('operon-table-task-icon-cell');
-			renderTableTaskIconButton(cell, {
+				renderTableTaskIconButton(cell, {
 				task,
 				settings: renderState.settings,
 				workflowStatusIdentityIndex: renderState.valueResolver.workflowStatusIdentityIndex,
-				onStatusIconClick: this.callbacks.onStatusIconClick,
-				onContextualAction: this.callbacks.onContextualAction,
+					onStatusIconClick: this.callbacks.onStatusIconClick,
+					onContextualAction: this.callbacks.onContextualAction,
 				isPinned: this.callbacks.isTaskPinned,
 				hasSubtasks: this.callbacks.hasSubtasks,
 			});
@@ -1701,10 +2035,10 @@ export class OperonTableView extends ItemView {
 		}
 		if (column.key === TABLE_TASK_TYPE_COLUMN_KEY) {
 			cell.addClass('operon-table-task-type-cell');
-			renderTableTaskTypeButton(cell, {
-				task,
-				onOpenTaskEditor: this.callbacks.onOpenTaskEditor,
-				onOpenTaskSource: this.callbacks.onOpenTaskSource,
+				renderTableTaskTypeButton(cell, {
+					task,
+					onOpenTaskEditor: this.callbacks.onOpenTaskEditor,
+					onOpenTaskSource: this.callbacks.onOpenTaskSource,
 			});
 		}
 	}
@@ -1796,6 +2130,21 @@ export class OperonTableView extends ItemView {
 		const fallbackIcon = getTableTaskField(column.key, renderState.settings)?.icon ?? 'text';
 		const isTaskIconColumn = column.key === 'taskIcon';
 		const isTaskTypeColumn = column.key === 'taskType';
+		if (column.key === 'datetimeStart' || column.key === 'datetimeEnd') {
+			renderTableCompactDatetimeCell(cell, {
+				value,
+				title: fieldLabel,
+				content,
+				ariaLabel: `${fieldLabel}: ${content}`,
+				color: resolveTableIconOnlyCellAccent(column, value, {
+					task,
+					settings: renderState.settings,
+					workflowStatusIdentityIndex: renderState.valueResolver.workflowStatusIdentityIndex,
+				}),
+				focusable: options.focusable,
+			});
+			return;
+		}
 		const icon = renderTableIconOnlyCell(cell, {
 			icon: locationVisual?.icon ?? resolveTableIconOnlyCellIcon(
 				column.key,
@@ -2424,6 +2773,12 @@ export class OperonTableView extends ItemView {
 	private endMobileInlineEdit(session: TableInlineEditSession): void {
 		if (this.activeMobileInlineEdit !== session) return;
 		this.activeMobileInlineEdit = null;
+		if (this.pendingMobileFullRender) {
+			this.pendingMobileFullRender = false;
+			this.pendingMobileTextInputRender = false;
+			this.scheduleRender();
+			return;
+		}
 		this.flushMobileDeferredVisibleRows();
 	}
 
@@ -2625,12 +2980,23 @@ export class OperonTableView extends ItemView {
 
 	private getCurrentPreset(): TablePreset | null {
 		const settings = this.getSettings();
+		if (this.fileMode) return this.filePreset;
 		const state = this.ensureState();
 		const requestedPresetId = state.presetId ?? settings.tableDefaultPresetId;
-		return settings.tablePresets.find(preset => preset.id === requestedPresetId)
-			?? settings.tablePresets.find(preset => preset.id === settings.tableDefaultPresetId)
-			?? settings.tablePresets[0]
+		const tablePresets = this.getAvailableTablePresets();
+		return (requestedPresetId ? this.resolveAvailableTablePreset(requestedPresetId) : null)
+			?? (settings.tableDefaultPresetId ? this.resolveAvailableTablePreset(settings.tableDefaultPresetId) : null)
+			?? tablePresets[0]
 			?? null;
+	}
+
+	private resolveAvailableTablePreset(presetId: string): TablePreset | null {
+		if (this.callbacks.resolveTablePreset) return this.callbacks.resolveTablePreset(presetId);
+		return this.getSettings().tablePresets.find(preset => preset.id === presetId) ?? null;
+	}
+
+	private getAvailableTablePresets(): readonly TablePreset[] {
+		return this.callbacks.getTablePresets?.() ?? this.getSettings().tablePresets;
 	}
 
 	private getCurrentEditingPreset(): TablePreset {
@@ -3082,9 +3448,15 @@ export class OperonTableView extends ItemView {
 
 	private savePresetPatch(patch: TablePresetPatch, context: string): void {
 		if (!this.callbacks.onSavePresetPatch) return;
-		this.callbacks.onSavePresetPatch(patch).catch(error => {
+		let ticket: TablePresetRegistryPatchControl;
+		try {
+			ticket = this.callbacks.onSavePresetPatch(patch, { surfaceToken: this.surfaceToken });
+		} catch (error) {
 			console.error(context, error);
-			new Notice(t('table', 'presetActionFailed'));
+			return;
+		}
+		void ticket.settled.catch(error => {
+			console.error(context, error);
 		});
 	}
 
@@ -3181,6 +3553,7 @@ export class OperonTableView extends ItemView {
 	}
 
 	private scheduleLeafStatePersistence(): void {
+		if (this.pagePreviewSurface || this.isPagePreviewSurface()) return;
 		if (this.persistStateTimer !== null) {
 			window.clearTimeout(this.persistStateTimer);
 		}
@@ -3249,18 +3622,34 @@ export class OperonTableView extends ItemView {
 			};
 		}
 		if (!this.callbacks.onSavePresetPatch) return;
-		this.callbacks.onSavePresetPatch({
-			id: currentPreset.id,
-			search,
-		}).then(() => {
+		let ticket: TablePresetRegistryPatchControl;
+		try {
+			ticket = this.callbacks.onSavePresetPatch({
+				id: currentPreset.id,
+				search,
+			}, { surfaceToken: this.surfaceToken });
+		} catch (error) {
+			console.error('Operon: failed to queue table preset search scope', error);
+			this.recoverTablePresetSearchStateAfterFailedSave(signature);
+			return;
+		}
+		const lifecycleEpoch = this.lifecycleEpoch;
+		void ticket.settled.then(() => {
+			if (!this.isCurrentPresetLifecycle(lifecycleEpoch, currentPreset.id)) return;
 			if (this.pendingPresetSearchSignature === signature) {
 				this.pendingPresetSearchSignature = null;
 			}
 		}).catch(error => {
 			console.error('Operon: failed to save table preset search scope', error);
+			if (!this.isCurrentPresetLifecycle(lifecycleEpoch, currentPreset.id)) return;
 			this.recoverTablePresetSearchStateAfterFailedSave(signature);
-			new Notice(t('table', 'presetActionFailed'));
 		});
+	}
+
+	private isCurrentPresetLifecycle(lifecycleEpoch: number, presetId: string): boolean {
+		return lifecycleEpoch === this.lifecycleEpoch
+			&& this.containerEl.isConnected
+			&& this.getCurrentPreset()?.id === presetId;
 	}
 
 	private buildPresetSearchSignature(presetId: string, search: TablePresetSearchState): string {
@@ -3301,11 +3690,15 @@ export class OperonTableView extends ItemView {
 
 	private normalizeState(raw: Partial<TableLeafState> | null | undefined): TableLeafState {
 		const settings = this.getSettings();
-		const availablePresetIds = settings.tablePresets.map(preset => preset.id);
+		const tablePresets = this.getAvailableTablePresets();
+		const availablePresetIds = this.fileMode
+			? this.filePreset ? [this.filePreset.id] : []
+			: tablePresets.map(preset => preset.id);
+		const knownPresetIds = this.fileMode ? availablePresetIds : settings.tablePresetOrderIds;
 		const fallbackPresetId = settings.tableDefaultPresetId && availablePresetIds.includes(settings.tableDefaultPresetId)
 			? settings.tableDefaultPresetId
 			: availablePresetIds[0] ?? null;
-		const requestedPresetId = typeof raw?.presetId === 'string' && availablePresetIds.includes(raw.presetId)
+		const requestedPresetId = typeof raw?.presetId === 'string' && knownPresetIds.includes(raw.presetId)
 			? raw.presetId
 			: fallbackPresetId;
 		return {
@@ -3324,7 +3717,7 @@ export class OperonTableView extends ItemView {
 	}
 
 	private syncLeafTitle(): void {
-		const title = this.getCurrentPreset()?.name ?? t('table', 'title');
+		const title = this.getCurrentPreset()?.name ?? this.file?.basename ?? t('table', 'title');
 		const leafWithHeader = this.leaf as WorkspaceLeaf & {
 			tabHeaderInnerTitleEl?: HTMLElement;
 			tabHeaderInnerIconEl?: HTMLElement;

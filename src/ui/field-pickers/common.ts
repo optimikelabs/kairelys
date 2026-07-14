@@ -224,6 +224,20 @@ function resolveRect(anchor: HTMLElement | DOMRect): DOMRect {
 	return anchor as DOMRect;
 }
 
+export function resolveSurfaceFloatingHostOptions(anchorEl: HTMLElement): FloatingHostOptions {
+	const pagePreviewHost = asHTMLElement(anchorEl.closest('.hover-popover, .popover.hover-popover'), anchorEl);
+	if (!pagePreviewHost) return {};
+	const scrollHost = asHTMLElement(
+		anchorEl.closest('.popover-content, .view-content, .markdown-preview-view'),
+		anchorEl,
+	) ?? pagePreviewHost;
+	return {
+		floatingHost: pagePreviewHost,
+		floatingScrollHost: scrollHost,
+		constrainToFloatingHost: true,
+	};
+}
+
 function resolveHostContext(anchor: HTMLElement | DOMRect, options: FloatingHostOptions = {}): FloatingHostContext {
 	if (options.floatingHost) {
 		return {
@@ -246,6 +260,14 @@ function resolveHostContext(anchor: HTMLElement | DOMRect, options: FloatingHost
 		return { host: getActiveDocument().body, constrainToHost: false, scrollHost: getActiveWindow() };
 	}
 	const ownerWindow = getOwnerWindow(anchorEl);
+	const surfaceOptions = resolveSurfaceFloatingHostOptions(anchorEl);
+	if (surfaceOptions.floatingHost) {
+		return {
+			host: surfaceOptions.floatingHost,
+			constrainToHost: true,
+			scrollHost: surfaceOptions.floatingScrollHost ?? ownerWindow,
+		};
+	}
 
 	const taskEditorHost = asHTMLElement(anchorEl.closest(
 		'.operon-task-editor-shell',
@@ -499,7 +521,10 @@ export function createFloatingPanel(
 			positionFloatingElement(panel, anchor, positionOptions);
 		});
 	};
-	const sizeObserver = new ResizeObserver(() => schedulePosition());
+	const ResizeObserverCtor = (hostWindow as Window & { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
+	const sizeObserver = ResizeObserverCtor
+		? new ResizeObserverCtor(() => schedulePosition())
+		: null;
 	const getRetainedFocusInput = (): HTMLElement | null => {
 		if (retainedFocusInput?.isConnected && panel.contains(retainedFocusInput)) {
 			return retainedFocusInput;
@@ -545,7 +570,7 @@ export function createFloatingPanel(
 			hostWindow.cancelAnimationFrame(focusRetentionRafId);
 			focusRetentionRafId = 0;
 		}
-		sizeObserver.disconnect();
+		sizeObserver?.disconnect();
 		panel.remove();
 		activeFloatingPanels.delete(record);
 		panel.removeEventListener('focusin', onPanelFocusIn);
@@ -576,7 +601,7 @@ export function createFloatingPanel(
 	};
 
 	const onKeyDown = (event: KeyboardEvent) => {
-		if (event.key === 'Escape' && isTopMostFloatingPanel(record)) requestClose('escape');
+		if (event.key === 'Escape' && !event.isComposing && isTopMostFloatingPanel(record)) requestClose('escape');
 	};
 
 	onHostWindowResize = () => {
@@ -610,7 +635,7 @@ export function createFloatingPanel(
 			panel.removeClass('is-opening');
 		}
 		if (options.repositionOnPanelResize !== false) {
-			sizeObserver.observe(panel);
+			sizeObserver?.observe(panel);
 		}
 		hostDocument.addEventListener('mousedown', onOutside, true);
 		hostDocument.addEventListener('keydown', onKeyDown, true);

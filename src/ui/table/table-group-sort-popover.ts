@@ -22,6 +22,7 @@ interface TableGroupSortPopoverOptions {
 	anchor: HTMLElement | DOMRect;
 	floatingHost?: HTMLElement;
 	floatingScrollHost?: HTMLElement | Window;
+	constrainToFloatingHost?: boolean;
 	preset: TablePreset;
 	settings: OperonSettings;
 	onChange: (preset: TablePreset, scope: TableGroupSortPresetPatchScope) => void;
@@ -43,6 +44,7 @@ export function showTableGroupSortPopover(options: TableGroupSortPopoverOptions)
 			focusInputSelector: '.operon-table-group-sort-field-select',
 			floatingHost: options.floatingHost,
 			floatingScrollHost: options.floatingScrollHost,
+			constrainToFloatingHost: options.constrainToFloatingHost,
 			repositionOnScroll: true,
 			repositionOnWindowResize: true,
 			shouldClose: reason => reason !== 'window-blur',

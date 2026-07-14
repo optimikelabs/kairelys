@@ -44,10 +44,12 @@ import {
 	DEFAULT_TABLE_EMBED_VISIBLE_ROWS,
 	DEFAULT_TABLE_PRESET_ID,
 	type TableEmbedVisibleRows,
+	type TablePresetFileBinding,
 	TablePreset,
 	cloneDefaultTablePresets,
 	normalizeTableEmbedVisibleRows,
 	normalizeTablePresets,
+	isSafeTablePresetId,
 } from './table';
 import {
 	CALENDAR_PRESET_TASK_COLOR_SOURCES,
@@ -75,8 +77,13 @@ import {
 	normalizeProjectSerialPrefix,
 	normalizeProjectSerialScopes,
 } from '../core/project-serials';
+import {
+	createDefaultPresetFavorites,
+	normalizePresetFavorites,
+	type PresetFavorites,
+} from '../core/preset-favorites';
 
-export const CURRENT_SETTINGS_VERSION = 103;
+export const CURRENT_SETTINGS_VERSION = 105;
 export const CURRENT_TASK_STATS_BACKFILL_VERSION = 2;
 export const SUPPORTED_LANGUAGE_OPTIONS = ['auto', 'en', 'tr', 'de', 'fr', 'es', 'zh-CN', 'zh-TW', 'ja', 'ru'] as const;
 export type OperonLanguage = typeof SUPPORTED_LANGUAGE_OPTIONS[number];
@@ -1236,6 +1243,8 @@ export interface OperonSettings {
 
 	/** Global presentation: expand parent tasks to reveal subtasks in all filter surfaces. */
 	filterShowSubtasks: boolean;
+	/** Global presentation: auto-expand each visible normal-filter subtask tree at or below this limit. */
+	filterSubtaskAutoExpandLimit: DynamicFileTaskFilterSubtaskAutoExpandLimit;
 	/** Global presentation: when showing subtasks, hide non-open ones under each parent. */
 	filterShowOnlyOpenSubtasks: boolean;
 	/** Automatically show the reserved dynamic filter inside YAML file task notes. */
@@ -1449,6 +1458,7 @@ export interface OperonSettings {
 	rightRailMaxTabs: number;
 	leftRailViewOrder: string[];
 	rightRailViewOrder: string[];
+	presetFavorites: PresetFavorites;
 
 	// Calendar
 	calendarPresets: CalendarPreset[];
@@ -1522,6 +1532,10 @@ export interface OperonSettings {
 
 	// Table
 	tablePresets: TablePreset[];
+	tablePresetOrderIds: string[];
+	tablePresetFileBindings: TablePresetFileBinding[];
+	tablePresetFileMigrationVersion: number;
+	tablePresetFileMigrationFinalizedVersion: number;
 	tableDefaultPresetId: string | null;
 	tableEmbedVisibleRows: TableEmbedVisibleRows;
 	tableShowLineNumbers: boolean;
@@ -1751,6 +1765,7 @@ export const DEFAULT_SETTINGS: OperonSettings = {
 	filterSets: cloneDefaultFilterSets(),
 
 	filterShowSubtasks: true,
+	filterSubtaskAutoExpandLimit: 10,
 	filterShowOnlyOpenSubtasks: false,
 	dynamicFileTaskFilterEnabled: true,
 	dynamicFileTaskFilterPlacement: 'body-top',
@@ -1883,6 +1898,11 @@ export const DEFAULT_SETTINGS: OperonSettings = {
 	rightRailMaxTabs: 5,
 	leftRailViewOrder: [],
 	rightRailViewOrder: [],
+	presetFavorites: createDefaultPresetFavorites({
+		table: DEFAULT_TABLE_PRESET_ID,
+		calendar: DEFAULT_CALENDAR_DEFAULT_PRESET_ID,
+		kanban: DEFAULT_KANBAN_DEFAULT_PRESET_ID,
+	}),
 
 	calendarPresets: cloneDefaultCalendarPresets(),
 	calendarDefaultPresetId: DEFAULT_CALENDAR_DEFAULT_PRESET_ID,
@@ -1953,6 +1973,10 @@ export const DEFAULT_SETTINGS: OperonSettings = {
 	kanbanMobileHorizontalStatusSnapEnabled: true,
 
 	tablePresets: cloneDefaultTablePresets(),
+	tablePresetOrderIds: [DEFAULT_TABLE_PRESET_ID],
+	tablePresetFileBindings: [],
+	tablePresetFileMigrationVersion: 0,
+	tablePresetFileMigrationFinalizedVersion: 0,
 	tableDefaultPresetId: DEFAULT_TABLE_PRESET_ID,
 	tableEmbedVisibleRows: DEFAULT_TABLE_EMBED_VISIBLE_ROWS,
 	tableShowLineNumbers: true,
@@ -2083,6 +2107,39 @@ function normalizeOptionalString(value: unknown): string | undefined {
 	if (typeof value !== 'string') return undefined;
 	const trimmed = value.trim();
 	return trimmed || undefined;
+}
+
+function normalizeTablePresetFileBindings(value: unknown): TablePresetFileBinding[] {
+	if (!Array.isArray(value)) return [];
+	const bindings: TablePresetFileBinding[] = [];
+	for (const entry of value) {
+		if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+		const record = entry as Record<string, unknown>;
+		const id = typeof record.id === 'string' ? record.id.trim() : '';
+		const path = typeof record.path === 'string'
+			? record.path.trim().replace(/\\/gu, '/').replace(/^\/+|\/+$/gu, '')
+			: '';
+		const pathKey = path.toLocaleLowerCase('en-US');
+		if (!isSafeTablePresetId(id) || !pathKey.endsWith('.table')) continue;
+		bindings.push({ id, path });
+	}
+	return bindings;
+}
+
+function normalizeTablePresetOrderIds(value: unknown, tablePresets: readonly TablePreset[]): string[] {
+	const orderIds: string[] = [];
+	const seen = new Set<string>();
+	const append = (value: unknown): void => {
+		const id = typeof value === 'string' ? value.trim() : '';
+		if (!isSafeTablePresetId(id) || seen.has(id)) return;
+		seen.add(id);
+		orderIds.push(id);
+	};
+	if (Array.isArray(value)) {
+		for (const entry of value) append(entry);
+	}
+	for (const preset of tablePresets) append(preset.id);
+	return orderIds;
 }
 
 function normalizeFolderPath(value: unknown): string | null {
@@ -3233,6 +3290,13 @@ export function migrateSettings(raw: unknown): OperonSettings {
 		: src.dynamicFileTaskFilterShowSubtasks === false
 			? 0
 			: DEFAULT_SETTINGS.dynamicFileTaskFilterSubtaskAutoExpandLimit;
+	out.filterSubtaskAutoExpandLimit = typeof src.filterSubtaskAutoExpandLimit === 'number'
+		? normalizeAllowedNumber(
+			Math.round(src.filterSubtaskAutoExpandLimit),
+			DYNAMIC_FILE_TASK_FILTER_SUBTASK_AUTO_EXPAND_LIMIT_OPTIONS,
+			DEFAULT_SETTINGS.filterSubtaskAutoExpandLimit,
+		) as DynamicFileTaskFilterSubtaskAutoExpandLimit
+		: DEFAULT_SETTINGS.filterSubtaskAutoExpandLimit;
 	out.dynamicSubtasksFilterSubtaskAutoExpandLimit = typeof src.dynamicSubtasksFilterSubtaskAutoExpandLimit === 'number'
 		? normalizeAllowedNumber(
 			Math.round(src.dynamicSubtasksFilterSubtaskAutoExpandLimit),
@@ -3748,13 +3812,32 @@ export function migrateSettings(raw: unknown): OperonSettings {
 	if (SPECIAL_DYNAMIC_FILTER_SET_IDS.has(out.leftRailDefaultFilterViewId ?? '')) {
 		out.leftRailDefaultFilterViewId = out.filterSets.find(filterSet => !SPECIAL_DYNAMIC_FILTER_SET_IDS.has(filterSet.id))?.id ?? null;
 	}
-	out.tablePresets = normalizeTablePresets(src.tablePresets, {
-		availableFilterSetIds: out.filterSets.map(filterSet => filterSet.id),
-	});
+	out.tablePresetFileBindings = normalizeTablePresetFileBindings(src.tablePresetFileBindings);
+	out.tablePresetFileMigrationVersion = typeof src.tablePresetFileMigrationVersion === 'number'
+		&& Number.isFinite(src.tablePresetFileMigrationVersion)
+		? Math.max(0, Math.floor(src.tablePresetFileMigrationVersion))
+		: 0;
+	out.tablePresetFileMigrationFinalizedVersion = typeof src.tablePresetFileMigrationFinalizedVersion === 'number'
+		&& Number.isFinite(src.tablePresetFileMigrationFinalizedVersion)
+		? Math.max(0, Math.floor(src.tablePresetFileMigrationFinalizedVersion))
+		: 0;
+	if (out.tablePresetFileMigrationFinalizedVersion >= 1) {
+		out.tablePresetFileMigrationVersion = Math.max(1, out.tablePresetFileMigrationVersion);
+	}
+	const allowEmptyLegacyTablePresets = (out.tablePresetFileBindings.length > 0
+		|| out.tablePresetFileMigrationVersion >= 1)
+		&& Array.isArray(src.tablePresets)
+		&& src.tablePresets.length === 0;
+	out.tablePresets = allowEmptyLegacyTablePresets
+		? []
+		: normalizeTablePresets(src.tablePresets, {
+			availableFilterSetIds: out.filterSets.map(filterSet => filterSet.id),
+		});
+	out.tablePresetOrderIds = normalizeTablePresetOrderIds(src.tablePresetOrderIds, out.tablePresets);
 	const requestedTableDefaultPresetId = typeof src.tableDefaultPresetId === 'string' && src.tableDefaultPresetId.trim()
 		? src.tableDefaultPresetId
 		: null;
-	out.tableDefaultPresetId = requestedTableDefaultPresetId && out.tablePresets.some(preset => preset.id === requestedTableDefaultPresetId)
+	out.tableDefaultPresetId = requestedTableDefaultPresetId && out.tablePresetOrderIds.includes(requestedTableDefaultPresetId)
 		? requestedTableDefaultPresetId
 		: out.tablePresets.find(preset => preset.id === DEFAULT_TABLE_PRESET_ID)?.id
 			?? out.tablePresets[0]?.id
@@ -3769,6 +3852,14 @@ export function migrateSettings(raw: unknown): OperonSettings {
 		? src.tableShowTaskTypeIcon
 		: DEFAULT_SETTINGS.tableShowTaskTypeIcon;
 	out.tableEmbedVisibleRows = normalizeTableEmbedVisibleRows(src.tableEmbedVisibleRows, DEFAULT_SETTINGS.tableEmbedVisibleRows);
+	out.presetFavorites = normalizePresetFavorites(
+		src.presetFavorites,
+		createDefaultPresetFavorites({
+			table: out.tableDefaultPresetId,
+			calendar: out.calendarDefaultPresetId,
+			kanban: out.kanbanDefaultPresetId,
+		}),
+	);
 
 	if (!Array.isArray(src.pipelines) || src.pipelines.length === 0) {
 		out.pipelines = cloneDefaultPipelines();

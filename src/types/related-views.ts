@@ -21,6 +21,13 @@ export type RelatedViewCreateTarget =
 	| { type: 'kanban'; variant: 'defaultPipeline'; filterSetId: string | null; presetName?: string }
 	| { type: 'table'; variant: 'defaultTable'; filterSetId: string | null; presetName?: string };
 
+export type RelatedViewFilteredCreateTarget = RelatedViewCreateTarget & { filterSetId: string };
+export type RelatedViewUnfilteredCreateTarget = RelatedViewCreateTarget & { filterSetId: null; presetName?: never };
+export type RelatedViewCreateGroup =
+	| { kind: 'with-filter'; targets: RelatedViewFilteredCreateTarget[] }
+	| { kind: 'without-filter'; targets: RelatedViewUnfilteredCreateTarget[] };
+export type RelatedViewCreateGroupKind = RelatedViewCreateGroup['kind'];
+
 export interface RelatedViewOpenTarget {
 	type: RelatedViewType;
 	presetId: string;

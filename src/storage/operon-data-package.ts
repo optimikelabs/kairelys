@@ -2,7 +2,7 @@ import type { KanbanManualOrderBoard } from './kanban-order-store';
 import type { CalendarPresetStoreSettings } from './calendar-preset-store';
 import type { ContextualMenuStoreSettings } from './contextual-menu-store';
 import type { KanbanPresetStoreSettings } from './kanban-preset-store';
-import type { TablePresetPackageSettings, TablePresetStoreSettings } from '../types/table';
+import type { TablePreset, TablePresetPackageSettings, TablePresetStoreSettings } from '../types/table';
 import type { PipelineStoreSettings } from './pipeline-store';
 import type { PriorityStoreSettings } from './priority-store';
 import type { TaskAutomationPolicyStoreSettings } from './task-automation-policy-store';
@@ -19,6 +19,7 @@ import {
 	normalizeKeyMappingCollection,
 } from '../types/settings';
 import { CANONICAL_KEYS } from '../types/keys';
+import type { PresetFavorites } from '../core/preset-favorites';
 
 export const OPERON_DATA_PACKAGE_SCHEMA_VERSION = 2;
 export const OPERON_PINNED_TASKS_PACKAGE_VERSION = 1;
@@ -51,6 +52,7 @@ export type OperonDataPackageOwnedSettingsKey =
 	| keyof TaskUiPreferenceStoreSettings
 	| keyof TaskCreationProfileStoreSettings
 	| keyof WorkspaceTweaksPackageSettings
+	| 'presetFavorites'
 	| keyof TaskAutomationPolicyStoreSettings;
 
 export const OPERON_DATA_PACKAGE_OWNED_SETTINGS_KEYS = [
@@ -66,11 +68,16 @@ export const OPERON_DATA_PACKAGE_OWNED_SETTINGS_KEYS = [
 	'kanbanPresets',
 	'kanbanDefaultPresetId',
 	'tablePresets',
+	'tablePresetOrderIds',
+	'tablePresetFileBindings',
+	'tablePresetFileMigrationVersion',
+	'tablePresetFileMigrationFinalizedVersion',
 	'tableDefaultPresetId',
 	'tableEmbedVisibleRows',
 	'tableShowLineNumbers',
 	'tableShowTaskIcon',
 	'tableShowTaskTypeIcon',
+	'presetFavorites',
 	'contextualMenuActionAllowlist',
 	'contextualMenuSurfaceActionMatrix',
 	'contextualMenuOpenDelayMs',
@@ -242,6 +249,7 @@ export interface OperonUiPackageV1 {
 	taskUiPreferences: VersionedStoreSlice<TaskUiPreferenceStoreSettings>;
 	taskCreationProfile: VersionedStoreSlice<TaskCreationProfileStoreSettings>;
 	workspaceTweaks: VersionedStoreSlice<WorkspaceTweaksPackageSettings>;
+	presetFavorites?: VersionedStoreSlice<PresetFavorites>;
 }
 
 export interface OperonAutomationPackageV1 {
@@ -289,6 +297,18 @@ export function composeOperonSettingsFromDataPackage(
 		.map(filterId => dataPackage.views.filters.itemsById[filterId])
 		.map(filterSet => normalizeFilterSet(filterSet))
 		.filter((filterSet): filterSet is FilterSet => !!filterSet);
+	const tablePresetPackage = dataPackage.views.tablePresets;
+	const hasFileBackedTablePresetAuthority = readArray(tablePresetPackage?.fileBindings, []).length > 0
+		|| readNumber(tablePresetPackage?.fileMigrationVersion, 0) >= 1;
+	const tablePresets = readArray<TablePreset>(
+		tablePresetPackage?.tablePresets,
+		hasFileBackedTablePresetAuthority
+			? []
+			: readArray(packageSettings.tablePresets, defaults.tablePresets),
+	);
+	const legacyTablePresetOrderIds = dataPackage.views.tablePresets?.tablePresets
+		? tablePresets.map(preset => preset.id)
+		: readArray(packageSettings.tablePresetOrderIds, defaults.tablePresetOrderIds);
 	return migrateSettings({
 		...defaults,
 		...packageSettings,
@@ -308,9 +328,22 @@ export function composeOperonSettingsFromDataPackage(
 			dataPackage.views.kanbanPresets.kanbanDefaultPresetId,
 			defaults.kanbanDefaultPresetId,
 		),
-		tablePresets: readArray(
-			dataPackage.views.tablePresets?.tablePresets,
-			readArray(packageSettings.tablePresets, defaults.tablePresets),
+		tablePresets,
+		tablePresetOrderIds: readArray(
+			dataPackage.views.tablePresets?.presetIds,
+			legacyTablePresetOrderIds,
+		),
+		tablePresetFileBindings: readArray(
+			dataPackage.views.tablePresets?.fileBindings,
+			defaults.tablePresetFileBindings,
+		),
+		tablePresetFileMigrationVersion: readNumber(
+			dataPackage.views.tablePresets?.fileMigrationVersion,
+			defaults.tablePresetFileMigrationVersion,
+		),
+		tablePresetFileMigrationFinalizedVersion: readNumber(
+			dataPackage.views.tablePresets?.fileMigrationFinalizedVersion,
+			defaults.tablePresetFileMigrationFinalizedVersion,
 		),
 		tableDefaultPresetId: readNullableString(
 			dataPackage.views.tablePresets?.tableDefaultPresetId,
@@ -362,6 +395,9 @@ export function composeOperonSettingsFromDataPackage(
 		...cloneUnknown<Partial<OperonSettings>>(dataPackage.ui.taskUiPreferences),
 		...cloneUnknown<Partial<OperonSettings>>(dataPackage.ui.taskCreationProfile),
 		...cloneUnknown<Partial<OperonSettings>>(dataPackage.ui.workspaceTweaks),
+		presetFavorites: isRecord(dataPackage.ui.presetFavorites)
+			? cloneUnknown(dataPackage.ui.presetFavorites)
+			: undefined,
 		...cloneUnknown<Partial<OperonSettings>>(dataPackage.automation.taskAutomationPolicy),
 		externalCalendars: readArray(dataPackage.integrations.externalCalendarSources.sources, defaults.externalCalendars),
 	});
@@ -492,6 +528,10 @@ export function buildOperonDataPackageFromSettings(
 				workspaceTweaksPropertiesExcludedFolders: cloneUnknown(normalized.workspaceTweaksPropertiesExcludedFolders),
 				workspaceTweaksCompactSidebarTabIcons: normalized.workspaceTweaksCompactSidebarTabIcons,
 			},
+			presetFavorites: {
+				version: 1,
+				...cloneUnknown<PresetFavorites>(normalized.presetFavorites),
+			},
 		},
 		automation: {
 			taskAutomationPolicy: {
@@ -525,12 +565,16 @@ export function mergeOperonDataPackage(
 	existing: Partial<OperonDataPackageV1> | null | undefined,
 	fallback: OperonDataPackageV1,
 ): OperonDataPackageV1 {
+	const ui = mergeUiPackage(existing?.ui, fallback.ui, existing?.settings);
+	if (existing && (!isRecord(existing.ui) || !isRecord(existing.ui.presetFavorites))) {
+		delete ui.presetFavorites;
+	}
 	return {
 		schemaVersion: OPERON_DATA_PACKAGE_SCHEMA_VERSION,
 		settings: cloneExistingDomain(existing?.settings, fallback.settings),
 		taxonomy: mergeTaxonomyPackage(existing?.taxonomy, fallback.taxonomy),
 		views: cloneExistingDomain(existing?.views, fallback.views, isViewsDomain),
-		ui: mergeUiPackage(existing?.ui, fallback.ui, existing?.settings),
+		ui,
 		automation: cloneExistingDomain(existing?.automation, fallback.automation, isAutomationDomain),
 		integrations: cloneExistingDomain(existing?.integrations, fallback.integrations, isIntegrationsDomain),
 		state: buildStatePackage(existing?.state, fallback.state),
@@ -808,6 +852,9 @@ function mergeUiPackage(
 		workspaceTweaks: isRecord(existing.workspaceTweaks)
 			? cloneUnknown(existing.workspaceTweaks)
 			: fallbackPackage.workspaceTweaks,
+		presetFavorites: isRecord(existing.presetFavorites)
+			? cloneUnknown(existing.presetFavorites)
+			: undefined,
 	};
 }
 

@@ -102,6 +102,7 @@ export class KanbanOrderStore {
 	}
 
 	async removeBoard(presetId: string): Promise<void> {
+		if (!Object.prototype.hasOwnProperty.call(this.boards, presetId)) return;
 		delete this.boards[presetId];
 		await this.persist();
 	}

@@ -4,7 +4,7 @@ import type { OperonSettings } from '../../types/settings';
 import type { TableSummaryFunction } from '../../types/table';
 import { t } from '../../core/i18n';
 import { setAccessibleLabelWithoutTooltip } from '../accessibility-label';
-import { createFloatingPanel, requestFloatingInputFocus } from '../field-pickers/common';
+import { createFloatingPanel, requestFloatingInputFocus, type FloatingHostOptions } from '../field-pickers/common';
 import { getTableTaskFieldLabel } from './table-field-catalog';
 import {
 	createTableSummaryPickerValueCache,
@@ -21,7 +21,7 @@ type TableSummaryPickerSettings = Pick<OperonSettings, 'keyMappings' | 'pipeline
 // first synchronous pass, short enough to keep huge vaults responsive via chunking.
 const TABLE_SUMMARY_PICKER_EVAL_BUDGET_MS = 8;
 
-export interface TableSummaryPickerOptions {
+export interface TableSummaryPickerOptions extends FloatingHostOptions {
 	anchor: HTMLElement;
 	fieldKey: string;
 	rows: readonly IndexedTask[];
@@ -66,6 +66,9 @@ export function showTableSummaryPicker(options: TableSummaryPickerOptions): () =
 		},
 		{
 			focusInputSelector: '.operon-table-summary-picker-input',
+			floatingHost: options.floatingHost,
+			floatingScrollHost: options.floatingScrollHost,
+			constrainToFloatingHost: options.constrainToFloatingHost,
 			repositionOnScroll: true,
 			repositionOnWindowResize: true,
 		},

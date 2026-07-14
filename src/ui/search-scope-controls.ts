@@ -205,32 +205,6 @@ export function renderSearchScopePopover(options: {
 	});
 }
 
-export function renderSearchScopeButtonStrip(options: {
-	container: HTMLElement;
-	scope: TaskSearchBoxScopeState;
-	settings: Pick<OperonSettings, 'taskFinderShortcuts' | 'taskFinderRecentModifiedDays'>;
-	keys: readonly TaskFinderDefaultScopeKey[];
-	buttonClassName: string;
-	onToggle: (key: TaskFinderDefaultScopeKey) => void;
-	onRefocus: () => void;
-	disabledKeys?: ReadonlySet<TaskFinderDefaultScopeKey>;
-	unavailableTooltip: string;
-}): void {
-	const disabledKeys = options.disabledKeys ?? new Set<TaskFinderDefaultScopeKey>();
-	for (const key of options.keys) {
-		renderSearchScopeButton(options.container, {
-			key,
-			scope: options.scope,
-			settings: options.settings,
-			buttonClassName: options.buttonClassName,
-			isDisabled: disabledKeys.has(key),
-			unavailableTooltip: options.unavailableTooltip,
-			onToggle: options.onToggle,
-			onRefocus: options.onRefocus,
-		});
-	}
-}
-
 function renderSearchScopeButton(container: HTMLElement, options: {
 	key: TaskFinderDefaultScopeKey;
 	scope: TaskSearchBoxScopeState;

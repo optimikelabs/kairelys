@@ -98,6 +98,8 @@ import {
 	type TaskProgressDescendantSummary,
 	type TaskProgressTrack,
 } from '../task-progress-tracks';
+import { getKanbanPresetPickerLabel, showKanbanPresetPicker } from './kanban-preset-picker';
+import { getFavoriteKanbanPresets, resolveKanbanPresetPickerButtonState } from './kanban-preset-visibility';
 import {
 	applyTaskSearchBoxShortcutCommand,
 	cloneTaskSearchBoxScopeState,
@@ -128,6 +130,10 @@ import {
 import {
 	estimateKanbanCellPlaceholderHeightPx,
 	isKanbanScrollRestoreClamped,
+	KanbanCellScrollAnchor,
+	resolveKanbanCellAnchorScrollTop,
+	resolveKanbanCellInitialRenderLimit,
+	resolveKanbanCellScrollRestore,
 	shouldMaterializeKanbanCell,
 } from '../../systems/kanban-cell-materialization';
 
@@ -151,6 +157,8 @@ const KANBAN_MOBILE_CARD_SCROLL_SNAP_SETTLE_MS = 420;
 const KANBAN_DROP_SCROLL_ANCHOR_SINGLE_RENDER_PASSES = 1;
 const KANBAN_DROP_SCROLL_ANCHOR_DOUBLE_RENDER_PASSES = 2;
 const KANBAN_DROP_SCROLL_ANCHOR_TTL_MS = 2000;
+const KANBAN_CELL_SCROLL_RESTORE_TTL_MS = 2000;
+const KANBAN_CELL_SCROLL_ANCHOR_MAX_CARDS = 4;
 const KANBAN_SEARCH_BOX_DISABLED_KEYS = new Set<TaskFinderDefaultScopeKey>();
 const KANBAN_LANE_COLUMN_MIN_WIDTH_PX = 96;
 const KANBAN_SEARCH_REFRESH_DEBOUNCE_MS = 180;
@@ -374,6 +382,7 @@ export class KanbanView extends ItemView {
 	private boardLayoutRefreshFrame: number | null = null;
 	private boardLayoutRefreshCleanup: (() => void) | null = null;
 	private toolbarLayoutCleanup: (() => void) | null = null;
+	private activePresetPickerClose: (() => void) | null = null;
 	private kanbanSearchScopePopoverCleanup: (() => void) | null = null;
 	private kanbanMobileLayoutCleanup: (() => void) | null = null;
 	private kanbanLazyObservers: IntersectionObserver[] = [];
@@ -391,6 +400,8 @@ export class KanbanView extends ItemView {
 	private optimisticMoves = new Map<string, KanbanOptimisticMove>();
 	private lastBoardScrollState: KanbanScrollState = { left: 0, top: 0 };
 	private pendingDropScrollAnchor: KanbanDropScrollAnchor | null = null;
+	private pendingCellScrollRestores = new Map<string, { top: number; anchors: KanbanCellScrollAnchor[]; expiresAt: number }>();
+	private cellScrollRestoreScope: string | null = null;
 	private pendingSearchFocusState: KanbanSearchFocusState | null = null;
 	private temporarilyExpandedAutoCollapsedStatusTokens = new Set<string>();
 	private temporarilyExpandedAutoCollapsedLaneTokens = new Set<string>();
@@ -487,6 +498,7 @@ export class KanbanView extends ItemView {
 		this.temporarilyExpandedAutoCollapsedLaneTokens.clear();
 		this.resetKanbanSearchScope();
 		this.lastRenderSignature = null;
+		this.closeActivePresetPicker();
 		if (this.persistStateTimer !== null) {
 			this.clearPersistStateTimer();
 			this.app.workspace.requestSaveLayout();
@@ -532,6 +544,7 @@ export class KanbanView extends ItemView {
 			return;
 		}
 
+		this.closeActivePresetPicker();
 		this.hideHoverMenu(true);
 		this.clearKanbanSearchRefreshTimer();
 		this.clearBoardLayoutRefresh();
@@ -596,6 +609,7 @@ export class KanbanView extends ItemView {
 			parentSearchHighlightedIndex: this.parentSearchHighlightedIndex,
 			parentSearchUi: this.buildParentSearchUiSignature(parentSearchUi),
 			kanbanPresets: settings.kanbanPresets,
+			kanbanPresetFavorites: settings.presetFavorites.kanban,
 			pipeline,
 			pipelines: settings.pipelines,
 			filterSet,
@@ -789,7 +803,7 @@ export class KanbanView extends ItemView {
 			void this.updateLeafState(this.buildStateForPresetSwitch(nextPreset.id));
 		});
 
-		for (const entry of kanbanPresets) {
+		for (const entry of getFavoriteKanbanPresets(kanbanPresets, this.getSettings().presetFavorites)) {
 			const button = center.createEl('button', {
 				text: entry.name,
 				cls: 'operon-kanban-toolbar-preset-button',
@@ -801,6 +815,8 @@ export class KanbanView extends ItemView {
 				void this.updateLeafState(this.buildStateForPresetSwitch(entry.id));
 			});
 		}
+
+		this.renderKanbanPresetPickerButton(end, kanbanPresets, preset);
 
 		const searchWrap = end.createDiv('operon-kanban-toolbar-search-wrap');
 		this.syncKanbanSearchWrapClasses(searchWrap, state.searchQuery);
@@ -931,6 +947,7 @@ export class KanbanView extends ItemView {
 		});
 		settingsButton.addEventListener('click', () => {
 			if (!preset.id) return;
+			this.closeActivePresetPicker();
 			void this.callbacks.onOpenPresetSettings?.(preset.id);
 		});
 		this.applyKanbanToolbarLayoutMode(toolbar, start, center, end);
@@ -942,9 +959,72 @@ export class KanbanView extends ItemView {
 			settings: this.getSettings(),
 			source: { type: 'kanban', preset },
 			buttonClass: 'operon-kanban-related-views-button',
+			closeBeforeOpen: () => this.closeActivePresetPicker(),
 			onOpenRelatedView: target => this.callbacks.onOpenRelatedView?.(target),
 			onCreateRelatedView: target => this.callbacks.onCreateRelatedView?.(target),
 		});
+	}
+
+	private renderKanbanPresetPickerButton(
+		container: HTMLElement,
+		presets: readonly KanbanPreset[],
+		activePreset: KanbanPreset,
+	): void {
+		const button = container.createEl('button', {
+			cls: 'operon-kanban-toolbar-settings-button operon-kanban-toolbar-preset-picker-button',
+			attr: {
+				type: 'button',
+				'aria-haspopup': 'listbox',
+				'aria-expanded': 'false',
+			},
+		});
+		const activePresetIndex = Math.max(0, presets.findIndex(entry => entry.id === activePreset.id));
+		const activeLabel = getKanbanPresetPickerLabel(activePreset, activePresetIndex);
+		const buttonState = resolveKanbanPresetPickerButtonState(
+			activePreset,
+			this.getSettings().presetFavorites,
+			t('tooltips', 'selectKanbanPreset'),
+			activeLabel,
+		);
+		button.classList.toggle('has-active-nonfavorite-preset', buttonState.hasActiveNonFavoritePreset);
+		setAccessibleLabelWithoutTooltip(button, `${t('tooltips', 'selectKanbanPreset')}: ${activeLabel}`);
+		setIcon(button, 'square-kanban');
+		bindOperonHoverTooltip(button, {
+			content: buttonState.tooltip,
+			taskColor: null,
+			preferredVertical: 'above',
+		});
+		button.addEventListener('click', event => {
+			event.preventDefault();
+			event.stopPropagation();
+			this.closeActivePresetPicker();
+			button.setAttribute('aria-expanded', 'true');
+			let closePicker: (() => void) | null = null;
+			closePicker = showKanbanPresetPicker(button, {
+				value: activePreset.id,
+				presets,
+				onSelect: presetId => {
+					this.clearParentSearchState();
+					void this.updateLeafState(this.buildStateForPresetSwitch(presetId));
+				},
+				onClose: () => {
+					if (button.isConnected) button.setAttribute('aria-expanded', 'false');
+					if (closePicker && this.activePresetPickerClose === closePicker) {
+						this.activePresetPickerClose = null;
+					}
+				},
+				floatingHost: container.ownerDocument.body,
+				floatingScrollHost: container.ownerDocument.defaultView ?? window,
+				matchWidth: 280,
+			});
+			this.activePresetPickerClose = closePicker;
+		});
+	}
+
+	private closeActivePresetPicker(): void {
+		const close = this.activePresetPickerClose;
+		this.activePresetPickerClose = null;
+		close?.();
 	}
 
 		private applyKanbanToolbarLayoutMode(
@@ -958,6 +1038,7 @@ export class KanbanView extends ItemView {
 				if (width <= 0) return;
 				const phonePresetDropdown = isKanbanPhoneToolbarLayoutEligible(this.getSettings(), width);
 				toolbar.classList.toggle('is-phone-preset-dropdown', phonePresetDropdown);
+				if (phonePresetDropdown) this.closeActivePresetPicker();
 				const requiredWidth = this.measureKanbanToolbarGroupWidth(start)
 					+ this.measureKanbanToolbarGroupWidth(center)
 					+ this.measureKanbanToolbarGroupWidth(end)
@@ -1468,7 +1549,14 @@ export class KanbanView extends ItemView {
 		readOnlyChips: boolean,
 	): KanbanCellRenderFinalizer {
 		const maxVisibleTasks = this.getSettings().kanbanMaxVisibleTasksPerCell;
-		const initialLimit = Math.min(tasks.length, Math.max(KANBAN_CARD_RENDER_BATCH_SIZE, maxVisibleTasks));
+		const initialLimit = resolveKanbanCellInitialRenderLimit({
+			taskCount: tasks.length,
+			renderBatchSize: KANBAN_CARD_RENDER_BATCH_SIZE,
+			maxVisibleTasks,
+			savedScrollTopPx: this.getPendingCellScrollTop(statusId, laneKey),
+			cardHeightPx: KANBAN_ESTIMATED_CARD_HEIGHT_PX,
+			cardGapPx: KANBAN_ESTIMATED_CARD_GAP_PX,
+		});
 		this.renderTaskCardBatch(cell, tasks, 0, initialLimit, pipeline, preset, statusId, laneKey, allTasks, taskLookup, workflowStatusIdentityIndex, readOnlyChips, null);
 		cell.dataset.kanbanVisibleCount = String(initialLimit);
 		// Height limiting is split into measure/commit so batch materialization
@@ -1480,8 +1568,10 @@ export class KanbanView extends ItemView {
 			},
 			commit: () => {
 				this.commitCellHeightLimit(cell, measuredHeightLimitPx);
-				if (tasks.length <= initialLimit) return;
-				this.attachCellLazySentinel(cell, tasks, pipeline, preset, statusId, laneKey, maxVisibleTasks, allTasks, taskLookup, workflowStatusIdentityIndex, readOnlyChips);
+				if (tasks.length > initialLimit) {
+					this.attachCellLazySentinel(cell, tasks, pipeline, preset, statusId, laneKey, maxVisibleTasks, allTasks, taskLookup, workflowStatusIdentityIndex, readOnlyChips);
+				}
+				this.restoreCellScrollIfPending(cell);
 			},
 		};
 	}
@@ -1554,6 +1644,7 @@ export class KanbanView extends ItemView {
 				observer.disconnect();
 				sentinel.remove();
 			}
+			this.restoreCellScrollIfPending(cell);
 		}, { root: cell, rootMargin: '0px' });
 		this.kanbanLazyObservers.push(observer);
 		observer.observe(sentinel);
@@ -3834,6 +3925,7 @@ export class KanbanView extends ItemView {
 	private captureBoardScrollState(container: HTMLElement): void {
 		const board = asHTMLElement(container.querySelector('.operon-kanban-grid-viewport'), container);
 		if (!board) return;
+		this.captureCellScrollStates(board);
 		const dropAnchor = this.getActiveDropScrollAnchor();
 		if (dropAnchor) {
 			this.lastBoardScrollState = { ...dropAnchor.state };
@@ -3867,6 +3959,100 @@ export class KanbanView extends ItemView {
 				this.clearDropScrollAnchor();
 			}
 		}
+	}
+
+	private captureCellScrollStates(board: HTMLElement): void {
+		const scope = this.buildDropScrollAnchorScope();
+		if (this.cellScrollRestoreScope !== scope) {
+			this.pendingCellScrollRestores.clear();
+			this.cellScrollRestoreScope = scope;
+		}
+		const now = Date.now();
+		for (const [key, entry] of this.pendingCellScrollRestores) {
+			if (entry.expiresAt < now) this.pendingCellScrollRestores.delete(key);
+		}
+		const cells = board.querySelectorAll<HTMLElement>('.operon-kanban-cell.is-scroll-limited');
+		for (const cell of Array.from(cells)) {
+			const statusId = cell.dataset.kanbanStatusId;
+			const laneKey = cell.dataset.kanbanLaneKey;
+			if (!statusId || laneKey === undefined) continue;
+			const top = cell.scrollTop;
+			if (top <= 0) continue;
+			const key = buildKanbanCellKey(statusId, laneKey);
+			// A still-pending clamped restore holds a deeper position than the
+			// interim DOM (lazy batches had not caught up yet); keep the deeper
+			// target so a mid-restore rebuild does not shallow it.
+			const pending = this.pendingCellScrollRestores.get(key);
+			const anchors = this.collectCellScrollAnchors(cell);
+			this.pendingCellScrollRestores.set(key, {
+				top: pending ? Math.max(pending.top, top) : top,
+				anchors: anchors.length > 0 ? anchors : (pending?.anchors ?? []),
+				expiresAt: now + KANBAN_CELL_SCROLL_RESTORE_TTL_MS,
+			});
+		}
+	}
+
+	private getPendingCellScrollTop(statusId: string, laneKey: string): number {
+		const key = buildKanbanCellKey(statusId, laneKey);
+		const entry = this.pendingCellScrollRestores.get(key);
+		if (!entry) return 0;
+		if (entry.expiresAt < Date.now()) {
+			this.pendingCellScrollRestores.delete(key);
+			return 0;
+		}
+		return entry.top;
+	}
+
+	private collectCellScrollAnchors(cell: HTMLElement): KanbanCellScrollAnchor[] {
+		const cellRect = cell.getBoundingClientRect();
+		const anchors: KanbanCellScrollAnchor[] = [];
+		const cards = cell.querySelectorAll<HTMLElement>(':scope > .operon-kanban-card');
+		for (const card of Array.from(cards)) {
+			const cardRect = card.getBoundingClientRect();
+			if (cardRect.bottom <= cellRect.top) continue;
+			const viewportOffsetPx = cardRect.top - cellRect.top;
+			if (viewportOffsetPx >= cellRect.height) break;
+			const taskId = card.dataset.operonTaskId;
+			if (!taskId) continue;
+			anchors.push({ taskId, viewportOffsetPx });
+			if (anchors.length >= KANBAN_CELL_SCROLL_ANCHOR_MAX_CARDS) break;
+		}
+		return anchors;
+	}
+
+	private resolveCellAnchorScrollTop(cell: HTMLElement, entry: { top: number; anchors: KanbanCellScrollAnchor[] }): number {
+		if (entry.anchors.length === 0) return entry.top;
+		const cellRect = cell.getBoundingClientRect();
+		const cardContentTops = new Map<string, number>();
+		for (const anchor of entry.anchors) {
+			if (cardContentTops.has(anchor.taskId)) continue;
+			const card = cell.querySelector<HTMLElement>(`:scope > .operon-kanban-card[data-operon-task-id="${CSS.escape(anchor.taskId)}"]`);
+			if (!card) continue;
+			cardContentTops.set(anchor.taskId, card.getBoundingClientRect().top - cellRect.top + cell.scrollTop);
+		}
+		return resolveKanbanCellAnchorScrollTop(entry.anchors, cardContentTops, entry.top);
+	}
+
+	private restoreCellScrollIfPending(cell: HTMLElement): void {
+		const statusId = cell.dataset.kanbanStatusId;
+		const laneKey = cell.dataset.kanbanLaneKey;
+		if (!statusId || laneKey === undefined) return;
+		const key = buildKanbanCellKey(statusId, laneKey);
+		const entry = this.pendingCellScrollRestores.get(key);
+		if (!entry) return;
+		const targetTop = this.resolveCellAnchorScrollTop(cell, entry);
+		cell.scrollTop = targetTop;
+		const outcome = resolveKanbanCellScrollRestore({
+			targetTop,
+			achievedTop: cell.scrollTop,
+			now: Date.now(),
+			expiresAt: entry.expiresAt,
+			// A clamped restore pushes the lazy sentinel into the cell's
+			// viewport, so the IntersectionObserver renders the next batch and
+			// re-invokes this restore until the saved depth is reachable.
+			canGrow: cell.querySelector(':scope > .operon-kanban-lazy-sentinel') !== null,
+		});
+		if (outcome !== 'retry') this.pendingCellScrollRestores.delete(key);
 	}
 
 	private beginDropScrollAnchor(root: HTMLElement, restorePasses: number): void {

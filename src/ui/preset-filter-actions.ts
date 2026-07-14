@@ -16,6 +16,7 @@ interface PresetFilterActionsOptions {
 	selectedFilterSetId: string | null | undefined;
 	onSelectFilter: (filterSetId: string | null) => Promise<void>;
 	onSaveFilterSet: (filterSet: FilterSet) => Promise<void>;
+	onToggleFilterFavorite?: (filterSetId: string) => Promise<void>;
 	getFilterModalEvalDeps?: () => FilterModalEvalDeps | null;
 	onRefresh: () => void;
 	errorContextPrefix: string;
@@ -87,7 +88,10 @@ export function renderPresetFilterActions(options: PresetFilterActionsOptions): 
 						onRefresh();
 					}),
 					getFilterModalEvalDeps?.() ?? undefined,
-					{ getSettings: options.getSettings },
+					{
+						getSettings: options.getSettings,
+						onToggleFavorite: options.onToggleFilterFavorite,
+					},
 				).open();
 			}));
 		})
@@ -106,7 +110,10 @@ export function renderPresetFilterActions(options: PresetFilterActionsOptions): 
 						onRefresh();
 					}),
 					getFilterModalEvalDeps?.() ?? undefined,
-					{ getSettings: options.getSettings },
+					{
+						getSettings: options.getSettings,
+						onToggleFavorite: options.onToggleFilterFavorite,
+					},
 				).open();
 			}));
 		})

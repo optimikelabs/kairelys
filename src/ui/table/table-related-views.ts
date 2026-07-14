@@ -1,5 +1,5 @@
 export {
-	buildTableRelatedCreateTargets,
+	buildTableRelatedCreateGroups,
 	buildTableRelatedViewGroups,
 	buildUniqueRelatedPresetName,
 } from '../related-views';

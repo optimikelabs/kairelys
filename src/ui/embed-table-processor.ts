@@ -5,6 +5,7 @@ import type { ProjectSerialDisplay } from '../core/project-serials';
 import type { IndexedTask } from '../types/fields';
 import { cloneFilterSet, type FilterSet, type OperonSettings, type TaskFinderDefaultScopeKey } from '../types/settings';
 import type { TrackerSession } from '../types/tracker';
+import type { RelatedViewCreateTarget, RelatedViewOpenTarget } from '../types/related-views';
 import {
 	TABLE_LINE_NUMBER_COLUMN_KEY,
 	TABLE_TASK_ICON_COLUMN_KEY,
@@ -35,6 +36,7 @@ import { renderTableDescriptionCellContent, type TableInlineEditSession } from '
 import { bindMobileTableViewport, isMobileTableTextInputFocused } from './table/mobile-table-viewport';
 import {
 	formatTableIconOnlyTooltipContent,
+	renderTableCompactDatetimeCell,
 	renderTableIconOnlyCell,
 	resolveTableIconOnlyCellIcon,
 	resolveTableValueCellIcon,
@@ -125,7 +127,11 @@ import { openTaskFieldPicker } from './task-field-picker-dispatch';
 import { showTextFieldPopover } from './text-field-popover';
 import { buildTrackerSessionEditContext, TrackerSessionEditModal } from './tracker-session-edit-modal';
 import { formatDurationHuman } from '../systems/tracker-utils';
-import { closeFloatingPanelsForRoot, snapshotFloatingRectAnchor } from './field-pickers/common';
+import {
+	closeFloatingPanelsForRoot,
+	resolveSurfaceFloatingHostOptions,
+	snapshotFloatingRectAnchor,
+} from './field-pickers/common';
 import { closeIconOnlyChipPreviewsForRoot } from './icon-only-chip-preview';
 import { getOwnerDocument, getOwnerWindow } from '../core/dom-compat';
 import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
@@ -144,7 +150,12 @@ import { bindTableTaskContextualHoverMenu, renderTableTaskIconButton } from './t
 import { bindTableTaskTypeEditorOpen, renderTableTaskTypeButton } from './table/table-task-type-button';
 import { showTableGroupSortPopover } from './table/table-group-sort-popover';
 import { getTablePresetPickerLabel, showTablePresetPicker } from './table/table-preset-picker';
+import { resolveTablePresetPickerButtonState } from './table/table-preset-visibility';
+import { renderTableToolbarComposition } from './table/table-toolbar-composition';
+import { resolveTableToolbarSurfacePolicy } from './table/table-toolbar-surface-policy';
+import { showTableExportMenu } from './table/table-export-menu';
 import { bindOperonHoverTooltip, cleanupOperonHoverTooltips } from './operon-hover-tooltip';
+import { renderRelatedViewsLauncher } from './related-views';
 import { FilterSetModal } from './filter-set-modal';
 import {
 	buildTableLocationCellIndexSignature,
@@ -159,6 +170,8 @@ export interface EmbedTableDeps {
 	app: App;
 	indexer: OperonIndexer;
 	getSettings: () => OperonSettings;
+	resolveTablePreset?: (presetId: string) => TablePreset | null;
+	getTablePresets?: () => readonly TablePreset[];
 	getPinnedCache: () => PinnedCache | null;
 	openTaskEditor: (operonId: string) => void;
 	openTaskSource: (operonId: string) => void;
@@ -173,6 +186,8 @@ export interface EmbedTableDeps {
 	onOpenPresetSettings?: (presetId: string) => void;
 	onSavePresetPatch?: (patch: TablePresetPatch) => Promise<void>;
 	onSaveFilterSet?: (filterSet: FilterSet) => Promise<void>;
+	onOpenRelatedView?: (target: RelatedViewOpenTarget) => void | Promise<void>;
+	onCreateRelatedView?: (target: RelatedViewCreateTarget) => void | Promise<void>;
 	getProjectSerialDisplay?: (operonId: string, task?: IndexedTask) => ProjectSerialDisplay | null;
 	getProjectSerialSignature?: () => string;
 	isTaskPinned?: (taskId: string) => boolean;
@@ -208,6 +223,7 @@ interface EmbedTableInstance {
 	collapsedGroupKeys: Set<string>;
 	visibleRowsFrame: number | null;
 	resizeObserverCleanup: (() => void) | null;
+	toolbarLayoutCleanup: (() => void) | null;
 	horizontalScrollerEl: HTMLElement | null;
 	bodyScrollerEl: HTMLElement | null;
 	bodyCanvasEl: HTMLElement | null;
@@ -484,7 +500,7 @@ function resolveTableEmbedSourceContext(el: HTMLElement, ctx: MarkdownPostProces
 	};
 }
 
-export function refreshEmbedTables(deps: EmbedTableDeps): void {
+export function refreshEmbedTables(deps: EmbedTableDeps, presetId?: string): void {
 	for (const instance of activeTableEmbeds) {
 		if (!instance.el.isConnected) {
 			destroyEmbedTableInstance(instance);
@@ -500,6 +516,7 @@ export function refreshEmbedTables(deps: EmbedTableDeps): void {
 			instance.lastRenderSignature = null;
 			continue;
 		}
+		if (presetId !== undefined && instance.presetId !== presetId) continue;
 		renderEmbedTable(instance, deps);
 	}
 }
@@ -539,6 +556,7 @@ function createEmbedTableInstance(
 		collapsedGroupKeys: new Set<string>(),
 		visibleRowsFrame: null,
 		resizeObserverCleanup: null,
+		toolbarLayoutCleanup: null,
 		horizontalScrollerEl: null,
 		bodyScrollerEl: null,
 		bodyCanvasEl: null,
@@ -580,6 +598,7 @@ function destroyEmbedTableInstance(instance: EmbedTableInstance): void {
 	instance.sortedRowsCache = null;
 	instance.noSearchResultCache = null;
 	cleanupEmbedTableResizeObserver(instance);
+	cleanupEmbedTableToolbarLayout(instance);
 	cleanupEmbedMobileViewport(instance);
 	cleanupOperonHoverTooltips(instance.el);
 	if (instance.visibleRowsFrame !== null) {
@@ -601,6 +620,15 @@ function resetEmbedTableRenderState(instance: EmbedTableInstance): void {
 	instance.lastRenderSignature = null;
 }
 
+function getEmbedTablePresets(deps: EmbedTableDeps): readonly TablePreset[] {
+	return deps.getTablePresets?.() ?? deps.getSettings().tablePresets;
+}
+
+function resolveEmbedTablePreset(deps: EmbedTableDeps, presetId: string): TablePreset | null {
+	if (deps.resolveTablePreset) return deps.resolveTablePreset(presetId);
+	return getEmbedTablePresets(deps).find(preset => preset.id === presetId) ?? null;
+}
+
 class EmbedTableRenderChild extends MarkdownRenderChild {
 	constructor(
 		containerEl: HTMLElement,
@@ -619,11 +647,12 @@ function renderEmbedTable(instance: EmbedTableInstance, deps: EmbedTableDeps): v
 	finishEmbedTableMobileInlineEdit(instance, true);
 	const renderStartedAt = enginePerfNow();
 	const settings = deps.getSettings();
-	const preset = settings.tablePresets.find(entry => entry.id === instance.presetId) ?? null;
+	const preset = resolveEmbedTablePreset(deps, instance.presetId);
 	if (!preset) {
 		closeEmbedTableTransientUi(instance.el);
 		closeEmbedTableActivePicker(instance);
 		cleanupEmbedTableResizeObserver(instance);
+		cleanupEmbedTableToolbarLayout(instance);
 		cleanupEmbedMobileViewport(instance);
 		cleanupOperonHoverTooltips(instance.el);
 		instance.el.empty();
@@ -795,6 +824,7 @@ function renderEmbedTable(instance: EmbedTableInstance, deps: EmbedTableDeps): v
 		closeEmbedTableActivePicker(instance);
 	}
 	cleanupEmbedTableResizeObserver(instance);
+	cleanupEmbedTableToolbarLayout(instance);
 	cleanupEmbedMobileViewport(instance);
 	cleanupOperonHoverTooltips(instance.el);
 	instance.el.empty();
@@ -871,6 +901,7 @@ function buildEmbedTableRenderSignature(
 		locationIndexSignature,
 		deps.getProjectSerialSignature?.() ?? '',
 		buildTableRelevantSettingsSignature(deps.getSettings()),
+		buildEmbedTableToolbarSignature(deps),
 		canWriteEmbedTable(deps) ? 'write' : 'readonly',
 	].join('|');
 }
@@ -896,8 +927,16 @@ function buildEmbedTableQuerySignature(
 		locationIndexSignature,
 		deps.getProjectSerialSignature?.() ?? '',
 		buildTableRelevantSettingsSignature(settings),
+		buildEmbedTableToolbarSignature(deps),
 		canWriteEmbedTable(deps) ? 'write' : 'readonly',
 	].join('|');
+}
+
+function buildEmbedTableToolbarSignature(deps: EmbedTableDeps): string {
+	return JSON.stringify({
+		presets: getEmbedTablePresets(deps).map(preset => [preset.id, preset.name]),
+		favorites: deps.getSettings().presetFavorites.table,
+	});
 }
 
 function canWriteEmbedTable(deps: EmbedTableDeps): boolean {
@@ -925,19 +964,96 @@ function renderEmbedTableToolbar(
 	deps: EmbedTableDeps,
 	parentSearchUi: TableParentSearchUiState | null,
 ): HTMLElement {
-	const toolbar = root.createDiv('operon-table-toolbar operon-table-embed-toolbar');
-	const titleWrap = toolbar.createDiv('operon-table-title-wrap');
-	const iconEl = titleWrap.createSpan('operon-table-title-icon');
-	setIcon(iconEl, 'table-2');
-	titleWrap.createSpan({ cls: 'operon-table-title', text: preset.name.trim() || t('table', 'title') });
-	const controls = toolbar.createDiv('operon-table-toolbar-controls');
+	const settings = deps.getSettings();
+	const tablePresets = getEmbedTablePresets(deps);
+	cleanupEmbedTableToolbarLayout(instance);
+	const composed = renderTableToolbarComposition({
+		root,
+		toolbarClassName: 'operon-table-embed-toolbar',
+		surfaceTitle: t('table', 'title'),
+		activePreset: preset,
+		presets: tablePresets,
+		favorites: settings.presetFavorites,
+		policy: resolveTableToolbarSurfacePolicy('markdown-embed'),
+		onSelectPreset: presetId => switchEmbedTablePreset(instance, deps, presetId),
+		slots: {
+			renderRelatedViews: start => renderEmbedTableRelatedViewsButton(start, instance, preset, deps),
+			renderPresetPicker: end => renderEmbedTablePresetPickerButton(end, instance, preset, deps),
+			renderGroupSort: end => renderEmbedTableGroupSortPopoverButton(end, instance, preset, deps),
+			renderFilter: end => renderEmbedTableFilterPopoverButton(end, instance, preset, deps),
+			renderSettings: end => renderEmbedTablePresetSettingsButton(end, preset, deps),
+			renderSearch: end => renderEmbedTableToolbarSearch(
+				end,
+				instance,
+				taskCount,
+				deps,
+				parentSearchUi,
+			),
+			renderExport: end => renderEmbedTableExportButton(end, instance),
+		},
+	});
+	instance.toolbarLayoutCleanup = composed.disposeLayout;
+	return composed.toolbar;
+}
+
+function renderEmbedTableRelatedViewsButton(
+	start: HTMLElement,
+	instance: EmbedTableInstance,
+	preset: TablePreset,
+	deps: EmbedTableDeps,
+): void {
+	if (!deps.onOpenRelatedView) return;
+	renderRelatedViewsLauncher({
+		container: start,
+		settings: deps.getSettings(),
+		source: { type: 'table', preset },
+		buttonClass: 'operon-table-toolbar-icon-button',
+		closeBeforeOpen: () => closeEmbedTableActivePicker(instance),
+		onOpenRelatedView: deps.onOpenRelatedView,
+		onCreateRelatedView: deps.onCreateRelatedView,
+	});
+}
+
+function renderEmbedTableExportButton(end: HTMLElement, instance: EmbedTableInstance): void {
+	const button = end.createEl('button', {
+		cls: 'operon-table-toolbar-icon-button',
+		attr: {
+			type: 'button',
+			'aria-haspopup': 'menu',
+			'aria-expanded': 'false',
+		},
+	});
+	setAccessibleLabelWithoutTooltip(button, t('table', 'exportMenuLabel'));
+	setIcon(button, 'file-down');
+	bindOperonHoverTooltip(button, {
+		content: t('table', 'exportMenuLabel'),
+		taskColor: null,
+		preferredVertical: 'above',
+	});
+	button.addEventListener('click', event => {
+		event.preventDefault();
+		const renderState = instance.currentRenderState;
+		if (!renderState) return;
+		button.setAttribute('aria-expanded', 'true');
+		showTableExportMenu({
+			anchor: button,
+			event,
+			preset: renderState.preset,
+			source: renderState,
+		});
+	});
+}
+
+function renderEmbedTableToolbarSearch(
+	end: HTMLElement,
+	instance: EmbedTableInstance,
+	taskCount: number,
+	deps: EmbedTableDeps,
+	parentSearchUi: TableParentSearchUiState | null,
+): void {
 	const settings = deps.getSettings();
 	const displaySearchQuery = instance.pendingSearchQuery ?? instance.searchQuery;
-	renderEmbedTablePresetPickerButton(controls, instance, preset, deps);
-	renderEmbedTableGroupSortPopoverButton(controls, instance, preset, deps);
-	renderEmbedTableFilterPopoverButton(controls, instance, preset, deps);
-	renderEmbedTablePresetSettingsButton(controls, preset, deps);
-	const searchWrap = controls.createDiv('operon-table-search-wrap');
+	const searchWrap = end.createDiv('operon-table-search-wrap');
 	syncTableSearchWrapClasses(searchWrap, instance.searchScope, instance.parentSearchSelection, displaySearchQuery);
 	searchWrap.classList.toggle('has-parent-search-dropdown', !!parentSearchUi?.dropdownVisible);
 	renderTableSearchIcon(searchWrap);
@@ -1021,7 +1137,6 @@ function renderEmbedTableToolbar(
 		highlightedIndex: instance.parentSearchHighlightedIndex,
 		onSelect: candidate => selectEmbedTableParentSearchCandidate(instance, parentSearchUi?.mode ?? 'pc', candidate, deps),
 	});
-	return toolbar;
 }
 
 function renderEmbedTablePresetPickerButton(
@@ -1030,21 +1145,28 @@ function renderEmbedTablePresetPickerButton(
 	preset: TablePreset,
 	deps: EmbedTableDeps,
 ): void {
-	const settings = deps.getSettings();
-	if (settings.tablePresets.length === 0) return;
+	const tablePresets = getEmbedTablePresets(deps);
+	if (tablePresets.length === 0) return;
 	const activeLabel = getTablePresetPickerLabel(preset);
 	const button = controls.createEl('button', {
-		cls: 'operon-table-toolbar-icon-button operon-table-preset-switcher-button operon-table-embed-toolbar-action',
+		cls: 'operon-table-toolbar-icon-button operon-table-preset-switcher-button',
 		attr: {
 			type: 'button',
 			'aria-haspopup': 'listbox',
 			'aria-expanded': 'false',
 		},
 	});
+	const buttonState = resolveTablePresetPickerButtonState(
+		preset,
+		deps.getSettings().presetFavorites,
+		t('table', 'selectPreset'),
+		activeLabel,
+	);
+	button.classList.toggle('has-active-nonfavorite-preset', buttonState.hasActiveNonFavoritePreset);
 	setAccessibleLabelWithoutTooltip(button, `${t('table', 'selectPreset')}: ${activeLabel}`);
 	setIcon(button.createSpan('operon-table-preset-switcher-button-icon'), 'table-2');
 	bindOperonHoverTooltip(button, {
-		content: t('table', 'selectPreset'),
+		content: buttonState.tooltip,
 		taskColor: null,
 		preferredVertical: 'above',
 	});
@@ -1056,7 +1178,7 @@ function renderEmbedTablePresetPickerButton(
 		let closePicker: (() => void) | null = null;
 		closePicker = showTablePresetPicker(button, {
 			value: preset.id,
-			presets: settings.tablePresets,
+			presets: tablePresets,
 			onSelect: presetId => {
 				void switchEmbedTablePreset(instance, deps, presetId);
 			},
@@ -1067,8 +1189,6 @@ function renderEmbedTablePresetPickerButton(
 				}
 				instance.keepActivePickerOnRender = false;
 			},
-			floatingHost: controls.ownerDocument.body,
-			floatingScrollHost: controls.ownerDocument.defaultView ?? window,
 			matchWidth: 280,
 		});
 		instance.activePickerClose = closePicker;
@@ -1136,7 +1256,7 @@ function renderEmbedTableGroupSortPopoverButton(
 ): void {
 	if (!deps.onSavePresetPatch) return;
 	const button = controls.createEl('button', {
-		cls: 'operon-table-toolbar-icon-button operon-table-group-sort-button operon-table-embed-toolbar-action',
+		cls: 'operon-table-toolbar-icon-button operon-table-group-sort-button',
 		attr: {
 			type: 'button',
 			'aria-haspopup': 'dialog',
@@ -1167,11 +1287,11 @@ function openEmbedTableGroupSortPopover(
 	closeEmbedTableActivePicker(instance);
 	button.setAttribute('aria-expanded', 'true');
 	const editingPreset = getCurrentEmbedTablePreset(instance, deps);
+	const floatingOptions = resolveSurfaceFloatingHostOptions(button);
 	let closePopover: (() => void) | null = null;
 	closePopover = showTableGroupSortPopover({
-		anchor: button.getBoundingClientRect(),
-		floatingHost: button.ownerDocument.body,
-		floatingScrollHost: getOwnerWindow(button),
+		anchor: snapshotFloatingRectAnchor(button),
+		...floatingOptions,
 		preset: editingPreset.id === preset.id ? editingPreset : preset,
 		settings: deps.getSettings(),
 		onChange: (updatedPreset, scope) => saveEmbedTableGroupSortPresetPatch(instance, deps, updatedPreset, scope),
@@ -1210,10 +1330,14 @@ function openEmbedTableFilterPopover(
 	const sourceFilterSetId = currentFilter?.id ?? null;
 	const ownerDocument = getOwnerDocument(host);
 	const ownerWindow = ownerDocument.defaultView ?? window;
-	const popover = ownerDocument.body.createDiv('operon-table-filter-popover');
+	const floatingOptions = resolveSurfaceFloatingHostOptions(button);
+	const popoverHost = floatingOptions.floatingHost ?? ownerDocument.body;
+	const floatingScrollHost = floatingOptions.floatingScrollHost ?? ownerWindow;
+	const popover = popoverHost.createDiv('operon-table-filter-popover');
 	const popoverId = generateEmbedTableFilterPopoverId();
 	let editor: FilterSetModal | null = null;
 	let isClosed = false;
+	let repositionFrame: number | null = null;
 	popover.id = popoverId;
 	popover.setAttribute('role', 'dialog');
 	setAccessibleLabelWithoutTooltip(popover, t('table', 'filter'));
@@ -1230,6 +1354,8 @@ function openEmbedTableFilterPopover(
 		ownerDocument.removeEventListener('pointerdown', handleDocumentPointerDown, true);
 		ownerDocument.removeEventListener('keydown', handleDocumentKeyDown, true);
 		ownerWindow.removeEventListener('resize', close);
+		floatingScrollHost.removeEventListener('scroll', scheduleReposition, true);
+		if (repositionFrame !== null) ownerWindow.cancelAnimationFrame(repositionFrame);
 		editor?.destroyInlineConditionEditor();
 		button.setAttribute('aria-expanded', 'false');
 		button.removeAttribute('aria-controls');
@@ -1240,6 +1366,14 @@ function openEmbedTableFilterPopover(
 		if (target && typeof (target as Node).nodeType === 'number' && host.contains(target as Node)) return;
 		if (editor?.isInlineEditorTarget(target)) return;
 		close();
+	};
+	const reposition = (): void => positionEmbedTableFilterPopover(popover, button);
+	const scheduleReposition = (): void => {
+		if (repositionFrame !== null) return;
+		repositionFrame = ownerWindow.requestAnimationFrame(() => {
+			repositionFrame = null;
+			if (!isClosed && popover.isConnected) reposition();
+		});
 	};
 	const handleDocumentKeyDown = (event: KeyboardEvent): void => {
 		if (event.key !== 'Escape') return;
@@ -1269,27 +1403,40 @@ function openEmbedTableFilterPopover(
 			? buildEmbedTableFilterUsageTooltip(sourceFilterSetId, deps)
 			: undefined,
 	});
-	positionEmbedTableFilterPopover(popover, button);
+	reposition();
 
 	instance.keepActivePickerOnRender = true;
 	instance.activePickerClose = close;
 	ownerDocument.addEventListener('pointerdown', handleDocumentPointerDown, true);
 	ownerDocument.addEventListener('keydown', handleDocumentKeyDown, true);
 	ownerWindow.addEventListener('resize', close);
+	floatingScrollHost.addEventListener('scroll', scheduleReposition, true);
 }
 
 function positionEmbedTableFilterPopover(popover: HTMLElement, button: HTMLElement): void {
 	const rect = button.getBoundingClientRect();
 	const ownerDocument = getOwnerDocument(button);
 	const ownerWindow = ownerDocument.defaultView ?? window;
+	const floatingOptions = resolveSurfaceFloatingHostOptions(button);
+	const floatingHost = floatingOptions.floatingHost;
+	const hostRect = floatingHost?.getBoundingClientRect();
+	const hostScrollLeft = floatingHost?.scrollLeft ?? 0;
+	const hostScrollTop = floatingHost?.scrollTop ?? 0;
 	const margin = 12;
 	const gap = 6;
-	const availableWidth = Math.max(240, ownerWindow.innerWidth - margin * 2);
+	const availableWidth = Math.max(240, (floatingHost?.clientWidth ?? ownerWindow.innerWidth) - margin * 2);
+	const availableHeight = floatingHost?.clientHeight ?? ownerWindow.innerHeight;
 	const width = Math.min(760, availableWidth);
-	const left = Math.max(margin, Math.min(rect.right - width, ownerWindow.innerWidth - width - margin));
-	const top = Math.max(margin, rect.bottom + gap);
-	const maxHeight = Math.max(240, ownerWindow.innerHeight - top - margin);
+	const anchorRight = hostRect ? rect.right - hostRect.left + hostScrollLeft : rect.right;
+	const anchorBottom = hostRect ? rect.bottom - hostRect.top + hostScrollTop : rect.bottom;
+	const left = Math.max(hostScrollLeft + margin, Math.min(
+		anchorRight - width,
+		hostScrollLeft + availableWidth - width - margin,
+	));
+	const top = Math.max(hostScrollTop + margin, anchorBottom + gap);
+	const maxHeight = Math.max(240, hostScrollTop + availableHeight - top - margin);
 	popover.style.width = `${Math.round(width)}px`;
+	popover.style.position = floatingHost ? 'absolute' : 'fixed';
 	popover.style.left = `${Math.round(left)}px`;
 	popover.style.top = `${Math.round(top)}px`;
 	popover.style.maxHeight = `${Math.round(maxHeight)}px`;
@@ -1317,7 +1464,7 @@ function buildEmbedTableFilterUsageTooltip(filterSetId: string, deps: EmbedTable
 	const kanbanPresets = settings.kanbanPresets
 		.filter(entry => entry.filterSetId === filterSetId)
 		.map(entry => entry.name.trim() || entry.id);
-	const tablePresets = settings.tablePresets
+	const tablePresets = getEmbedTablePresets(deps)
 		.filter(entry => entry.filterSetId === filterSetId)
 		.map(entry => entry.name.trim() || entry.id);
 	if (calendarPresets.length > 0) {
@@ -1455,11 +1602,12 @@ function suppressEmbedTableActivePickerCloseForProgrammaticScroll(instance: Embe
 }
 
 function getCurrentEmbedTablePreset(instance: EmbedTableInstance, deps: EmbedTableDeps): TablePreset {
-	const settings = deps.getSettings();
-	const storedPreset = settings.tablePresets.find(preset => preset.id === instance.presetId)
-		?? settings.tablePresets[0]
+	const storedPreset = resolveEmbedTablePreset(deps, instance.presetId)
 		?? null;
-	return resolveTableEditingPreset(storedPreset, instance.currentRenderState?.preset ?? null);
+	const renderedPreset = instance.currentRenderState?.preset.id === instance.presetId
+		? instance.currentRenderState.preset
+		: null;
+	return resolveTableEditingPreset(storedPreset, renderedPreset);
 }
 
 function syncEmbedTableSearchStateFromPreset(
@@ -1505,8 +1653,7 @@ function buildEmbedTableCurrentPresetSearchState(instance: EmbedTableInstance): 
 }
 
 function saveEmbedTableCurrentPresetSearchState(instance: EmbedTableInstance, deps: EmbedTableDeps): void {
-	const settings = deps.getSettings();
-	const currentPreset = settings.tablePresets.find(preset => preset.id === instance.presetId) ?? null;
+	const currentPreset = resolveEmbedTablePreset(deps, instance.presetId);
 	if (!currentPreset) return;
 	const search = buildEmbedTableCurrentPresetSearchState(instance);
 	const signature = buildEmbedTablePresetSearchSignature(currentPreset.id, search);
@@ -1548,7 +1695,7 @@ function recoverEmbedTablePresetSearchStateAfterFailedSave(
 	const recovery = resolveTablePresetSearchSaveFailureRecovery(instance.pendingPresetSearchSignature, signature);
 	instance.pendingPresetSearchSignature = recovery.pendingPresetSearchSignature;
 	if (!recovery.shouldRecover) return;
-	const currentPreset = deps.getSettings().tablePresets.find(preset => preset.id === instance.presetId) ?? null;
+	const currentPreset = resolveEmbedTablePreset(deps, instance.presetId);
 	if (!currentPreset) return;
 	syncEmbedTableSearchStateFromPreset(instance, currentPreset, { force: true });
 	if (instance.el.isConnected) {
@@ -1562,7 +1709,7 @@ async function switchEmbedTablePreset(
 	nextPresetId: string,
 ): Promise<void> {
 	if (nextPresetId === instance.presetId) return;
-	const nextPreset = deps.getSettings().tablePresets.find(preset => preset.id === nextPresetId) ?? null;
+	const nextPreset = resolveEmbedTablePreset(deps, nextPresetId);
 	if (!nextPreset) {
 		new Notice(t('table', 'presetActionFailed'));
 		return;
@@ -2635,6 +2782,21 @@ function renderEmbedTableIconOnlyCell(
 	const fallbackIcon = getTableTaskField(column.key, renderState.settings)?.icon ?? 'text';
 	const isTaskIconColumn = column.key === 'taskIcon';
 	const isTaskTypeColumn = column.key === 'taskType';
+	if (column.key === 'datetimeStart' || column.key === 'datetimeEnd') {
+		renderTableCompactDatetimeCell(cell, {
+			value,
+			title: fieldLabel,
+			content,
+			ariaLabel: `${fieldLabel}: ${content}`,
+			color: resolveTableIconOnlyCellAccent(column, value, {
+				task,
+				settings: renderState.settings,
+				workflowStatusIdentityIndex: renderState.valueResolver.workflowStatusIdentityIndex,
+			}),
+			focusable: options.focusable,
+		});
+		return;
+	}
 	const icon = renderTableIconOnlyCell(cell, {
 		icon: locationVisual?.icon ?? resolveTableIconOnlyCellIcon(
 			column.key,
@@ -3418,6 +3580,11 @@ function observeEmbedTableBodyResize(
 function cleanupEmbedTableResizeObserver(instance: EmbedTableInstance): void {
 	instance.resizeObserverCleanup?.();
 	instance.resizeObserverCleanup = null;
+}
+
+function cleanupEmbedTableToolbarLayout(instance: EmbedTableInstance): void {
+	instance.toolbarLayoutCleanup?.();
+	instance.toolbarLayoutCleanup = null;
 }
 
 function restoreEmbedTableSearchFocus(

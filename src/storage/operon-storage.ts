@@ -27,6 +27,7 @@ import { TaskAutomationPolicyStore, TaskAutomationPolicyStoreSettings } from './
 import { ActiveTrackerStore } from './active-tracker-store';
 import { ProjectSerialStore } from './project-serial-store';
 import { FieldRenameJournalStore } from './field-rename-journal-store';
+import { TablePresetFileMigrationJournalStore } from './table-preset-file-migration-journal-store';
 import { enginePerfNow, WriteJsonMetrics } from '../core/engine-perf';
 import { writeTextSafely, type RecoveredStoreWriteOptions } from './storage-file-ops';
 import {
@@ -49,6 +50,16 @@ import {
 	joinVaultPath,
 	type OperonStoragePaths,
 } from './operon-storage-paths';
+import {
+	clonePresetFavorites,
+	createDefaultPresetFavorites,
+	isPresetFavorite,
+	removePresetFavorite,
+	togglePresetFavorite,
+	type PresetFavoriteKind,
+} from '../core/preset-favorites';
+import { isSpecialDynamicFilterSetId } from '../core/dynamic-file-task-filter';
+import { cloneTablePreset, type TablePreset, type TablePresetStoreSettings } from '../types/table';
 
 export interface OperonStorageOptions extends Partial<OperonPluginDataAccess> {
 	pluginId?: string;
@@ -214,6 +225,7 @@ export class OperonStorage {
 	private taskAutomationPolicyStore: TaskAutomationPolicyStore;
 	private activeTrackerStore: ActiveTrackerStore;
 	private projectSerialStore: ProjectSerialStore;
+	private tablePresetFileMigrationJournalStore: TablePresetFileMigrationJournalStore;
 	private fieldRenameJournalStore: FieldRenameJournalStore;
 
 	constructor(app: App, options: OperonStorageOptions = {}) {
@@ -282,6 +294,11 @@ export class OperonStorage {
 			this.writeQueue,
 			pickTablePresetStoreSettings(DEFAULT_SETTINGS),
 			joinVaultPath(this.storagePaths.pluginDir, 'data', 'table-presets'),
+		);
+		this.tablePresetFileMigrationJournalStore = new TablePresetFileMigrationJournalStore(
+			app,
+			this.writeQueue,
+			this.storagePaths.state.tablePresetFileMigrationJournalPath,
 		);
 		this.kanbanOrderStore = new KanbanOrderStore(app, this.writeQueue);
 		this.keyMappingStore = new KeyMappingStore(app, this.writeQueue);
@@ -387,6 +404,7 @@ export class OperonStorage {
 		await this.repeatSeriesStore.load();
 		await this.projectSerialStore.load();
 		await this.fieldRenameJournalStore.load();
+		await this.tablePresetFileMigrationJournalStore.load();
 		await this.externalCalendarCache.load();
 	}
 
@@ -430,6 +448,210 @@ export class OperonStorage {
 		await run;
 	}
 
+	async commitTablePresetFileBinding(presetId: string, path: string): Promise<void> {
+		await this.enqueueSettingsTransaction(async () => {
+			const previousIndex = this.settings.tablePresetFileBindings.findIndex(binding => binding.id === presetId);
+			const previousBinding = previousIndex >= 0
+				? { ...this.settings.tablePresetFileBindings[previousIndex] }
+				: null;
+			this.settings.tablePresetFileBindings = this.settings.tablePresetFileBindings
+				.filter(binding => binding.id !== presetId);
+			this.settings.tablePresetFileBindings.push({ id: presetId, path });
+			try {
+				await this.persistSettings({ forceRecoveredWrite: true });
+			} catch (error) {
+				this.settings.tablePresetFileBindings = this.settings.tablePresetFileBindings
+					.filter(binding => binding.id !== presetId);
+				if (previousBinding) {
+					this.settings.tablePresetFileBindings.splice(
+						Math.min(previousIndex, this.settings.tablePresetFileBindings.length),
+						0,
+						previousBinding,
+					);
+				}
+				throw error;
+			}
+		});
+	}
+
+	async commitTablePresetFileMigrationVersion(version: number): Promise<void> {
+		await this.enqueueSettingsTransaction(async () => {
+			const previousVersion = this.settings.tablePresetFileMigrationVersion;
+			this.settings.tablePresetFileMigrationVersion = version;
+			try {
+				await this.persistSettings({ forceRecoveredWrite: true });
+			} catch (error) {
+				if (this.settings.tablePresetFileMigrationVersion === version) {
+					this.settings.tablePresetFileMigrationVersion = previousVersion;
+				}
+				throw error;
+			}
+		});
+	}
+
+	async commitTablePresetFileMigrationFinalizedVersion(version: number): Promise<void> {
+		await this.enqueueSettingsTransaction(async () => {
+			const previousVersion = this.settings.tablePresetFileMigrationFinalizedVersion;
+			this.settings.tablePresetFileMigrationFinalizedVersion = version;
+			try {
+				await this.persistSettings({ forceRecoveredWrite: true });
+			} catch (error) {
+				if (this.settings.tablePresetFileMigrationFinalizedVersion === version) {
+					this.settings.tablePresetFileMigrationFinalizedVersion = previousVersion;
+				}
+				throw error;
+			}
+		});
+	}
+
+	private enqueueSettingsTransaction<T>(operation: () => Promise<T>): Promise<T> {
+		const run = this.settingsSaveQueue.then(operation);
+		this.settingsSaveQueue = run.then(() => undefined, () => undefined);
+		return run;
+	}
+
+	private isStoredPresetFavoriteTarget(kind: PresetFavoriteKind, presetId: string): boolean {
+		switch (kind) {
+			case 'calendar':
+				return this.settings.calendarPresets.some(entry => entry.id === presetId);
+			case 'kanban':
+				return this.settings.kanbanPresets.some(entry => entry.id === presetId);
+			case 'filter':
+				return !isSpecialDynamicFilterSetId(presetId)
+					&& this.filterStore.getAll().some(entry => entry.id === presetId);
+			case 'table':
+				return this.settings.tablePresets.some(entry => entry.id === presetId);
+		}
+	}
+
+	private restorePresetFavoriteMembership(
+		kind: PresetFavoriteKind,
+		presetId: string,
+		previousFavorites: OperonSettings['presetFavorites'],
+	): void {
+		const wasFavorite = isPresetFavorite(previousFavorites, kind, presetId);
+		const isFavorite = isPresetFavorite(this.settings.presetFavorites, kind, presetId);
+		if (wasFavorite === isFavorite) return;
+		if (!wasFavorite) {
+			this.settings.presetFavorites = removePresetFavorite(this.settings.presetFavorites, kind, presetId);
+			return;
+		}
+		const nextFavorites = clonePresetFavorites(this.settings.presetFavorites);
+		const previousIndex = previousFavorites[kind].indexOf(presetId);
+		nextFavorites[kind].splice(Math.min(Math.max(previousIndex, 0), nextFavorites[kind].length), 0, presetId);
+		this.settings.presetFavorites = nextFavorites;
+	}
+
+	private syncCalendarPresetStoreFromSettings(): void {
+		const dataPackage = buildOperonDataPackageFromSettings(this.settings, {
+			filterSets: this.filterStore.getAll(),
+			kanbanOrderBoards: this.kanbanOrderStore.toPackage().boards,
+		});
+		this.calendarPresetStore.loadFromPackage(dataPackage.views.calendarPresets);
+	}
+
+	private syncKanbanPresetStoreFromSettings(): void {
+		const dataPackage = buildOperonDataPackageFromSettings(this.settings, {
+			filterSets: this.filterStore.getAll(),
+			kanbanOrderBoards: this.kanbanOrderStore.toPackage().boards,
+		});
+		this.kanbanPresetStore.loadFromPackage(dataPackage.views.kanbanPresets);
+	}
+
+	async togglePresetFavorite(kind: PresetFavoriteKind, presetId: string): Promise<boolean> {
+		return this.enqueueSettingsTransaction(async () => {
+			if (!this.isStoredPresetFavoriteTarget(kind, presetId)) return false;
+			const previousFavorites = clonePresetFavorites(this.settings.presetFavorites);
+			this.settings.presetFavorites = togglePresetFavorite(this.settings.presetFavorites, kind, presetId);
+			try {
+				await this.persistSettings({ forceRecoveredWrite: true });
+			} catch (error) {
+				this.restorePresetFavoriteMembership(kind, presetId, previousFavorites);
+				throw error;
+			}
+			return true;
+		});
+	}
+
+	async deleteCalendarPresetWithFavoriteCleanup(presetId: string): Promise<boolean> {
+		return this.enqueueSettingsTransaction(async () => {
+			if (this.settings.calendarPresets.length <= 1) return false;
+			if (!this.settings.calendarPresets.some(entry => entry.id === presetId)) return false;
+			const previousPreset = this.settings.calendarPresets.find(entry => entry.id === presetId)!;
+			const previousPresetIndex = this.settings.calendarPresets.indexOf(previousPreset);
+			const previousDefaultId = this.settings.calendarDefaultPresetId;
+			const previousFavorites = clonePresetFavorites(this.settings.presetFavorites);
+			this.settings.calendarPresets = this.settings.calendarPresets.filter(entry => entry.id !== presetId);
+			this.settings.presetFavorites = removePresetFavorite(this.settings.presetFavorites, 'calendar', presetId);
+			if (!this.settings.calendarPresets.some(entry => entry.id === this.settings.calendarDefaultPresetId)) {
+				this.settings.calendarDefaultPresetId = this.settings.calendarPresets[0]?.id ?? null;
+			}
+			const replacementDefaultId = this.settings.calendarDefaultPresetId;
+			try {
+				await this.persistSettings({ forceRecoveredWrite: true });
+			} catch (error) {
+				if (!this.settings.calendarPresets.some(entry => entry.id === presetId)) {
+					this.settings.calendarPresets.splice(
+						Math.min(previousPresetIndex, this.settings.calendarPresets.length),
+						0,
+						previousPreset,
+					);
+				}
+				if (previousDefaultId === presetId && this.settings.calendarDefaultPresetId === replacementDefaultId) {
+					this.settings.calendarDefaultPresetId = previousDefaultId;
+				}
+				this.restorePresetFavoriteMembership('calendar', presetId, previousFavorites);
+				this.syncCalendarPresetStoreFromSettings();
+				throw error;
+			}
+			return true;
+		});
+	}
+
+	async deleteKanbanPresetWithFavoriteCleanup(presetId: string): Promise<boolean> {
+		return this.enqueueSettingsTransaction(async () => {
+			if (this.settings.kanbanPresets.length <= 1) return false;
+			if (!this.settings.kanbanPresets.some(entry => entry.id === presetId)) return false;
+			const previousPreset = this.settings.kanbanPresets.find(entry => entry.id === presetId)!;
+			const previousPresetIndex = this.settings.kanbanPresets.indexOf(previousPreset);
+			const previousDefaultId = this.settings.kanbanDefaultPresetId;
+			const previousFavorites = clonePresetFavorites(this.settings.presetFavorites);
+			const previousKanbanOrder = this.kanbanOrderStore.toPackage();
+			const nextKanbanOrder = this.kanbanOrderStore.toPackage();
+			delete nextKanbanOrder.boards[presetId];
+			this.kanbanOrderStore.loadFromPackage(nextKanbanOrder);
+			this.settings.kanbanPresets = this.settings.kanbanPresets.filter(entry => entry.id !== presetId);
+			this.settings.presetFavorites = removePresetFavorite(this.settings.presetFavorites, 'kanban', presetId);
+			if (!this.settings.kanbanPresets.some(entry => entry.id === this.settings.kanbanDefaultPresetId)) {
+				this.settings.kanbanDefaultPresetId = this.settings.kanbanPresets[0]?.id ?? null;
+			}
+			const replacementDefaultId = this.settings.kanbanDefaultPresetId;
+			try {
+				await this.persistSettings({ forceRecoveredWrite: true });
+			} catch (error) {
+				if (!this.settings.kanbanPresets.some(entry => entry.id === presetId)) {
+					this.settings.kanbanPresets.splice(
+						Math.min(previousPresetIndex, this.settings.kanbanPresets.length),
+						0,
+						previousPreset,
+					);
+				}
+				if (previousDefaultId === presetId && this.settings.kanbanDefaultPresetId === replacementDefaultId) {
+					this.settings.kanbanDefaultPresetId = previousDefaultId;
+				}
+				this.restorePresetFavoriteMembership('kanban', presetId, previousFavorites);
+				const currentKanbanOrder = this.kanbanOrderStore.toPackage();
+				if (!(presetId in currentKanbanOrder.boards) && presetId in previousKanbanOrder.boards) {
+					currentKanbanOrder.boards[presetId] = previousKanbanOrder.boards[presetId]!;
+					this.kanbanOrderStore.loadFromPackage(currentKanbanOrder);
+				}
+				this.syncKanbanPresetStoreFromSettings();
+				throw error;
+			}
+			return true;
+		});
+	}
+
 	private async persistSettings(_options: RecoveredStoreWriteOptions): Promise<void> {
 		if (!this.dataPackageStore.canPersist()) {
 			if (_options.forceRecoveredWrite === false) return;
@@ -441,29 +663,52 @@ export class OperonStorage {
 		this.settings.filterSets = this.filterStore.getAll();
 		const normalized = migrateSettings(this.settings);
 		this.applySettingsInPlace(normalized);
-		await this.tablePresetStore.replaceAll(pickTablePresetStoreSettings(this.settings));
+		const legacyTableStoreActive = this.settings.tablePresetFileMigrationVersion < 1;
+		const previousTableSettings = legacyTableStoreActive ? this.tablePresetStore.getAll() : null;
+		const fileBackedTablePresetIds = new Set(this.settings.tablePresetFileBindings.map(binding => binding.id));
+		const legacyTableSettings = pickTablePresetStoreSettings(this.settings);
+		legacyTableSettings.tablePresets = legacyTableSettings.tablePresets.filter(preset => !fileBackedTablePresetIds.has(preset.id));
+		legacyTableSettings.tablePresetOrderIds = (legacyTableSettings.tablePresetOrderIds ?? [])
+			.filter(presetId => !fileBackedTablePresetIds.has(presetId));
+		if (legacyTableStoreActive) {
+			await this.tablePresetStore.replaceAll(legacyTableSettings, {
+				preservePresetIds: fileBackedTablePresetIds,
+				allowEmpty: fileBackedTablePresetIds.size > 0,
+			});
+		}
 		const dataPackage = buildOperonDataPackageFromSettings(this.settings, {
 			filterSets: this.filterStore.getAll(),
 			kanbanOrderBoards: this.kanbanOrderStore.toPackage().boards,
 			pinnedTasks: this.pinnedCache.toPackage(),
 		});
-		await this.dataPackageStore.updateDataPackage(currentPackage => {
-			const pinnedTasks = prunePinnedTaskTombstones(
-				mergePinnedTasksPackages(
-					currentPackage.state.pinnedTasks,
-					dataPackage.state.pinnedTasks,
-				),
-				new Date().toISOString(),
-				OPERON_PINNED_TASK_TOMBSTONE_RETENTION_MS,
-			);
-			return {
-				...dataPackage,
-				state: {
-					...dataPackage.state,
-					pinnedTasks,
-				},
-			};
-		});
+		try {
+			await this.dataPackageStore.updateDataPackage(currentPackage => {
+				const pinnedTasks = prunePinnedTaskTombstones(
+					mergePinnedTasksPackages(
+						currentPackage.state.pinnedTasks,
+						dataPackage.state.pinnedTasks,
+					),
+					new Date().toISOString(),
+					OPERON_PINNED_TASK_TOMBSTONE_RETENTION_MS,
+				);
+				return {
+					...dataPackage,
+					state: {
+						...dataPackage.state,
+						pinnedTasks,
+					},
+				};
+			});
+		} catch (error) {
+			if (previousTableSettings) {
+				try {
+					await this.tablePresetStore.replaceAll(previousTableSettings, { preservePresetIds: fileBackedTablePresetIds });
+				} catch (rollbackError) {
+					console.error('Operon: failed to roll back Table preset storage after settings save failure', rollbackError);
+				}
+			}
+			throw error;
+		}
 		this.hydratePackageBackedSettingStores();
 	}
 
@@ -504,6 +749,9 @@ export class OperonStorage {
 			const result = await this.dataPackageStore.reloadCanonicalDataPackage(DEFAULT_SETTINGS, {
 				stage: dataPackage => this.stageCanonicalDataPackageReload(dataPackage),
 			});
+			if (!result.dataPackage.ui.presetFavorites) {
+				await this.persistSettings({ forceRecoveredWrite: true });
+			}
 			return {
 				changed: result.changed,
 				diagnostics: result.diagnostics,
@@ -543,14 +791,67 @@ export class OperonStorage {
 
 	private getCommittedSettingsSnapshot(): OperonSettings {
 		const committed = this.dataPackageStore.getSettings(DEFAULT_SETTINGS);
-		Object.assign(committed, this.tablePresetStore.getAll());
+		const packageTableManifest = pickTablePresetStoreSettings(committed);
+		const legacyTableSettings = this.tablePresetStore.getAll();
+		if (this.hasFileBackedTablePresetAuthority(packageTableManifest)) {
+			committed.tablePresets = legacyTableSettings.tablePresets.map(cloneTablePreset);
+			this.applyFileBackedTablePresetManifest(committed, packageTableManifest, this.settings.tablePresets);
+		} else {
+			Object.assign(committed, legacyTableSettings);
+		}
 		return committed;
+	}
+
+	private hasFileBackedTablePresetAuthority(settings: TablePresetStoreSettings): boolean {
+		return (settings.tablePresetFileBindings?.length ?? 0) > 0
+			|| settings.tablePresetFileMigrationVersion >= 1;
+	}
+
+	private applyFileBackedTablePresetManifest(
+		target: OperonSettings,
+		manifest: TablePresetStoreSettings,
+		runtimePresets: readonly TablePreset[] = [],
+	): void {
+		const boundPresetIds = new Set((manifest.tablePresetFileBindings ?? []).map(binding => binding.id));
+		const presetsById = new Map(target.tablePresets.map(preset => [preset.id, preset]));
+		for (const preset of runtimePresets) {
+			if (boundPresetIds.has(preset.id)) presetsById.set(preset.id, cloneTablePreset(preset));
+		}
+		const orderIds = [...(manifest.tablePresetOrderIds ?? [])];
+		const orderedPresetIds = new Set(orderIds);
+		target.tablePresets = [
+			...orderIds.flatMap(presetId => {
+				const preset = presetsById.get(presetId);
+				return preset ? [preset] : [];
+			}),
+			...[...presetsById.values()].filter(preset => !orderedPresetIds.has(preset.id)),
+		];
+		target.tablePresetOrderIds = orderIds;
+		target.tablePresetFileBindings = (manifest.tablePresetFileBindings ?? []).map(binding => ({ ...binding }));
+		target.tablePresetFileMigrationVersion = manifest.tablePresetFileMigrationVersion;
+		target.tablePresetFileMigrationFinalizedVersion = manifest.tablePresetFileMigrationFinalizedVersion;
+		target.tableDefaultPresetId = manifest.tableDefaultPresetId;
+		target.tableEmbedVisibleRows = manifest.tableEmbedVisibleRows;
+		target.tableShowLineNumbers = manifest.tableShowLineNumbers;
+		target.tableShowTaskIcon = manifest.tableShowTaskIcon;
+		target.tableShowTaskTypeIcon = manifest.tableShowTaskTypeIcon;
 	}
 
 	private async stageCanonicalDataPackageReload(
 		dataPackage: OperonDataPackageV1,
 	): Promise<OperonDataPackageReloadStage> {
 		const nextSettings = composeOperonSettingsFromDataPackage(dataPackage, DEFAULT_SETTINGS);
+		const packageTableManifest = pickTablePresetStoreSettings(nextSettings);
+		const currentFileProjectionSignature = JSON.stringify({
+			orderIds: this.settings.tablePresetOrderIds,
+			bindings: this.settings.tablePresetFileBindings,
+			defaultPresetId: this.settings.tableDefaultPresetId,
+		});
+		const packageFileProjectionSignature = JSON.stringify({
+			orderIds: packageTableManifest.tablePresetOrderIds ?? [],
+			bindings: packageTableManifest.tablePresetFileBindings ?? [],
+			defaultPresetId: packageTableManifest.tableDefaultPresetId,
+		});
 		const stagedFilterStore = new FilterStore(this.app, this.writeQueue);
 		stagedFilterStore.loadFromPackage(dataPackage.views.filters, {
 			seedDynamicDefaultSorts: dataPackage.settings.settingsVersion < 88,
@@ -569,6 +870,25 @@ export class OperonStorage {
 			},
 		);
 		Object.assign(nextSettings, tableLoad.settings);
+		if (this.hasFileBackedTablePresetAuthority(packageTableManifest)) {
+			this.applyFileBackedTablePresetManifest(nextSettings, packageTableManifest, this.settings.tablePresets);
+		}
+		nextSettings.tablePresetFileMigrationFinalizedVersion = Math.max(
+			nextSettings.tablePresetFileMigrationFinalizedVersion,
+			this.settings.tablePresetFileMigrationFinalizedVersion,
+		);
+		nextSettings.tablePresetFileMigrationVersion = Math.max(
+			nextSettings.tablePresetFileMigrationVersion,
+			this.settings.tablePresetFileMigrationVersion,
+			nextSettings.tablePresetFileMigrationFinalizedVersion >= 1 ? 1 : 0,
+		);
+		if (!dataPackage.ui.presetFavorites) {
+			nextSettings.presetFavorites = createDefaultPresetFavorites({
+				table: nextSettings.tableDefaultPresetId,
+				calendar: nextSettings.calendarDefaultPresetId,
+				kanban: nextSettings.kanbanDefaultPresetId,
+			});
+		}
 
 		const previousSettings = cloneOperonSettings(this.settings);
 		const previousDataPackage = this.dataPackageStore.getDataPackage();
@@ -576,7 +896,9 @@ export class OperonStorage {
 		Object.assign(previousSettings, previousTableSnapshot.settings);
 		const nextTableSnapshot = stagedTablePresetStore.captureRuntimeSnapshot();
 		const tablePresetsChanged = JSON.stringify(previousTableSnapshot.settings)
-			!== JSON.stringify(pickTablePresetStoreSettings(nextSettings));
+			!== JSON.stringify(nextTableSnapshot.settings);
+		const fileProjectionChanged = this.hasFileBackedTablePresetAuthority(packageTableManifest)
+			&& currentFileProjectionSignature !== packageFileProjectionSignature;
 		let commitStarted = false;
 
 		const applyRuntimePackage = (
@@ -596,7 +918,7 @@ export class OperonStorage {
 		};
 
 		return {
-			changed: tablePresetsChanged,
+			changed: tablePresetsChanged || fileProjectionChanged,
 			commit: () => {
 				commitStarted = true;
 				this.tablePresetStore.restoreRuntimeSnapshot(nextTableSnapshot);
@@ -614,6 +936,7 @@ export class OperonStorage {
 		dataPackage: OperonDataPackageV1,
 		options: { preserveSettingsIdentity?: boolean } = {},
 	): Promise<boolean> {
+		const shouldSeedPresetFavorites = !dataPackage.ui.presetFavorites;
 		this.filterStore.loadFromPackage(dataPackage.views.filters, {
 			seedDynamicDefaultSorts: dataPackage.settings.settingsVersion < 88,
 		});
@@ -622,6 +945,7 @@ export class OperonStorage {
 			resetGeneration: !options.preserveSettingsIdentity,
 		});
 		const nextSettings = composeOperonSettingsFromDataPackage(dataPackage, DEFAULT_SETTINGS);
+		const packageTableManifest = pickTablePresetStoreSettings(nextSettings);
 		const tableLoad = await this.tablePresetStore.load(
 			pickTablePresetStoreSettings(nextSettings),
 			{
@@ -630,6 +954,16 @@ export class OperonStorage {
 			},
 		);
 		Object.assign(nextSettings, tableLoad.settings);
+		if (this.hasFileBackedTablePresetAuthority(packageTableManifest)) {
+			this.applyFileBackedTablePresetManifest(nextSettings, packageTableManifest);
+		}
+		if (shouldSeedPresetFavorites) {
+			nextSettings.presetFavorites = createDefaultPresetFavorites({
+				table: nextSettings.tableDefaultPresetId,
+				calendar: nextSettings.calendarDefaultPresetId,
+				kanban: nextSettings.kanbanDefaultPresetId,
+			});
+		}
 		if (options.preserveSettingsIdentity) {
 			this.applySettingsInPlace(nextSettings);
 		} else {
@@ -742,10 +1076,50 @@ export class OperonStorage {
 	get externalCalendars(): ExternalCalendarCacheStore { return this.externalCalendarCache; }
 	get externalCalendarSources(): ExternalCalendarSourceStore { return this.externalCalendarSourceStore; }
 	get filters(): FilterStore { return this.filterStore; }
+
+	async deleteFilterSetWithFavoriteCleanup(filterId: string): Promise<void> {
+		await this.enqueueSettingsTransaction(async () => {
+			if (isSpecialDynamicFilterSetId(filterId)) return;
+			const previousFavorites = clonePresetFavorites(this.settings.presetFavorites);
+			const previousFilters = this.filterStore.toPackage();
+			if (!previousFilters.filterIds.includes(filterId)) return;
+			const nextFilters = this.filterStore.toPackage();
+			nextFilters.filterIds = nextFilters.filterIds.filter(id => id !== filterId);
+			delete nextFilters.itemsById[filterId];
+			this.filterStore.loadFromPackage(nextFilters);
+			this.settings.filterSets = this.filterStore.getAll();
+			this.settings.presetFavorites = removePresetFavorite(this.settings.presetFavorites, 'filter', filterId);
+			try {
+				await this.persistSettings({ forceRecoveredWrite: true });
+			} catch (error) {
+				const currentFilters = this.filterStore.toPackage();
+				if (!(filterId in currentFilters.itemsById)) {
+					const previousFilter = previousFilters.itemsById[filterId];
+					if (previousFilter) {
+						currentFilters.itemsById[filterId] = previousFilter;
+						const previousIndex = previousFilters.filterIds.indexOf(filterId);
+						currentFilters.filterIds.splice(
+							Math.min(Math.max(previousIndex, 0), currentFilters.filterIds.length),
+							0,
+							filterId,
+						);
+					}
+				}
+				this.filterStore.loadFromPackage(currentFilters);
+				this.settings.filterSets = this.filterStore.getAll();
+				this.restorePresetFavoriteMembership('filter', filterId, previousFavorites);
+				throw error;
+			}
+		});
+	}
+
 	get pipelines(): PipelineStore { return this.pipelineStore; }
 	get calendarPresets(): CalendarPresetStore { return this.calendarPresetStore; }
 	get kanbanPresets(): KanbanPresetStore { return this.kanbanPresetStore; }
 	get tablePresets(): TablePresetStore { return this.tablePresetStore; }
+	get tablePresetFileMigrationJournal(): TablePresetFileMigrationJournalStore { return this.tablePresetFileMigrationJournalStore; }
+	get tablePresetFileMigrationBackupRootPath(): string { return this.storagePaths.tablePresetFileMigrationBackupRootPath; }
+	get tablePresetFileMigrationReceiptPath(): string { return this.storagePaths.state.tablePresetFileMigrationReceiptPath; }
 	get kanbanOrder(): KanbanOrderStore { return this.kanbanOrderStore; }
 	get keyMappings(): KeyMappingStore { return this.keyMappingStore; }
 	get priorities(): PriorityStore { return this.priorityStore; }
@@ -759,6 +1133,7 @@ export class OperonStorage {
 			this.repeatSeriesStore.drain(),
 			this.projectSerialStore.drain(),
 			this.fieldRenameJournalStore.drain(),
+			this.tablePresetFileMigrationJournalStore.drain(),
 			this.externalCalendarCache.drain(),
 		]);
 		await this.writeQueue.drain();

@@ -460,6 +460,10 @@ function isValidDataPackageDomain(domain: OperonDataPackageDomain, value: unknow
 			&& isRecord(value.taskUiPreferences)
 			&& isRecord(value.taskCreationProfile)
 			&& (
+				!Object.prototype.hasOwnProperty.call(value, 'presetFavorites')
+				|| isRecord(value.presetFavorites)
+			)
+			&& (
 				!Object.prototype.hasOwnProperty.call(value, 'workspaceTweaks')
 				|| isRecord(value.workspaceTweaks)
 			);

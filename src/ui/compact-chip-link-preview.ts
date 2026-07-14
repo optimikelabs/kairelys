@@ -1,18 +1,21 @@
-import { App } from 'obsidian';
+import { App, type HoverParent } from 'obsidian';
 import { asHTMLElement, getOwnerBody } from '../core/dom-compat';
 
 export const OPERON_COMPACT_CHIP_HOVER_SOURCE = 'operon-compact-chip';
 export const OPERON_TASK_TITLE_HOVER_SOURCE = 'operon-task-title';
 export const OPERON_TASK_DESCRIPTION_WIKILINK_HOVER_SOURCE = 'operon-task-description-wikilink';
 const OPERON_PREVIEW_BINDINGS = Symbol('operon-preview-bindings');
+const hoverParents = new WeakMap<HTMLElement, HoverParent>();
 
-function resolveHoverParent(element: HTMLElement): HTMLElement {
-	const hoverParent = asHTMLElement(element.closest(
+function resolveHoverParent(element: HTMLElement): HoverParent {
+	const hoverParentEl = asHTMLElement(element.closest(
 		'.workspace-leaf-content, .markdown-preview-view, .markdown-embed, .markdown-source-view, .modal',
-	), element);
-	if (hoverParent) return hoverParent;
-
-	return getOwnerBody(element);
+	), element) ?? getOwnerBody(element);
+	const existing = hoverParents.get(hoverParentEl);
+	if (existing) return existing;
+	const hoverParent: HoverParent = { hoverPopover: null };
+	hoverParents.set(hoverParentEl, hoverParent);
+	return hoverParent;
 }
 
 function bindModifierHoverLinkPreview(
@@ -33,8 +36,10 @@ function bindModifierHoverLinkPreview(
 		[OPERON_PREVIEW_BINDINGS]?: Set<string>;
 	})[OPERON_PREVIEW_BINDINGS] = bindings;
 
-	const triggerPreview = (event: MouseEvent) => {
-		if (!event.metaKey && !event.ctrlKey) return;
+	let isHovered = false;
+	let previewTriggered = false;
+	const triggerPreview = (event: MouseEvent): boolean => {
+		if (!event.metaKey && !event.ctrlKey) return false;
 		(app.workspace as unknown as {
 			trigger: (name: string, payload: Record<string, unknown>) => void;
 		}).trigger('hover-link', {
@@ -45,10 +50,25 @@ function bindModifierHoverLinkPreview(
 			sourcePath,
 			hoverParent: resolveHoverParent(element),
 		});
+		return true;
 	};
 
-	element.addEventListener('mouseover', triggerPreview);
-	element.addEventListener('mousemove', triggerPreview);
+	element.addEventListener('mouseover', (event) => {
+		const relatedTarget = event.relatedTarget;
+		if (relatedTarget && element.contains(relatedTarget as Node)) return;
+		isHovered = true;
+		previewTriggered = triggerPreview(event);
+	});
+	element.addEventListener('mousemove', (event) => {
+		if (!isHovered || previewTriggered) return;
+		previewTriggered = triggerPreview(event);
+	});
+	element.addEventListener('mouseout', (event) => {
+		const relatedTarget = event.relatedTarget;
+		if (relatedTarget && element.contains(relatedTarget as Node)) return;
+		isHovered = false;
+		previewTriggered = false;
+	});
 }
 
 export function bindCompactChipLinkPreview(

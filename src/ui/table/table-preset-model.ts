@@ -19,6 +19,7 @@ import {
 	type TableSummaryFunction,
 } from '../../types/table';
 import type { FilterFieldType, OperonSettings } from '../../types/settings';
+import type { TablePresetRegistryEntry } from '../../types/table-preset-registry';
 import { getTableTaskField } from './table-field-catalog';
 
 const TABLE_COLUMN_MIN_WIDTH = 80;
@@ -39,6 +40,18 @@ export function createTablePresetFromSource(source: TablePreset | null | undefin
 
 export function normalizeTablePresetForEditing(preset: TablePreset): TablePreset {
 	return normalizeTablePresetColumnOrder(cloneTablePreset(preset));
+}
+
+export function resolveTablePresetForSettings(
+	registryEntry: Pick<TablePresetRegistryEntry, 'status' | 'preset'> | null | undefined,
+	legacyPreset: TablePreset | null | undefined,
+): TablePreset | null {
+	if (registryEntry) {
+		return registryEntry.status === 'available' && registryEntry.preset
+			? cloneTablePreset(registryEntry.preset)
+			: null;
+	}
+	return legacyPreset ? cloneTablePreset(legacyPreset) : null;
 }
 
 export function normalizeTablePresetForColumnUi(preset: TablePreset): TablePreset {
@@ -205,6 +218,21 @@ export function setTablePresetColumnAlignment(
 		return draft;
 	}
 	column.align = align;
+	return draft;
+}
+
+export function setTablePresetColumnLabel(preset: TablePreset, key: string, label: string): TablePreset {
+	const normalizedKey = key.trim();
+	if (!normalizedKey) return cloneTablePreset(preset);
+	const draft = cloneTablePreset(preset);
+	const column = draft.columns.find(entry => entry.key === normalizedKey);
+	if (!column) return draft;
+	const normalizedLabel = label.trim();
+	if (normalizedLabel) {
+		column.label = normalizedLabel;
+	} else {
+		delete column.label;
+	}
 	return draft;
 }
 

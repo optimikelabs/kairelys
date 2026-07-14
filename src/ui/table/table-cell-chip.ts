@@ -59,6 +59,7 @@ export function renderTableCellChipContent(
 	options: TableCellChipRenderOptions = {},
 ): void {
 	applyTableCellChipAccent(chip, key, value, options);
+	const displayValue = formatTableDetailedDatetimeValue(key, value);
 	const locationVisual = resolveTableLocationCellVisual(key, value, options);
 	if (locationVisual) {
 		renderTableLocationChipContent(
@@ -74,7 +75,7 @@ export function renderTableCellChipContent(
 		const preserveDateIconSlot = field?.type === 'date' || field?.type === 'datetime';
 		renderTableValueIconChipContent(
 			chip,
-			value,
+			displayValue,
 			resolveTableValueCellIcon(
 				key,
 				value,
@@ -88,10 +89,15 @@ export function renderTableCellChipContent(
 		return;
 	}
 	if (key !== 'taskIcon') {
-		chip.setText(value);
+		chip.setText(displayValue);
 		return;
 	}
 	renderTableTaskIconChipContent(chip, value);
+}
+
+export function formatTableDetailedDatetimeValue(key: string, value: string): string {
+	if (key !== 'datetimeStart' && key !== 'datetimeEnd') return value;
+	return value.replace(/^(\d{4}-\d{2}-\d{2})T/u, '$1 ');
 }
 
 function getTableCellChipItems(

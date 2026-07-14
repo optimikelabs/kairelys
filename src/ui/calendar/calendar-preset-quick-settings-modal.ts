@@ -14,12 +14,16 @@ import { parsePresetNumber } from '../settings/preset-control-helpers';
 import { renderTaskColorSourceSelectButton, showTaskColorSourceSelectMenu } from '../task-color-source-select';
 import { renderPresetFilterActions } from '../preset-filter-actions';
 import type { FilterModalEvalDeps } from '../filter-set-modal';
+import { isPresetFavorite } from '../../core/preset-favorites';
+import { createPresetFavoriteButton } from '../preset-favorite-button';
 
 interface CalendarPresetQuickSettingsModalOptions {
 	getSettings: () => OperonSettings;
 	preset: CalendarPreset | null;
 	onSave: (preset: CalendarPreset) => Promise<void>;
+	onToggleFavorite: (presetId: string) => Promise<void>;
 	onSaveFilterSet: (filterSet: FilterSet) => Promise<void>;
+	onToggleFilterFavorite?: (filterSetId: string) => Promise<void>;
 	getFilterModalEvalDeps?: () => FilterModalEvalDeps | null;
 }
 
@@ -95,7 +99,7 @@ export class CalendarPresetQuickSettingsModal extends Modal {
 						current.surfaceType = value;
 						current.weekCount = this.normalizeWeekCount(current.weekCount);
 					});
-					this.render();
+					this.renderPreservingScroll();
 				});
 			});
 
@@ -204,6 +208,7 @@ export class CalendarPresetQuickSettingsModal extends Modal {
 				});
 			},
 			onSaveFilterSet: this.options.onSaveFilterSet,
+			onToggleFilterFavorite: this.options.onToggleFilterFavorite,
 			getFilterModalEvalDeps: this.options.getFilterModalEvalDeps,
 			onRefresh: () => this.render(),
 			errorContextPrefix: 'calendar preset',
@@ -372,15 +377,35 @@ export class CalendarPresetQuickSettingsModal extends Modal {
 
 	private renderButtons(container: HTMLElement): void {
 		const row = container.createDiv('operon-calendar-preset-settings-footer');
+		const left = row.createDiv('operon-preset-settings-footer-management');
+		const right = row.createDiv('operon-preset-settings-footer-primary');
+		const preset = this.getPreset();
+		const settings = this.options.getSettings();
+		const isStoredPreset = preset !== null && settings.calendarPresets.some(entry => entry.id === preset.id);
+		const isFavorite = preset !== null && isPresetFavorite(settings.presetFavorites, 'calendar', preset.id);
 
-		const cancelBtn = row.createEl('button', {
+		createPresetFavoriteButton({
+			containerEl: left,
+			className: 'operon-calendar-preset-settings-footer-button operon-preset-settings-footer-icon-button',
+			active: isFavorite,
+			disabled: !isStoredPreset,
+			onClick: () => {
+				if (!preset) return;
+				void runSettingsAsync('calendar preset favorite failed', async () => {
+					await this.options.onToggleFavorite(preset.id);
+					this.renderPreservingScroll(true);
+				});
+			},
+		});
+
+		const cancelBtn = right.createEl('button', {
 			cls: 'operon-calendar-preset-settings-footer-button',
 			text: t('buttons', 'cancel'),
 		});
 		cancelBtn.type = 'button';
 		cancelBtn.addEventListener('click', () => this.close());
 
-		const saveBtn = row.createEl('button', {
+		const saveBtn = right.createEl('button', {
 			cls: 'operon-calendar-preset-settings-footer-button mod-cta',
 			text: t('buttons', 'save'),
 		});
@@ -397,6 +422,21 @@ export class CalendarPresetQuickSettingsModal extends Modal {
 			await this.options.onSave(cloneCalendarPreset(preset));
 			this.close();
 		}));
+	}
+
+	private renderPreservingScroll(restoreFavoriteFocus = false): void {
+		const scrollTop = this.contentEl.scrollTop;
+		const scrollLeft = this.contentEl.scrollLeft;
+		this.render();
+		const restore = (): void => {
+			this.contentEl.scrollTop = scrollTop;
+			this.contentEl.scrollLeft = scrollLeft;
+		};
+		restore();
+		if (restoreFavoriteFocus) {
+			this.contentEl.querySelector<HTMLButtonElement>('.operon-preset-favorite-button')?.focus({ preventScroll: true });
+		}
+		this.contentEl.ownerDocument.defaultView?.requestAnimationFrame(restore);
 	}
 
 	private addNumberSetting(

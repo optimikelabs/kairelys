@@ -10,6 +10,26 @@ import { Editor, EditorPosition, EditorSelection, MarkdownRenderer, MarkdownRend
 import { EditorView } from '@codemirror/view';
 import type { StateEffect } from '@codemirror/state';
 import { OperonStorage } from './src/storage/operon-storage';
+import { TablePresetRegistry } from './src/storage/table-preset-registry';
+import type { TablePresetRegistryEntry, TablePresetRegistryPatchControl } from './src/types/table-preset-registry';
+import { TablePresetFileLifecycle } from './src/storage/table-preset-file-lifecycle';
+import type {
+	TablePresetFileConflictResolutionResult,
+	TablePresetFileMigrationReceiptV1,
+} from './src/types/table-preset-file-lifecycle';
+import {
+	runTablePresetFileMigration,
+	summarizeTablePresetFileMigrationJournal,
+	type TablePresetFileMigrationSummary,
+} from './src/storage/table-preset-file-migration-runner';
+import {
+	buildUniqueOperonTableFilePath,
+	deriveOperonTableNameFromPath,
+	getOperonTableFilePathKey,
+	isOperonTableFilePath,
+	parseOperonTableFile,
+	serializeOperonTableFile,
+} from './src/storage/table-file';
 import { OperonIndexer, type IndexedTaskDelta } from './src/indexer/indexer';
 import type { ProjectSerialDisplay } from './src/core/project-serials';
 import { scanFileWithMappings } from './src/indexer/file-scanner';
@@ -125,7 +145,11 @@ import {
 } from './src/ui/reading-task-operon-id';
 import { enhanceReadingTaskFileWikilinks } from './src/ui/reading-task-wikilink-overlay';
 import { MobileGlobalTaskFab } from './src/ui/mobile-global-task-fab';
-import { OPERON_COMPACT_CHIP_HOVER_SOURCE } from './src/ui/compact-chip-link-preview';
+import {
+	OPERON_COMPACT_CHIP_HOVER_SOURCE,
+	OPERON_TASK_DESCRIPTION_WIKILINK_HOVER_SOURCE,
+	OPERON_TASK_TITLE_HOVER_SOURCE,
+} from './src/ui/compact-chip-link-preview';
 import { cleanupOperonRenderRoot } from './src/ui/render-root-cleanup';
 import { hideTaskContextualHoverMenu } from './src/ui/contextual-hover-menu';
 import {
@@ -200,7 +224,7 @@ import {
 import { SubtasksFilterModal } from './src/ui/subtasks-filter-modal';
 import { FilterSetModal, refreshFilterPreviewModals, refreshFilterSetModals, type FilterModalEvalDeps } from './src/ui/filter-set-modal';
 import { OperonReleaseNotesModal } from './src/ui/release-notes-modal';
-import { OperonSettingsTab } from './src/ui/settings-tab';
+import { OperonSettingsTab, type TablePresetSettingsFileIntegration } from './src/ui/settings-tab';
 import { TimeSessionHistoryView, TIME_SESSION_HISTORY_VIEW_TYPE } from './src/ui/time-session-history-view';
 import { FlowTimeView, FLOW_TIME_VIEW_TYPE } from './src/ui/flow-time-view';
 import { TimeTrackerStatusBar } from './src/ui/time-tracker-status-bar';
@@ -409,19 +433,28 @@ import { buildRepeatScopeModalLabels, promptRepeatOccurrenceScope } from './src/
 import { KanbanView, KANBAN_VIEW_TYPE } from './src/ui/kanban/kanban-view';
 import { OperonTableView } from './src/ui/table/operon-table-view';
 import {
+	OPERON_TABLE_FILE_VIEW_TYPE,
 	OPERON_TABLE_VIEW_TYPE,
 	cloneTablePreset,
 	createDefaultTablePreset,
 	createTablePresetId,
 	type TableLeafState,
 	type TablePreset,
+	type TablePresetFileBinding,
 	type TablePresetPatch,
 } from './src/types/table';
 import { buildUniqueRelatedPresetName } from './src/ui/related-views';
 import type { RelatedViewCreateTarget, RelatedViewOpenTarget } from './src/types/related-views';
 import { isEditableTableTaskFieldKey, normalizeTableTaskFieldKey } from './src/ui/table/table-field-catalog';
 import { buildTableEmbedCode } from './src/ui/table/table-export';
-import { applyTablePresetPatch } from './src/ui/table/table-preset-model';
+import { applyTablePresetPatch, resolveTablePresetForSettings } from './src/ui/table/table-preset-model';
+import {
+	clonePresetFavorites,
+	removePresetFavorite,
+	togglePresetFavorite,
+	type PresetFavoriteKind,
+	type PresetFavorites,
+} from './src/core/preset-favorites';
 import { TablePresetMutationQueue } from './src/ui/table/table-preset-mutation-queue';
 import { TablePresetQuickSettingsModal } from './src/ui/table/table-preset-quick-settings-modal';
 import { KanbanPresetQuickSettingsModal } from './src/ui/kanban/kanban-preset-quick-settings-modal';
@@ -679,6 +712,8 @@ interface MarkdownTaskSurfaceRefreshOptions {
 type DuplicateAlertStatusBarState = 'hidden' | 'conflict' | 'resolved';
 
 const OPERON_ID_PLACEHOLDER_VALUE_PATTERN = /^\{\{operonId[0-9A-Za-z]?\}\}$/;
+const DEFERRED_FILE_TASK_TEMPLATE_PLACEHOLDER_PATTERN = /\{\{(note|dateStarted|dateScheduled|dateDue|status|priority)\}\}/g;
+const TEMPLATED_FILE_TASK_CREATION_WINDOW_MS = 30_000;
 const RAW_TASK_CREATION_BULK_NOTICE_THRESHOLD = 4;
 const RAW_TASK_CREATION_NOTICE_SUPPRESSION_TTL_MS = 30_000;
 const DUPLICATE_ALERT_RESOLVED_HIDE_DELAY_MS = 10_000;
@@ -695,6 +730,14 @@ interface WorkspaceTweakPropertiesCollapseCycle {
 }
 
 type SettingsReindexReason = 'key-mappings' | 'workflow-semantics';
+
+interface TablePresetSettingsSnapshot {
+	tablePresets: TablePreset[];
+	tablePresetFileBindings: TablePresetFileBinding[];
+	tablePresetOrderIds: string[];
+	tableDefaultPresetId: string | null;
+	presetFavorites: PresetFavorites;
+}
 
 export default class OperonPlugin extends Plugin {
 	storage!: OperonStorage;
@@ -729,6 +772,17 @@ export default class OperonPlugin extends Plugin {
 	private embedFilterDeps: EmbedFilterDeps | null = null;
 	private embedTableDeps: EmbedTableDeps | null = null;
 	private readonly tablePresetMutationQueue = new TablePresetMutationQueue();
+	private tablePresetRegistry!: TablePresetRegistry<TFile>;
+	private tablePresetFileLifecycle!: TablePresetFileLifecycle<TFile>;
+	private readonly tablePresetRegistrySubscriptions = new Map<string, () => void>();
+	private settingsTab: OperonSettingsTab | null = null;
+	private tablePresetRegistryRefreshTimer: WindowTimeoutHandle | null = null;
+	private readonly expectedTableFileModifyHashes = new Map<string, string>();
+	private readonly expectedTableFileRenames = new Map<string, string>();
+	private readonly expectedTableFileDeletes = new Map<string, string>();
+	private tablePresetFileMigrationRunning = false;
+	private tablePresetFileMigrationSummary: TablePresetFileMigrationSummary | null = null;
+	private tablePresetFileMigrationReceipt: TablePresetFileMigrationReceiptV1 | null = null;
 	private dynamicFileTaskFilterReadingTimers = new Map<string, WindowTimeoutHandle>();
 	private dynamicFileTaskFilterReadingHosts = new Set<HTMLElement>();
 	private dynamicFileTaskFilterReadingInstances = new WeakMap<HTMLElement, FilterSurfaceInstance>();
@@ -754,6 +808,9 @@ export default class OperonPlugin extends Plugin {
 	private livePreviewPendingPickerSessionId: string | null = null;
 	private livePreviewPendingPickerUntil = 0;
 	private workflowNormalizationInProgress = new Set<string>();
+	private workflowNormalizationPending = new Set<string>();
+	private workflowNormalizationRenameTargets = new Map<string, string>();
+	private templatedFileTaskCreationCandidates = new Map<string, number>();
 	private trackerStatusBar: TimeTrackerStatusBar | null = null;
 	private pinnedDock: PinnedTasksDock | null = null;
 	private mobileGlobalTaskFab: MobileGlobalTaskFab | null = null;
@@ -833,6 +890,12 @@ export default class OperonPlugin extends Plugin {
 		this.settings.filterSets = this.storage.filters.getAll();
 	}
 
+	private async togglePresetFavoriteAndRefresh(kind: PresetFavoriteKind, presetId: string): Promise<void> {
+		if (await this.storage.togglePresetFavorite(kind, presetId)) {
+			this.refreshViews();
+		}
+	}
+
 	private async saveFilterSetAndRefresh(filterSet: FilterSet): Promise<void> {
 		await this.storage.filters.upsert(filterSet);
 		this.syncFilterSetsFromStore();
@@ -866,7 +929,7 @@ export default class OperonPlugin extends Plugin {
 	}
 
 	private async deleteFilterSetAndRefresh(filterSetId: string): Promise<void> {
-		await this.storage.filters.delete(filterSetId);
+		await this.storage.deleteFilterSetWithFavoriteCleanup(filterSetId);
 		this.syncFilterSetsFromStore();
 		this.refreshViews();
 	}
@@ -1134,6 +1197,11 @@ export default class OperonPlugin extends Plugin {
 					path: taxonomyDiagnostics.backupPath,
 				}));
 			}
+			const hasFileBackedTablePresetAuthority = this.settings.tablePresetFileBindings.length > 0
+				|| this.settings.tablePresetFileMigrationVersion >= 1;
+			if (result.changed || hasFileBackedTablePresetAuthority) {
+				await this.refreshTablePresetRegistry({ adoptUnbound: true, persistBindings: true });
+			}
 			if (result.changed) {
 				this.handleSettingsChanged();
 				if (mode === 'manual') {
@@ -1234,14 +1302,50 @@ export default class OperonPlugin extends Plugin {
 		}
 	}
 
-	private refreshTableLeaves(): void {
-		for (const leaf of this.app.workspace.getLeavesOfType(OPERON_TABLE_VIEW_TYPE)) {
+	private refreshTableLeaves(presetId?: string, registryEntry?: TablePresetRegistryEntry<TFile> | null): void {
+		const leaves = [
+			...this.app.workspace.getLeavesOfType(OPERON_TABLE_VIEW_TYPE),
+			...this.app.workspace.getLeavesOfType(OPERON_TABLE_FILE_VIEW_TYPE),
+		];
+		for (const leaf of leaves) {
+			const tableView = leaf.view instanceof OperonTableView ? leaf.view : null;
+			const isFileView = tableView?.getViewType() === OPERON_TABLE_FILE_VIEW_TYPE;
+			if (presetId !== undefined) {
+				if (isFileView) {
+					const path = tableView?.file?.path;
+					const entry = this.tablePresetRegistry.get(presetId);
+					const candidatePaths = new Set([
+						...(entry?.source.path ? [entry.source.path] : []),
+						...(entry?.conflicts.flatMap(conflict => conflict.paths) ?? []),
+					].map(getOperonTableFilePathKey));
+					if (!path || !candidatePaths.has(getOperonTableFilePathKey(path))) continue;
+				} else {
+					const state = leaf.view instanceof OperonTableView
+					? leaf.view.getState() as Partial<TableLeafState>
+					: {};
+					const activePresetId = state.presetId ?? this.settings.tableDefaultPresetId;
+					if (activePresetId !== presetId) continue;
+				}
+			}
+			if (isFileView && tableView && presetId !== undefined) {
+				if (registryEntry?.status === 'available' && registryEntry.preset) {
+					tableView.applyRegistryPreset(registryEntry.preset);
+					continue;
+				}
+				runAsyncAction('table file leaf reload failed', () => tableView.reloadCurrentTableFile());
+				continue;
+			}
 			if (hasUnknownMethod(leaf.view, 'renderIfVisibleOrInvalidate')) {
 				callUnknownMethod(leaf.view, 'renderIfVisibleOrInvalidate');
 			} else {
 				callUnknownMethod(leaf.view, 'render');
 			}
 		}
+	}
+
+	private refreshTablePresetSurfaces(presetId: string, registryEntry?: TablePresetRegistryEntry<TFile> | null): void {
+		this.refreshTableLeaves(presetId, registryEntry);
+		if (this.embedTableDeps) refreshEmbedTables(this.embedTableDeps, presetId);
 	}
 
 	private refreshTimeSessionHistoryLeaves(force = false): void {
@@ -1848,6 +1952,495 @@ export default class OperonPlugin extends Plugin {
 		runAsyncAction('plugin load failed', () => this.loadPlugin());
 	}
 
+	private async initializeTablePresetRegistry(): Promise<void> {
+		await this.executeTablePresetFileMigration({ notify: true, refreshRegistry: false });
+		this.tablePresetRegistry = new TablePresetRegistry<TFile>({
+			loadLegacyPresets: () => this.settings.tablePresetFileMigrationVersion < 1
+				? this.storage.tablePresets.getAll().tablePresets
+				: [],
+			loadFileBindings: () => this.settings.tablePresetFileBindings.map(binding => ({ ...binding })),
+			listTableFiles: () => this.app.vault.getFiles(),
+			readTableFile: file => this.app.vault.read(file),
+			applyPatch: (preset, patch) => applyTablePresetPatch(preset, patch),
+			writeTableFile: (path, serialized, context) => this.writeCanonicalTableFile(path, serialized, context.baseFileContent),
+		});
+		this.tablePresetFileLifecycle = new TablePresetFileLifecycle(
+			this.app,
+			this.storage,
+			this.tablePresetRegistry,
+			{ receiptPath: this.storage.tablePresetFileMigrationReceiptPath },
+		);
+		try {
+			this.tablePresetFileMigrationReceipt = await this.tablePresetFileLifecycle.reconcileFinalizedReceipt(
+				this.settings.tablePresetFileMigrationFinalizedVersion,
+			);
+		} catch (error) {
+			console.error('Operon: failed to load Table file migration receipt', error);
+			this.tablePresetFileMigrationReceipt = null;
+		}
+		await this.refreshTablePresetRegistry({ adoptUnbound: true, persistBindings: true });
+		this.registerTablePresetFileWatchers();
+		this.register(() => {
+			if (this.tablePresetRegistryRefreshTimer !== null) {
+				clearWindowTimeout(this.tablePresetRegistryRefreshTimer);
+				this.tablePresetRegistryRefreshTimer = null;
+			}
+			for (const unsubscribe of this.tablePresetRegistrySubscriptions.values()) unsubscribe();
+			this.tablePresetRegistrySubscriptions.clear();
+		});
+	}
+
+	private async executeTablePresetFileMigration(
+		options: { notify: boolean; refreshRegistry: boolean },
+	): Promise<TablePresetFileMigrationSummary | null> {
+		if (this.tablePresetFileMigrationRunning) return this.tablePresetFileMigrationSummary;
+		const wasComplete = this.settings.tablePresetFileMigrationVersion >= 1;
+		this.tablePresetFileMigrationRunning = true;
+		try {
+			try {
+				this.tablePresetFileMigrationSummary = await runTablePresetFileMigration(this.app, this.storage);
+			} catch (error) {
+				console.error('Operon: Table file migration failed before it could persist recovery state', error);
+				this.tablePresetFileMigrationSummary = summarizeTablePresetFileMigrationJournal(
+					this.storage.tablePresetFileMigrationJournal.get(),
+					'failed',
+				);
+			}
+		} finally {
+			this.tablePresetFileMigrationRunning = false;
+		}
+		if (options.refreshRegistry && this.tablePresetRegistry) {
+			await this.refreshTablePresetRegistry({ adoptUnbound: true, persistBindings: true });
+		}
+		this.settingsTab?.refreshTablePresetFileState();
+		if (options.notify && !wasComplete && this.tablePresetFileMigrationSummary) {
+			this.showTablePresetFileMigrationNotice(this.tablePresetFileMigrationSummary);
+		}
+		return this.tablePresetFileMigrationSummary;
+	}
+
+	private showTablePresetFileMigrationNotice(summary: TablePresetFileMigrationSummary): void {
+		if (summary.status === 'completed') {
+			new Notice(t('settings', 'tableFileMigrationCompletedNotice', {
+				count: String(summary.migrated + summary.adopted + summary.alreadyMigrated),
+			}));
+			return;
+		}
+		if (summary.status === 'partial' || summary.status === 'failed') {
+			new Notice(t('settings', 'tableFileMigrationNeedsReviewNotice', {
+				count: String(summary.blocked + summary.failed),
+			}), 8_000);
+		}
+	}
+
+	private registerTablePresetFileWatchers(): void {
+		this.registerEvent(this.app.vault.on('modify', file => {
+			if (this.tablePresetFileMigrationRunning) return;
+			if (!(file instanceof TFile) || !isOperonTableFilePath(file.path)) return;
+			runAsyncAction('table file modify refresh failed', async () => {
+				const source = await this.app.vault.read(file);
+				const pathKey = getOperonTableFilePathKey(file.path);
+				if (this.expectedTableFileModifyHashes.get(pathKey) === this.hashTableFileContent(source)) {
+					this.expectedTableFileModifyHashes.delete(pathKey);
+					return;
+				}
+				this.scheduleTablePresetRegistryRefresh();
+			});
+		}));
+		this.registerEvent(this.app.vault.on('create', file => {
+			if (this.tablePresetFileMigrationRunning) return;
+			if (!(file instanceof TFile) || !isOperonTableFilePath(file.path)) return;
+			runAsyncAction('table file create refresh failed', async () => {
+				const source = await this.app.vault.read(file);
+				const pathKey = getOperonTableFilePathKey(file.path);
+				if (this.expectedTableFileModifyHashes.get(pathKey) === this.hashTableFileContent(source)) {
+					this.expectedTableFileModifyHashes.delete(pathKey);
+					return;
+				}
+				this.scheduleTablePresetRegistryRefresh();
+			});
+		}));
+		this.registerEvent(this.app.vault.on('delete', file => {
+			if (this.tablePresetFileMigrationRunning) return;
+			if (!(file instanceof TFile) || !isOperonTableFilePath(file.path)) return;
+			runAsyncAction('table file delete lifecycle failed', () => this.handleDeletedTableFile(file.path));
+		}));
+		this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
+			if (this.tablePresetFileMigrationRunning) return;
+			if (!(file instanceof TFile) || (!isOperonTableFilePath(oldPath) && !isOperonTableFilePath(file.path))) return;
+			runAsyncAction('table file rename synchronization failed', () => this.handleExternalTableFileRename(file, oldPath));
+		}));
+	}
+
+	private async handleDeletedTableFile(path: string): Promise<void> {
+		const pathKey = getOperonTableFilePathKey(path);
+		const expectedPresetId = this.expectedTableFileDeletes.get(pathKey);
+		if (expectedPresetId) {
+			this.expectedTableFileDeletes.delete(pathKey);
+			return;
+		}
+		const binding = this.settings.tablePresetFileBindings.find(candidate => getOperonTableFilePathKey(candidate.path) === pathKey);
+		if (binding) this.tablePresetRegistry.cancelPatches(binding.id);
+		this.closeTableFileLeavesForPath(path);
+		if (!binding) {
+			await this.refreshTablePresetRegistry({ adoptUnbound: true, persistBindings: true });
+			return;
+		}
+		await new Promise<void>(resolve => window.setTimeout(resolve, 180));
+		await this.refreshTablePresetRegistry({ adoptUnbound: true, persistBindings: true });
+		this.refreshTablePresetSurfaces(binding.id);
+		this.settingsTab?.refreshTablePresetFileState();
+	}
+
+	private closeTableFileLeavesForPath(path: string): void {
+		const pathKey = getOperonTableFilePathKey(path);
+		for (const leaf of this.app.workspace.getLeavesOfType(OPERON_TABLE_FILE_VIEW_TYPE)) {
+			const file = leaf.view instanceof OperonTableView ? leaf.view.file : null;
+			if (!file || getOperonTableFilePathKey(file.path) !== pathKey) continue;
+			leaf.detach();
+		}
+	}
+
+	private getTableWorkspaceLeavesForPreset(presetId: string): WorkspaceLeaf[] {
+		const leaves: WorkspaceLeaf[] = [];
+		for (const leaf of this.app.workspace.getLeavesOfType(OPERON_TABLE_VIEW_TYPE)) {
+			if (!(leaf.view instanceof OperonTableView)) continue;
+			if (leaf.view.getRequestedPresetId() === presetId) leaves.push(leaf);
+		}
+		return leaves;
+	}
+
+	private closeTableWorkspaceLeaves(presetId: string, leaves: readonly WorkspaceLeaf[]): void {
+		const currentLeaves = new Set(this.app.workspace.getLeavesOfType(OPERON_TABLE_VIEW_TYPE));
+		for (const leaf of leaves) {
+			if (!currentLeaves.has(leaf) || !(leaf.view instanceof OperonTableView)) continue;
+			if (leaf.view.getRequestedPresetId() === presetId) leaf.detach();
+		}
+	}
+
+	private scheduleTablePresetRegistryRefresh(): void {
+		if (this.tablePresetRegistryRefreshTimer !== null) clearWindowTimeout(this.tablePresetRegistryRefreshTimer);
+		this.tablePresetRegistryRefreshTimer = setWindowTimeout(() => {
+			this.tablePresetRegistryRefreshTimer = null;
+			runAsyncAction('table preset registry refresh failed', () =>
+				this.refreshTablePresetRegistry({ adoptUnbound: true, persistBindings: true })
+			);
+		}, 120);
+	}
+
+	private async refreshTablePresetRegistry(options: { adoptUnbound?: boolean; persistBindings?: boolean } = {}): Promise<void> {
+		const previousSnapshot = this.tablePresetRegistry.getSnapshot();
+		const previousOrderSignature = this.settings.tablePresetOrderIds.join('\u0000');
+		await this.tablePresetRegistry.refresh();
+		let bindingsChanged = false;
+		for (const entry of this.tablePresetRegistry.getSnapshot().entries.values()) {
+			if (entry.status !== 'available' || entry.source.kind !== 'table-file' || !entry.source.bound || !entry.source.path) continue;
+			const binding = this.settings.tablePresetFileBindings.find(candidate => candidate.id === entry.id);
+			if (!binding || getOperonTableFilePathKey(binding.path) === getOperonTableFilePathKey(entry.source.path)) continue;
+			binding.path = entry.source.path;
+			bindingsChanged = true;
+		}
+		if (options.adoptUnbound) {
+			for (const entry of this.tablePresetRegistry.getSnapshot().entries.values()) {
+				if (entry.status !== 'available' || !entry.preset || entry.source.kind !== 'table-file' || entry.source.bound || !entry.source.path) continue;
+				if (this.settings.tablePresetFileBindings.some(binding => binding.id === entry.id)) continue;
+				this.settings.tablePresetFileBindings.push({ id: entry.id, path: entry.source.path });
+				bindingsChanged = true;
+			}
+		}
+		if (bindingsChanged) await this.tablePresetRegistry.refresh();
+		this.syncTablePresetProjectionFromRegistry();
+		if (await this.reconcileBoundTableFileNames()) {
+			await this.tablePresetRegistry.refresh();
+			this.syncTablePresetProjectionFromRegistry();
+		}
+		const orderChanged = previousOrderSignature !== this.settings.tablePresetOrderIds.join('\u0000');
+		if ((bindingsChanged || orderChanged) && options.persistBindings) await this.storage.saveSettings();
+		const nextSnapshot = this.tablePresetRegistry.getSnapshot();
+		const newlySubscribedIds = this.syncTablePresetRegistrySubscriptions();
+		const changedPresetIds = new Set([...previousSnapshot.entries.keys(), ...nextSnapshot.entries.keys()]);
+		for (const presetId of changedPresetIds) {
+			if (this.getTablePresetRegistryEntrySignature(previousSnapshot.entries.get(presetId))
+				=== this.getTablePresetRegistryEntrySignature(nextSnapshot.entries.get(presetId))) continue;
+			if (newlySubscribedIds.has(presetId)) this.refreshTablePresetSurfaces(presetId);
+		}
+	}
+
+	private syncTablePresetRegistrySubscriptions(): Set<string> {
+		const presetIds = new Set(this.tablePresetRegistry.getSnapshot().entries.keys());
+		for (const [presetId, unsubscribe] of this.tablePresetRegistrySubscriptions) {
+			if (presetIds.has(presetId)) continue;
+			unsubscribe();
+			this.tablePresetRegistrySubscriptions.delete(presetId);
+		}
+		const subscribed = new Set<string>();
+		for (const presetId of presetIds) {
+			if (this.tablePresetRegistrySubscriptions.has(presetId)) continue;
+			const unsubscribe = this.tablePresetRegistry.subscribe(presetId, entry => {
+				this.syncTablePresetProjectionFromRegistry();
+				this.refreshTablePresetSurfaces(presetId, entry);
+				this.settingsTab?.refreshTablePresetFileState();
+			}, false);
+			this.tablePresetRegistrySubscriptions.set(presetId, unsubscribe);
+			subscribed.add(presetId);
+		}
+		return subscribed;
+	}
+
+	private resolveTableFileForView(path: string, source: string): {
+		preset: TablePreset | null;
+		diagnostics: Array<{
+			code: 'invalid-json' | 'invalid-root' | 'invalid-format' | 'unsupported-version' | 'missing-field' | 'invalid-field' | 'unknown-field' | 'read-failed' | 'duplicate-id';
+			severity: 'error';
+			message: string;
+			path?: string;
+			field?: string;
+		}>;
+	} {
+		const parsed = parseOperonTableFile(source, path);
+		if (parsed.status !== 'valid') return { preset: null, diagnostics: [...parsed.diagnostics] };
+		const entry = this.tablePresetRegistry.get(parsed.preset.id);
+		if (entry?.status !== 'conflict') {
+			return { preset: this.tablePresetRegistry.projectFilePreset(path, parsed.preset), diagnostics: [] };
+		}
+		const conflictPaths = [...new Set(entry.conflicts.flatMap(conflict => conflict.paths))];
+		return {
+			preset: null,
+			diagnostics: [{
+				code: 'duplicate-id',
+				severity: 'error',
+				path,
+				field: 'id',
+				message: `Table preset id "${parsed.preset.id}" has an unresolved conflict across: ${conflictPaths.join(', ') || path}.`,
+			}],
+		};
+	}
+
+	private getTablePresetRegistryEntrySignature(entry: ReturnType<TablePresetRegistry<TFile>['get']> | undefined): string {
+		if (!entry) return '';
+		return JSON.stringify({
+			status: entry.status,
+			preset: entry.preset,
+			source: { kind: entry.source.kind, path: entry.source.path, bound: entry.source.bound },
+			conflicts: entry.conflicts,
+		});
+	}
+
+	private syncTablePresetProjectionFromRegistry(): void {
+		const snapshot = this.tablePresetRegistry.getSnapshot();
+		const currentOrder = this.settings.tablePresetOrderIds;
+		const availableById = new Map<string, TablePreset>();
+		for (const entry of snapshot.entries.values()) {
+			if (entry.status === 'available' && entry.preset) availableById.set(entry.id, entry.preset);
+		}
+		const nextOrder: string[] = [];
+		const seen = new Set<string>();
+		for (const id of currentOrder) {
+			if (!snapshot.entries.has(id) || seen.has(id)) continue;
+			nextOrder.push(id);
+			seen.add(id);
+		}
+		const additions = [...snapshot.entries.values()]
+			.filter(entry => !seen.has(entry.id))
+			.sort((left, right) => {
+				const leftPath = this.tablePresetRegistry.getPath(left.id) ?? left.preset?.name ?? left.id;
+				const rightPath = this.tablePresetRegistry.getPath(right.id) ?? right.preset?.name ?? right.id;
+				return leftPath.localeCompare(rightPath, 'en', { sensitivity: 'base' });
+			});
+		nextOrder.push(...additions.map(entry => entry.id));
+		this.settings.tablePresetOrderIds = nextOrder;
+		const next = nextOrder.flatMap(id => {
+			const preset = availableById.get(id);
+			return preset ? [cloneTablePreset(preset)] : [];
+		});
+		this.settings.tablePresets.splice(0, this.settings.tablePresets.length, ...next);
+		if (this.settings.tableDefaultPresetId && !nextOrder.includes(this.settings.tableDefaultPresetId)) {
+			this.settings.tableDefaultPresetId = this.resolveEffectiveTablePresetId();
+		}
+	}
+
+	private resolveTablePresetForSurface(presetId: string): TablePreset | null {
+		const registryEntry = this.tablePresetRegistry.get(presetId);
+		if (registryEntry) {
+			return registryEntry.status === 'available' && registryEntry.preset
+				? cloneTablePreset(registryEntry.preset)
+				: null;
+		}
+		const legacyPreset = this.settings.tablePresets.find(preset => preset.id === presetId);
+		return legacyPreset ? cloneTablePreset(legacyPreset) : null;
+	}
+
+	private getTablePresetsForSurfaces(): TablePreset[] {
+		const snapshot = this.tablePresetRegistry.getSnapshot();
+		const availableById = new Map<string, TablePreset>();
+		for (const entry of snapshot.entries.values()) {
+			if (entry.status === 'available' && entry.preset) availableById.set(entry.id, entry.preset);
+		}
+		const ordered: TablePreset[] = [];
+		const seen = new Set<string>();
+		for (const presetId of this.settings.tablePresetOrderIds) {
+			const preset = availableById.get(presetId);
+			if (!preset || seen.has(presetId)) continue;
+			ordered.push(cloneTablePreset(preset));
+			seen.add(presetId);
+		}
+		for (const [presetId, preset] of availableById) {
+			if (seen.has(presetId)) continue;
+			ordered.push(cloneTablePreset(preset));
+		}
+		if (ordered.length > 0) return ordered;
+		return snapshot.entries.size === 0 ? this.settings.tablePresets.map(cloneTablePreset) : [];
+	}
+
+	private resolveEffectiveTablePresetId(excludedPresetId?: string): string | null {
+		const tablePresets = this.getTablePresetsForSurfaces();
+		const availableIds = new Set(tablePresets.map(preset => preset.id));
+		for (const presetId of this.settings.tablePresetOrderIds) {
+			if (presetId !== excludedPresetId && availableIds.has(presetId)) return presetId;
+		}
+		return tablePresets.find(preset => preset.id !== excludedPresetId)?.id ?? null;
+	}
+
+	private async writeCanonicalTableFile(path: string, serialized: string, expectedSource?: string): Promise<void> {
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (!(file instanceof TFile)) throw new Error(`Table file not found: ${path}`);
+		const previous = await this.app.vault.read(file);
+		if (expectedSource !== undefined && previous !== expectedSource) {
+			throw new Error(`Table file changed before save: ${path}`);
+		}
+		const parsed = parseOperonTableFile(serialized, path);
+		if (parsed.status !== 'valid') throw new Error(`Refusing to write invalid Table file: ${path}`);
+		this.expectedTableFileModifyHashes.set(getOperonTableFilePathKey(path), this.hashTableFileContent(serialized));
+		try {
+			await this.app.vault.modify(file, serialized);
+		} catch (error) {
+			this.expectedTableFileModifyHashes.delete(getOperonTableFilePathKey(path));
+			throw error;
+		}
+		try {
+			const verified = parseOperonTableFile(await this.app.vault.read(file), path);
+			if (verified.status !== 'valid' || verified.preset.id !== parsed.preset.id) {
+				throw new Error(`Table file verification failed: ${path}`);
+			}
+			const nextPath = this.resolveTableFilePathForName(file, parsed.preset.name);
+			if (nextPath !== file.path) {
+				await this.renameCanonicalTableFile(file, nextPath);
+				await this.tablePresetRegistry.refresh();
+				this.syncTablePresetProjectionFromRegistry();
+			}
+		} catch (error) {
+			const currentFile = this.app.vault.getAbstractFileByPath(file.path);
+			if (currentFile instanceof TFile && await this.app.vault.read(currentFile) === serialized) {
+				this.expectedTableFileModifyHashes.set(getOperonTableFilePathKey(currentFile.path), this.hashTableFileContent(previous));
+				await this.app.vault.modify(currentFile, previous);
+			}
+			throw error;
+		}
+	}
+
+	private resolveTableFilePathForName(file: TFile, name: string): string {
+		const folder = file.parent?.path ?? '';
+		return buildUniqueOperonTableFilePath(
+			folder,
+			name,
+			this.app.vault.getFiles().filter(candidate => candidate.path !== file.path).map(candidate => candidate.path),
+		);
+	}
+
+	private async renameCanonicalTableFile(file: TFile, targetPath: string): Promise<void> {
+		const oldPath = file.path;
+		const binding = this.settings.tablePresetFileBindings.find(entry => getOperonTableFilePathKey(entry.path) === getOperonTableFilePathKey(oldPath));
+		try {
+			if (getOperonTableFilePathKey(oldPath) === getOperonTableFilePathKey(targetPath)) {
+				const temporaryPath = buildUniqueOperonTableFilePath(file.parent?.path ?? '', '.operon-table-rename', this.app.vault.getFiles().map(candidate => candidate.path));
+				this.expectedTableFileRenames.set(getOperonTableFilePathKey(oldPath), getOperonTableFilePathKey(temporaryPath));
+				await this.app.fileManager.renameFile(file, temporaryPath);
+				this.expectedTableFileRenames.set(getOperonTableFilePathKey(temporaryPath), getOperonTableFilePathKey(targetPath));
+				await this.app.fileManager.renameFile(file, targetPath);
+			} else {
+				this.expectedTableFileRenames.set(getOperonTableFilePathKey(oldPath), getOperonTableFilePathKey(targetPath));
+				await this.app.fileManager.renameFile(file, targetPath);
+			}
+			if (binding) {
+				binding.path = targetPath;
+				await this.storage.saveSettings();
+			}
+		} catch (error) {
+			if (binding) binding.path = oldPath;
+			if (file.path !== oldPath && !this.app.vault.getAbstractFileByPath(oldPath)) {
+				this.expectedTableFileRenames.set(getOperonTableFilePathKey(file.path), getOperonTableFilePathKey(oldPath));
+				await this.app.fileManager.renameFile(file, oldPath);
+			}
+			throw error;
+		}
+	}
+
+	private async handleExternalTableFileRename(file: TFile, oldPath: string): Promise<void> {
+		const expectedTarget = this.expectedTableFileRenames.get(getOperonTableFilePathKey(oldPath));
+		if (expectedTarget === getOperonTableFilePathKey(file.path)) {
+			this.expectedTableFileRenames.delete(getOperonTableFilePathKey(oldPath));
+			return;
+		}
+		const binding = this.settings.tablePresetFileBindings.find(entry => getOperonTableFilePathKey(entry.path) === getOperonTableFilePathKey(oldPath));
+		if (binding && !isOperonTableFilePath(file.path)) {
+			this.tablePresetRegistry.cancelPatches(binding.id);
+			this.closeTableFileLeavesForPath(oldPath);
+			this.closeTableFileLeavesForPath(file.path);
+			await this.refreshTablePresetRegistry({ adoptUnbound: true, persistBindings: true });
+			this.refreshTablePresetSurfaces(binding.id);
+			this.settingsTab?.refreshTablePresetFileState();
+			return;
+		}
+		if (binding && isOperonTableFilePath(file.path)) {
+			const oldName = deriveOperonTableNameFromPath(oldPath);
+			const nextName = deriveOperonTableNameFromPath(file.path);
+			try {
+				binding.path = file.path;
+				if (oldName !== nextName) {
+					const source = await this.app.vault.read(file);
+					const parsed = parseOperonTableFile(source, file.path);
+					if (parsed.status === 'valid') {
+						const serialized = serializeOperonTableFile({ ...parsed.preset, name: nextName });
+						this.expectedTableFileModifyHashes.set(getOperonTableFilePathKey(file.path), this.hashTableFileContent(serialized));
+						await this.app.vault.modify(file, serialized);
+					}
+				}
+				await this.storage.saveSettings();
+			} catch (error) {
+				binding.path = oldPath;
+				this.expectedTableFileModifyHashes.delete(getOperonTableFilePathKey(file.path));
+				this.scheduleTablePresetRegistryRefresh();
+				throw error;
+			}
+		}
+		this.scheduleTablePresetRegistryRefresh();
+	}
+
+	private async reconcileBoundTableFileNames(): Promise<boolean> {
+		let renamed = false;
+		for (const binding of this.settings.tablePresetFileBindings) {
+			const entry = this.tablePresetRegistry.get(binding.id);
+			if (entry?.status !== 'available' || !entry.preset || entry.source.kind !== 'table-file') continue;
+			const file = this.app.vault.getAbstractFileByPath(binding.path);
+			if (!(file instanceof TFile)) continue;
+			const desiredPath = this.resolveTableFilePathForName(file, entry.preset.name);
+			if (desiredPath !== file.path) {
+				await this.renameCanonicalTableFile(file, desiredPath);
+				renamed = true;
+			}
+		}
+		return renamed;
+	}
+
+	private hashTableFileContent(source: string): string {
+		let hash = 2166136261;
+		for (let index = 0; index < source.length; index++) {
+			hash ^= source.charCodeAt(index);
+			hash = Math.imul(hash, 16777619);
+		}
+		return (hash >>> 0).toString(16);
+	}
+
 	private async loadPlugin(): Promise<void> {
 		registerObsidianIconFallbacks();
 
@@ -1859,6 +2452,8 @@ export default class OperonPlugin extends Plugin {
 		});
 		await this.storage.initialize();
 		this.settings = this.storage.getSettings();
+		initI18n(getAppLocale(this.app), this.settings.language);
+		await this.initializeTablePresetRegistry();
 		this.pinnedCache = this.storage.pinned;
 		this.unsubscribePinnedCache = this.pinnedCache.subscribe(() => {
 			if (!this.startupReady) return;
@@ -1885,14 +2480,18 @@ export default class OperonPlugin extends Plugin {
 		this.keyMappingSignature = this.buildKeyMappingSignature();
 		this.workflowStatusSemanticsSignature = buildWorkflowStatusSemanticsSignature(this.settings.pipelines);
 
-		// Initialize i18n — use language override from settings, or detect Obsidian's locale
-		initI18n(getAppLocale(this.app), this.settings.language);
 		this.reportStartupPipelineTaxonomyDiagnostics();
 		this.applyWorkspaceTweaks();
-		this.registerHoverLinkSource(OPERON_COMPACT_CHIP_HOVER_SOURCE, {
-			display: 'Operon',
-			defaultMod: true,
-		});
+		for (const source of [
+			OPERON_COMPACT_CHIP_HOVER_SOURCE,
+			OPERON_TASK_TITLE_HOVER_SOURCE,
+			OPERON_TASK_DESCRIPTION_WIKILINK_HOVER_SOURCE,
+		]) {
+			this.registerHoverLinkSource(source, {
+				display: 'Operon',
+				defaultMod: true,
+			});
+		}
 
 		// Initialize indexer, task writer, and core systems
 		this.indexer = new OperonIndexer(this.app, this.storage);
@@ -2035,7 +2634,7 @@ export default class OperonPlugin extends Plugin {
 		this.registerEmbedTableProcessor();
 
 		// Register settings tab
-		this.addSettingTab(new OperonSettingsTab(
+		this.settingsTab = new OperonSettingsTab(
 			this.app,
 			this,
 			this.settings,
@@ -2071,7 +2670,9 @@ export default class OperonPlugin extends Plugin {
 					(input) => this.applyWorkflowFieldRenameTransaction(input),
 					() => this.retryPendingWorkflowRename(),
 					() => this.resolvePendingWorkflowRenameConflict(),
-					));
+					this.buildTablePresetSettingsFileIntegration(),
+					);
+		this.addSettingTab(this.settingsTab);
 
 		const statusBarItem = this.addStatusBarItem();
 		this.trackerStatusBar = new TimeTrackerStatusBar(
@@ -2105,6 +2706,10 @@ export default class OperonPlugin extends Plugin {
 
 			this.addRibbonIcon('square-kanban', t('commands', 'openKanban'), () => {
 				runAsyncAction('open kanban from ribbon failed', () => this.openKanbanView());
+			});
+
+			this.addRibbonIcon('table-2', t('commands', 'openOperonTable'), () => {
+				runAsyncAction('open operon table from ribbon failed', () => this.openOperonTable());
 			});
 
 				this.addRibbonIcon('pin', t('commands', 'openPinnedTasks'), () => {
@@ -2244,10 +2849,24 @@ export default class OperonPlugin extends Plugin {
 		this.livePreviewEphemeralSession.cancel('plugin_unload');
 		hideTaskContextualHoverMenu(true);
 
+		let tablePresetDrainError: unknown = null;
+		try {
+			await this.tablePresetRegistry?.drain();
+		} catch (error) {
+			tablePresetDrainError = error;
+		} finally {
+			this.tablePresetRegistry?.dispose();
+		}
 		await this.indexer.flushPendingPersist();
 		await this.storage.flushPendingWrites();
 		this.indexer.destroy();
 		this.storage.destroy();
+		this.settingsTab = null;
+		if (tablePresetDrainError) {
+			throw tablePresetDrainError instanceof Error
+				? tablePresetDrainError
+				: new Error('Table preset registry drain failed during plugin unload.');
+		}
 	}
 
 	/**
@@ -2374,6 +2993,7 @@ export default class OperonPlugin extends Plugin {
 				(dateKey) => this.openDailyNoteFromDateKey(dateKey),
 				(filterSet) => this.duplicateFilterSetAndRefresh(filterSet),
 				(filterSetId) => this.deleteFilterSetAndRefresh(filterSetId),
+				(filterSetId) => this.togglePresetFavoriteAndRefresh('filter', filterSetId),
 				(target) => this.openRelatedViewTarget(target),
 				(target) => this.createRelatedViewPresetAndOpen(target),
 			)
@@ -2526,6 +3146,8 @@ export default class OperonPlugin extends Plugin {
 								await this.storage.saveSettings();
 								this.refreshViews();
 							},
+							onToggleFavorite: presetId => this.togglePresetFavoriteAndRefresh('calendar', presetId),
+							onToggleFilterFavorite: filterSetId => this.togglePresetFavoriteAndRefresh('filter', filterSetId),
 							onSaveFilterSet: (filterSet) => this.saveFilterSetAndRefresh(filterSet),
 							getFilterModalEvalDeps: () => this.buildFilterModalEvalDeps(),
 						}).open();
@@ -2585,6 +3207,8 @@ export default class OperonPlugin extends Plugin {
 								await this.handleKanbanSortModeChange(updated.id, updated.sortMode);
 								this.refreshViews();
 							},
+							onToggleFavorite: presetId => this.togglePresetFavoriteAndRefresh('kanban', presetId),
+							onToggleFilterFavorite: filterSetId => this.togglePresetFavoriteAndRefresh('filter', filterSetId),
 							onSaveFilterSet: (filterSet) => this.saveFilterSetAndRefresh(filterSet),
 							getFilterModalEvalDeps: () => this.buildFilterModalEvalDeps(),
 						}).open();
@@ -2601,12 +3225,15 @@ export default class OperonPlugin extends Plugin {
 				() => this.settings,
 				() => this.pinnedCache,
 				{
+					resolveTablePreset: (presetId) => this.resolveTablePresetForSurface(presetId),
+					getTablePresets: () => this.getTablePresetsForSurfaces(),
 					onOpenTaskEditor: (operonId) => this.openEditorForId(operonId),
 					onOpenTaskSource: openTaskSourceInNewTab,
-					onOpenPresetSettings: (presetId) => this.openTablePresetSettingsModal(presetId, leaf),
+					onOpenPresetSettings: (presetId, options) => this.openTablePresetSettingsModal(presetId, leaf, options),
 					onOpenRelatedView: (target) => this.openRelatedViewTarget(target),
 					onCreateRelatedView: (target) => this.createRelatedViewPresetAndOpen(target),
-					onSavePresetPatch: (patch) => this.saveTablePresetPatchAndRefresh(patch),
+						onSavePresetPatch: (patch, context) => this.queueTablePresetPatchAndRefresh(patch, this.getTablePresetPatchScope(patch), context.surfaceToken),
+						onFlushPresetWrites: presetId => this.tablePresetRegistry.flushPatches(presetId),
 					onSaveFilterSet: (filterSet) => this.saveFilterSetAndRefresh(filterSet),
 					onUpdateTaskFields: (operonId, payload) => this.updateTableTaskFieldsAndRefresh(operonId, payload),
 					getTaskSessions: (operonId) => this.timeTracker.getTaskSessions(operonId),
@@ -2624,6 +3251,43 @@ export default class OperonPlugin extends Plugin {
 				},
 			)
 		);
+		this.registerView(OPERON_TABLE_FILE_VIEW_TYPE, (leaf) =>
+			new OperonTableView(
+				leaf,
+				this.indexer,
+				() => this.settings,
+				() => this.pinnedCache,
+					{
+						resolveTableFile: (path, source) => this.resolveTableFileForView(path, source),
+						resolveTablePreset: (presetId) => this.resolveTablePresetForSurface(presetId),
+						getTablePresets: () => this.getTablePresetsForSurfaces(),
+						onOpenTaskEditor: (operonId) => this.openEditorForId(operonId),
+						onOpenTaskSource: openTaskSourceInNewTab,
+						onSelectPreset: (presetId) => this.openTablePresetInLeaf(leaf, presetId),
+						onOpenPresetSettings: (presetId, options) => this.openTablePresetSettingsModal(presetId, leaf, options),
+						onOpenRelatedView: (target) => this.openRelatedViewTarget(target),
+						onCreateRelatedView: (target) => this.createRelatedViewPresetAndOpen(target),
+							onSavePresetPatch: (patch, context) => this.queueTablePresetPatchAndRefresh(patch, this.getTablePresetPatchScope(patch), context.surfaceToken),
+						onFlushPresetWrites: presetId => this.tablePresetRegistry.flushPatches(presetId),
+						onSaveFilterSet: (filterSet) => this.saveFilterSetAndRefresh(filterSet),
+					onUpdateTaskFields: (operonId, payload) => this.updateTableTaskFieldsAndRefresh(operonId, payload),
+					getTaskSessions: (operonId) => this.timeTracker.getTaskSessions(operonId),
+					onAddTaskSession: (operonId, start, end) => this.addTableTaskSessionAndRefresh(operonId, start, end),
+					onEditTaskSession: (session, start, end) => this.editTableTaskSessionAndRefresh(session, start, end),
+					onDeleteTaskSession: (session) => this.deleteTableTaskSessionAndRefresh(session),
+					onStatusIconClick: (taskId) => this.handleCalendarStatusIconClick(taskId),
+					onContextualAction: (taskId, actionId, context, invocation) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
+					getProjectSerialDisplay: (operonId, task) => task
+						? this.getReadingProjectSerialDisplayForTask(operonId, task)
+						: this.getProjectSerialDisplayForTask(operonId),
+					getProjectSerialSignature: () => this.getProjectSerialSignature(),
+					isTaskPinned: (taskId) => this.pinnedCache?.isPinned(taskId) === true,
+					hasSubtasks: (taskId) => this.indexer.secondary.getChildIds(taskId).size > 0,
+				},
+				{ mode: 'file' },
+			)
+		);
+		this.registerExtensions(['table'], OPERON_TABLE_FILE_VIEW_TYPE);
 	}
 
 	private navigateToTask(task: IndexedTask): void {
@@ -3867,21 +4531,7 @@ export default class OperonPlugin extends Plugin {
 			return;
 		}
 		const preset = this.createRelatedTablePreset(target.filterSetId, target.presetName);
-		await this.enqueueTablePresetMutation(async () => {
-			const snapshot = this.snapshotTablePresetSettings();
-			this.settings.tablePresets.push(preset);
-			if (!this.settings.tableDefaultPresetId) {
-				this.settings.tableDefaultPresetId = this.settings.tablePresets[0]?.id ?? null;
-			}
-			try {
-				await this.storage.saveSettings();
-			} catch (error) {
-				this.restoreTablePresetSettings(snapshot);
-				this.refreshViews();
-				throw error;
-			}
-			this.refreshViews();
-		});
+		await this.addTablePresetAndRefresh(preset);
 		await this.openOperonTable({ presetId: preset.id });
 	}
 
@@ -3975,8 +4625,8 @@ export default class OperonPlugin extends Plugin {
 		const index = this.settings.tablePresets.findIndex(entry => entry.id === patch.id);
 		if (index === -1) return;
 		this.settings.tablePresets[index] = applyTablePresetPatch(this.settings.tablePresets[index], patch);
-		if (!this.settings.tablePresets.some(entry => entry.id === this.settings.tableDefaultPresetId)) {
-			this.settings.tableDefaultPresetId = this.settings.tablePresets[0]?.id ?? null;
+		if (this.settings.tableDefaultPresetId && !this.settings.tablePresetOrderIds.includes(this.settings.tableDefaultPresetId)) {
+			this.settings.tableDefaultPresetId = this.resolveEffectiveTablePresetId();
 		}
 	}
 
@@ -3984,19 +4634,38 @@ export default class OperonPlugin extends Plugin {
 		return this.tablePresetMutationQueue.enqueue(operation);
 	}
 
-	private snapshotTablePresetSettings(): { tablePresets: TablePreset[]; tableDefaultPresetId: string | null } {
+	private snapshotTablePresetSettings(): TablePresetSettingsSnapshot {
 		return {
 			tablePresets: this.settings.tablePresets.map(cloneTablePreset),
+			tablePresetFileBindings: this.settings.tablePresetFileBindings.map(binding => ({ ...binding })),
+			tablePresetOrderIds: [...this.settings.tablePresetOrderIds],
 			tableDefaultPresetId: this.settings.tableDefaultPresetId,
+			presetFavorites: clonePresetFavorites(this.settings.presetFavorites),
 		};
 	}
 
-	private restoreTablePresetSettings(snapshot: { tablePresets: TablePreset[]; tableDefaultPresetId: string | null }): void {
+	private restoreTablePresetSettings(snapshot: TablePresetSettingsSnapshot): void {
 		this.settings.tablePresets = snapshot.tablePresets.map(cloneTablePreset);
+		this.settings.tablePresetFileBindings = snapshot.tablePresetFileBindings.map(binding => ({ ...binding }));
+		this.settings.tablePresetOrderIds = [...snapshot.tablePresetOrderIds];
 		this.settings.tableDefaultPresetId = snapshot.tableDefaultPresetId;
+		this.settings.presetFavorites = clonePresetFavorites(snapshot.presetFavorites);
 	}
 
 	private async saveTablePresetPatchAndRefresh(patch: TablePresetPatch): Promise<void> {
+		const source = this.tablePresetRegistry.getSource(patch.id);
+		if (source?.kind === 'table-file') {
+			await this.tablePresetRegistry.flushPatches(patch.id);
+			const control = this.tablePresetRegistry.queuePatch(patch.id, 'explicit-save', patch, {
+				delayMs: 0,
+				onError: error => this.handleTablePresetFileWriteFailure(error),
+			});
+			await control.flush();
+			return;
+		}
+		if (source?.kind === 'missing-bound-file' || source?.kind === 'conflict') {
+			throw new Error(`Table preset "${patch.id}" cannot be edited while its file source is ${source.kind}.`);
+		}
 		await this.enqueueTablePresetMutation(async () => {
 			const snapshot = this.snapshotTablePresetSettings();
 			this.patchTablePreset(patch);
@@ -4011,39 +4680,277 @@ export default class OperonPlugin extends Plugin {
 		});
 	}
 
-	private async addTablePresetAndRefresh(preset: TablePreset, leaf: WorkspaceLeaf): Promise<void> {
+	private queueTablePresetPatchAndRefresh(
+		patch: TablePresetPatch,
+		scope: string,
+		surfaceToken: string,
+	): TablePresetRegistryPatchControl {
+		const source = this.tablePresetRegistry.getSource(patch.id);
+		if (source?.kind !== 'table-file') {
+			const settled = this.saveTablePresetPatchAndRefresh(patch).catch(error => {
+				this.handleTablePresetFileWriteFailure(error);
+				throw error;
+			});
+			void settled.catch(() => {});
+			return {
+				acceptedRevision: this.tablePresetRegistry.getSnapshot().revision,
+				settled,
+				flush: () => settled,
+				cancel: () => undefined,
+			};
+		}
+		return this.tablePresetRegistry.queuePatch(patch.id, scope, patch, {
+			surfaceToken,
+			onError: error => {
+				this.handleTablePresetFileWriteFailure(error);
+			},
+		});
+	}
+
+	private getTablePresetPatchScope(patch: TablePresetPatch): string {
+		const domains = new Set<string>();
+		if ('name' in patch) domains.add('identity');
+		if ('filterSetId' in patch) domains.add('filter');
+		if ('columns' in patch) domains.add('columns');
+		if ('sortRules' in patch) domains.add('sorting');
+		if ('groupBy' in patch || 'groupOrder' in patch || 'subgroupBy' in patch || 'subgroupOrder' in patch) domains.add('grouping');
+		if ('summaries' in patch) domains.add('summaries');
+		if ('search' in patch) domains.add('search');
+		if ('display' in patch) domains.add('display');
+		return [...domains].sort().join('+') || 'preset';
+	}
+
+	private handleTablePresetFileWriteFailure(error: unknown): void {
+		console.error('Operon: Table file save failed', error);
+		new Notice(`Operon could not save the Table file. ${error instanceof Error ? error.message : String(error)}`);
+	}
+
+	private async addTablePresetAndRefresh(
+		preset: TablePreset,
+		leaf?: WorkspaceLeaf,
+		insertAfterPresetId?: string | null,
+	): Promise<void> {
 		await this.enqueueTablePresetMutation(async () => {
 			const snapshot = this.snapshotTablePresetSettings();
-			this.settings.tablePresets.push(preset);
-			if (!this.settings.tableDefaultPresetId) {
-				this.settings.tableDefaultPresetId = preset.id;
+			if (this.tablePresetRegistry.get(preset.id) || this.settings.tablePresets.some(entry => entry.id === preset.id)) {
+				throw new Error(`Table preset id "${preset.id}" already exists.`);
 			}
+			await this.ensureVaultFolder('Operon/Tables');
+			const path = buildUniqueOperonTableFilePath(
+				'Operon/Tables',
+				preset.name,
+				this.app.vault.getFiles().map(file => file.path),
+			);
+			const serialized = serializeOperonTableFile(preset);
+			let createdByOperon = false;
 			try {
+				this.expectedTableFileModifyHashes.set(getOperonTableFilePathKey(path), this.hashTableFileContent(serialized));
+				await this.app.vault.create(path, serialized);
+				createdByOperon = true;
+				this.settings.tablePresetFileBindings.push({ id: preset.id, path });
+				const sourceIndex = insertAfterPresetId
+					? this.settings.tablePresetOrderIds.indexOf(insertAfterPresetId)
+					: -1;
+				if (sourceIndex >= 0) {
+					this.settings.tablePresetOrderIds.splice(sourceIndex + 1, 0, preset.id);
+				} else {
+					this.settings.tablePresetOrderIds.push(preset.id);
+				}
+				this.settings.tablePresets.push(cloneTablePreset(preset));
+				if (!this.settings.tableDefaultPresetId) {
+					this.settings.tableDefaultPresetId = preset.id;
+				}
 				await this.storage.saveSettings();
 			} catch (error) {
+				this.expectedTableFileModifyHashes.delete(getOperonTableFilePathKey(path));
 				this.restoreTablePresetSettings(snapshot);
+				const createdFile = this.app.vault.getAbstractFileByPath(path);
+				if (createdByOperon && createdFile instanceof TFile && await this.app.vault.read(createdFile) === serialized) {
+					try {
+						await this.app.fileManager.trashFile(createdFile);
+					} catch (rollbackError) {
+						console.warn('Operon: failed to roll back Table file creation', rollbackError);
+					}
+				}
 				this.refreshViews();
 				throw error;
 			}
+			try {
+				await this.refreshTablePresetRegistry();
+			} catch (error) {
+				console.error('Operon: Table preset was created, but the registry refresh failed', error);
+				this.scheduleTablePresetRegistryRefresh();
+			}
 		});
-		await this.activateTablePresetInLeaf(leaf, preset.id);
+		if (leaf) await this.openTablePresetInLeaf(leaf, preset.id);
 		this.refreshViews();
 	}
 
-	private async deleteTablePresetAndRefresh(presetId: string, leaf: WorkspaceLeaf): Promise<void> {
+	private buildTablePresetSettingsFileIntegration(): TablePresetSettingsFileIntegration {
+		const toMetadata = (presetId: string): ReturnType<TablePresetSettingsFileIntegration['getSourceMetadata']> => {
+			const entry = this.tablePresetRegistry.get(presetId);
+			if (!entry) return null;
+			const source = entry.source;
+			const kind = source.kind === 'table-file'
+				? 'file-backed'
+				: source.kind === 'missing-bound-file'
+					? 'missing'
+					: source.kind;
+			const paths = [...new Set([
+				...(source.path ? [source.path] : []),
+				...entry.conflicts.flatMap(conflict => conflict.paths),
+			])];
+			const path = source.path ?? paths[0] ?? null;
+			return {
+				id: presetId,
+				kind,
+				path,
+				name: entry.preset?.name ?? (path ? deriveOperonTableNameFromPath(path) : presetId),
+				paths,
+			};
+		};
+		return {
+			getSourceMetadata: toMetadata,
+			listAvailablePresets: () => this.getTablePresetsForSurfaces(),
+			listUnavailableSources: () => [...new Set([
+				...this.settings.tablePresetOrderIds,
+				...this.tablePresetRegistry.getSnapshot().entries.keys(),
+			])].flatMap(presetId => {
+				const metadata = toMetadata(presetId);
+				return metadata?.kind === 'conflict' || metadata?.kind === 'missing' ? [metadata] : [];
+			}),
+			createPreset: (preset, context) => this.addTablePresetAndRefresh(
+				preset,
+				undefined,
+				context.reason === 'duplicate' ? context.sourcePresetId : null,
+			),
+			patchPreset: patch => this.saveTablePresetPatchAndRefresh(patch),
+			deletePreset: presetId => this.deleteTablePresetAndRefresh(presetId),
+			getMigrationSummary: () => this.tablePresetFileMigrationSummary,
+			getMigrationReceipt: () => this.tablePresetFileMigrationReceipt,
+			retryMigration: async () => {
+				await this.executeTablePresetFileMigration({ notify: true, refreshRegistry: true });
+			},
+			recoverMigrationBackup: presetId => this.recoverTablePresetMigrationBackup(presetId),
+			resolveIdConflict: (presetId, originalPath) => this.resolveTablePresetIdConflict(presetId, originalPath),
+			preflightFinalization: () => this.tablePresetFileLifecycle.preflightFinalization(),
+			finalizeMigration: () => this.finalizeTablePresetFileMigration(),
+			retryFinalization: () => this.retryTablePresetFileMigrationFinalization(),
+			openTablesFolder: () => this.openTablePresetMigrationFolder(),
+		};
+	}
+
+	private async recoverTablePresetMigrationBackup(presetId: string): Promise<void> {
+		const result = await this.runTablePresetFileLifecycleMutation(() =>
+			this.tablePresetFileLifecycle.recoverBackup({ presetId })
+		);
+		await this.refreshTablePresetRegistry({ adoptUnbound: true, persistBindings: true });
+		new Notice(t('settings', 'tableFileMigrationRecoveryCompletedNotice', { name: result.createdPreset.name }));
+	}
+
+	private async resolveTablePresetIdConflict(
+		presetId: string,
+		originalPath: string,
+	): Promise<TablePresetFileConflictResolutionResult> {
+		const result = await this.runTablePresetFileLifecycleMutation(() =>
+			this.tablePresetFileLifecycle.resolveDuplicateIdConflict({ presetId, chosenOriginalPath: originalPath })
+		);
+		await this.refreshTablePresetRegistry({ adoptUnbound: true, persistBindings: true });
+		new Notice(result.failed.length === 0
+			? t('settings', 'tableFileMigrationConflictResolvedNotice', { count: String(result.succeeded.length) })
+			: t('settings', 'tableFileMigrationConflictPartialNotice', {
+				succeeded: String(result.succeeded.length),
+				failed: String(result.failed.length),
+			}));
+		return result;
+	}
+
+	private async runTablePresetFileLifecycleMutation<T>(operation: () => Promise<T>): Promise<T> {
+		if (this.tablePresetFileMigrationRunning) throw new Error('A Table file migration operation is already running.');
+		this.tablePresetFileMigrationRunning = true;
+		try {
+			return await operation();
+		} finally {
+			this.tablePresetFileMigrationRunning = false;
+		}
+	}
+
+	private async finalizeTablePresetFileMigration(): Promise<void> {
+		this.tablePresetFileMigrationReceipt = await this.tablePresetFileLifecycle.finalize({
+			commitFinalizedVersion: version => this.storage.commitTablePresetFileMigrationFinalizedVersion(version),
+		});
+		this.settingsTab?.refreshTablePresetFileState();
+		if (this.tablePresetFileMigrationReceipt.status === 'finalized') {
+			new Notice(t('settings', 'tableFileMigrationFinalizedNotice'));
+		} else {
+			new Notice(t('settings', 'tableFileMigrationFinalizationFailedNotice'));
+		}
+	}
+
+	private async retryTablePresetFileMigrationFinalization(): Promise<void> {
+		this.tablePresetFileMigrationReceipt = await this.tablePresetFileLifecycle.retryFinalization({
+			commitFinalizedVersion: version => this.storage.commitTablePresetFileMigrationFinalizedVersion(version),
+		});
+		this.settingsTab?.refreshTablePresetFileState();
+		new Notice(this.tablePresetFileMigrationReceipt.status === 'finalized'
+			? t('settings', 'tableFileMigrationFinalizedNotice')
+			: t('settings', 'tableFileMigrationFinalizationFailedNotice'));
+	}
+
+	private async openTablePresetMigrationFolder(): Promise<void> {
+		await this.ensureVaultFolder('Operon/Tables');
+		const folder = this.app.vault.getAbstractFileByPath('Operon/Tables');
+		if (!(folder instanceof TFolder)) return;
+		let explorerLeaf: WorkspaceLeaf | undefined = this.app.workspace.getLeavesOfType('file-explorer')[0];
+		if (!explorerLeaf) {
+			explorerLeaf = this.app.workspace.getLeftLeaf(false) ?? undefined;
+			await explorerLeaf?.setViewState({ type: 'file-explorer', active: true });
+		}
+		const explorerView = explorerLeaf?.view as { revealInFolder?: (file: TAbstractFile) => Promise<void> | void } | undefined;
+		if (explorerView?.revealInFolder) {
+			await explorerView.revealInFolder(folder);
+			return;
+		}
+		if (explorerLeaf) await this.app.workspace.revealLeaf(explorerLeaf);
+		const firstTableFile = this.app.vault.getFiles()
+			.filter(file => isOperonTableFilePath(file.path) && file.path.startsWith(`${folder.path}/`))
+			.sort((left, right) => left.path.localeCompare(right.path))[0];
+		if (firstTableFile) await this.app.workspace.getLeaf(false).openFile(firstTableFile);
+	}
+
+	private async ensureVaultFolder(path: string): Promise<void> {
+		let current = '';
+		for (const part of path.split('/').filter(Boolean)) {
+			current = current ? `${current}/${part}` : part;
+			const existing = this.app.vault.getAbstractFileByPath(current);
+			if (existing instanceof TFolder) continue;
+			if (existing) throw new Error(`Cannot create Table folder because a file exists at "${current}".`);
+			await this.app.vault.createFolder(current);
+		}
+	}
+
+	private async deleteTablePresetAndRefresh(presetId: string, leaf?: WorkspaceLeaf): Promise<void> {
+		const source = this.tablePresetRegistry.getSource(presetId);
+		if (source?.kind === 'table-file') {
+			await this.deleteFileBackedTablePresetAndRefresh(presetId);
+			return;
+		}
 		let fallbackPresetId: string | null = null;
 		let deleted = false;
 		await this.enqueueTablePresetMutation(async () => {
-			if (this.settings.tablePresets.length <= 1) return;
+			if (this.settings.tablePresets.length <= 1) {
+				new Notice(t('settings', 'tableAtLeastOnePresetRequired'));
+				return;
+			}
 			const snapshot = this.snapshotTablePresetSettings();
 			const deletedIndex = this.settings.tablePresets.findIndex(entry => entry.id === presetId);
 			if (deletedIndex === -1) return;
 			this.settings.tablePresets.splice(deletedIndex, 1);
+			this.settings.tablePresetOrderIds = this.settings.tablePresetOrderIds.filter(id => id !== presetId);
+			this.settings.presetFavorites = removePresetFavorite(this.settings.presetFavorites, 'table', presetId);
 			deleted = true;
-			fallbackPresetId = this.settings.tablePresets[Math.max(0, deletedIndex - 1)]?.id
-				?? this.settings.tablePresets[0]?.id
-				?? null;
-			if (!this.settings.tablePresets.some(entry => entry.id === this.settings.tableDefaultPresetId)) {
+			fallbackPresetId = this.resolveEffectiveTablePresetId();
+			if (this.settings.tableDefaultPresetId === presetId) {
 				this.settings.tableDefaultPresetId = fallbackPresetId;
 			}
 			try {
@@ -4055,17 +4962,160 @@ export default class OperonPlugin extends Plugin {
 			}
 		});
 		if (!deleted) return;
-		if (fallbackPresetId) {
+		if (fallbackPresetId && leaf) {
 			await this.activateTablePresetInLeaf(leaf, fallbackPresetId);
 		}
 		this.refreshViews();
 	}
 
-	private async setDefaultTablePresetAndRefresh(presetId: string): Promise<void> {
+	private async deleteFileBackedTablePresetAndRefresh(presetId: string): Promise<void> {
+		const tablePresets = this.getTablePresetsForSurfaces();
+		if (tablePresets.length <= 1) {
+			new Notice(t('settings', 'tableAtLeastOnePresetRequired'));
+			return;
+		}
+		const preset = tablePresets.find(entry => entry.id === presetId);
+		const source = this.tablePresetRegistry.getSource(presetId);
+		if (!preset || source?.kind !== 'table-file' || !source.path) return;
+		if (!await this.confirmDeleteFileBackedTablePreset(preset.name)) return;
+
+		const affectedWorkspaceLeaves = this.getTableWorkspaceLeavesForPreset(presetId);
+		await this.tablePresetRegistry.flushPatches(presetId);
+		const path = source.path;
+		let fallbackPresetId: string | null = null;
+		let deleted = false;
 		await this.enqueueTablePresetMutation(async () => {
-			if (!this.settings.tablePresets.some(entry => entry.id === presetId)) return;
+			const currentSource = this.tablePresetRegistry.getSource(presetId);
+			const file = this.app.vault.getAbstractFileByPath(path);
+			if (currentSource?.kind !== 'table-file' || !(file instanceof TFile)) return;
 			const snapshot = this.snapshotTablePresetSettings();
-			this.settings.tableDefaultPresetId = presetId;
+			fallbackPresetId = this.resolveEffectiveTablePresetId(presetId);
+			this.settings.tablePresets = this.settings.tablePresets.filter(entry => entry.id !== presetId);
+			this.settings.tablePresetFileBindings = this.settings.tablePresetFileBindings.filter(binding => binding.id !== presetId);
+			this.settings.tablePresetOrderIds = this.settings.tablePresetOrderIds.filter(id => id !== presetId);
+			this.settings.presetFavorites = removePresetFavorite(this.settings.presetFavorites, 'table', presetId);
+			if (this.settings.tableDefaultPresetId === presetId) this.settings.tableDefaultPresetId = fallbackPresetId;
+			try {
+				await this.storage.saveSettings();
+			} catch (error) {
+				this.restoreTablePresetSettings(snapshot);
+				throw error;
+			}
+
+			this.expectedTableFileDeletes.set(getOperonTableFilePathKey(path), presetId);
+			try {
+				await this.app.fileManager.trashFile(file);
+				window.setTimeout(() => {
+					const pathKey = getOperonTableFilePathKey(path);
+					if (this.expectedTableFileDeletes.get(pathKey) === presetId) {
+						this.expectedTableFileDeletes.delete(pathKey);
+					}
+				}, 5_000);
+			} catch (error) {
+				this.expectedTableFileDeletes.delete(getOperonTableFilePathKey(path));
+				this.restoreTablePresetSettings(snapshot);
+				try {
+					await this.storage.saveSettings();
+				} catch (rollbackError) {
+					console.error('Operon: Table preset delete rollback failed', rollbackError);
+				}
+				throw error;
+			}
+			deleted = true;
+			await this.refreshTablePresetRegistry();
+		});
+		if (!deleted) return;
+		this.closeTableFileLeavesForPath(path);
+		if (fallbackPresetId) {
+			await this.transitionDeletedTableWorkspaceLeaves(presetId, fallbackPresetId, affectedWorkspaceLeaves);
+		} else {
+			this.closeTableWorkspaceLeaves(presetId, affectedWorkspaceLeaves);
+		}
+		this.refreshTablePresetSurfaces(presetId);
+		this.settingsTab?.refreshTablePresetFileState();
+		new Notice(t('settings', 'tablePresetMovedToTrash', { name: preset.name }));
+	}
+
+	private async transitionDeletedTableWorkspaceLeaves(
+		deletedPresetId: string,
+		fallbackPresetId: string,
+		leaves: readonly WorkspaceLeaf[] = [],
+	): Promise<void> {
+		const currentLeaves = new Set(this.app.workspace.getLeavesOfType(OPERON_TABLE_VIEW_TYPE));
+		for (const leaf of leaves) {
+			if (!currentLeaves.has(leaf) || !(leaf.view instanceof OperonTableView)) continue;
+			if (leaf.view.getRequestedPresetId() !== deletedPresetId) continue;
+			await this.activateTablePresetInLeaf(leaf, fallbackPresetId);
+		}
+	}
+
+	private async confirmDeleteFileBackedTablePreset(presetName: string): Promise<boolean> {
+		return await new Promise(resolve => {
+			new ConfirmActionModal(this.app, {
+				title: t('settings', 'deleteTablePresetTitle', { name: presetName }),
+				message: t('settings', 'deleteTablePresetFileMessage'),
+				confirmText: t('settings', 'moveTablePresetToTrash'),
+				cancelText: t('buttons', 'cancel'),
+				danger: true,
+			}, resolve).open();
+		});
+	}
+
+	private async removeTablePresetReferences(presetIds: readonly string[]): Promise<string | null> {
+		const removedIds = new Set(presetIds);
+		if (removedIds.size === 0) return null;
+		let fallbackPresetId: string | null = null;
+		let changed = false;
+		await this.enqueueTablePresetMutation(async () => {
+			const snapshot = this.snapshotTablePresetSettings();
+			changed = this.settings.tablePresetFileBindings.some(binding => removedIds.has(binding.id))
+				|| this.settings.tablePresetOrderIds.some(id => removedIds.has(id))
+				|| this.settings.tablePresets.some(preset => removedIds.has(preset.id));
+			if (!changed) return;
+			const availablePresets = this.getTablePresetsForSurfaces().filter(preset => !removedIds.has(preset.id));
+			const availableIds = new Set(availablePresets.map(preset => preset.id));
+			fallbackPresetId = this.settings.tablePresetOrderIds.find(id => !removedIds.has(id) && availableIds.has(id))
+				?? availablePresets[0]?.id
+				?? null;
+			this.settings.tablePresets = this.settings.tablePresets.filter(preset => !removedIds.has(preset.id));
+			this.settings.tablePresetFileBindings = this.settings.tablePresetFileBindings.filter(binding => !removedIds.has(binding.id));
+			this.settings.tablePresetOrderIds = this.settings.tablePresetOrderIds.filter(id => !removedIds.has(id));
+			for (const presetId of removedIds) {
+				this.settings.presetFavorites = removePresetFavorite(this.settings.presetFavorites, 'table', presetId);
+			}
+			if (this.settings.tableDefaultPresetId && removedIds.has(this.settings.tableDefaultPresetId)) {
+				this.settings.tableDefaultPresetId = fallbackPresetId;
+			}
+			try {
+				await this.storage.saveSettings();
+			} catch (error) {
+				this.restoreTablePresetSettings(snapshot);
+				try {
+					await this.refreshTablePresetRegistry();
+				} catch (refreshError) {
+					console.warn('Operon: Table preset registry rollback refresh failed', refreshError);
+					this.scheduleTablePresetRegistryRefresh();
+				}
+				this.settingsTab?.refreshTablePresetFileState();
+				for (const presetId of removedIds) this.refreshTablePresetSurfaces(presetId);
+				throw error;
+			}
+			try {
+				await this.refreshTablePresetRegistry();
+			} catch (error) {
+				console.warn('Operon: Table preset registry refresh failed after reference cleanup', error);
+				this.scheduleTablePresetRegistryRefresh();
+			}
+		});
+		if (changed) this.settingsTab?.refreshTablePresetFileState();
+		return fallbackPresetId;
+	}
+
+	private async toggleTablePresetFavoriteAndRefresh(presetId: string): Promise<void> {
+		await this.enqueueTablePresetMutation(async () => {
+			if (!this.getTablePresetsForSurfaces().some(entry => entry.id === presetId)) return;
+			const snapshot = this.snapshotTablePresetSettings();
+			this.settings.presetFavorites = togglePresetFavorite(this.settings.presetFavorites, 'table', presetId);
 			try {
 				await this.storage.saveSettings();
 			} catch (error) {
@@ -4093,19 +5143,47 @@ export default class OperonPlugin extends Plugin {
 		});
 	}
 
-	private openTablePresetSettingsModal(presetId: string, leafOrResolver: WorkspaceLeaf | (() => WorkspaceLeaf)): void {
+	private async openTablePresetInLeaf(leaf: WorkspaceLeaf, presetId: string): Promise<void> {
+		const source = this.tablePresetRegistry.getSource(presetId);
+		if (source?.kind === 'table-file' && source.path) {
+			const file = this.app.vault.getAbstractFileByPath(source.path);
+			if (file instanceof TFile) {
+				await leaf.openFile(file, { active: true });
+				return;
+			}
+		}
+		await this.activateTablePresetInLeaf(leaf, presetId);
+	}
+
+	private openTablePresetSettingsModal(
+		presetId: string,
+		leafOrResolver: WorkspaceLeaf | (() => WorkspaceLeaf),
+		options: { managementMode?: 'full' | 'current-only' } = {},
+	): void {
 		const resolveLeaf = () => typeof leafOrResolver === 'function' ? leafOrResolver() : leafOrResolver;
-		const preset = this.settings.tablePresets.find(entry => entry.id === presetId) ?? null;
+		const registryEntry = this.tablePresetRegistry.get(presetId);
+		const legacyPreset = this.settings.tablePresets.find(entry => entry.id === presetId) ?? null;
+		const preset = resolveTablePresetForSettings(registryEntry, legacyPreset);
+		const source = this.tablePresetRegistry.getSource(presetId);
 		new TablePresetQuickSettingsModal(this.app, {
-			getSettings: () => this.settings,
+			getSettings: () => ({
+				...this.settings,
+				tablePresets: this.getTablePresetsForSurfaces(),
+			}),
 			preset,
 			onSave: (patch) => this.saveTablePresetPatchAndRefresh(patch),
 			onCreate: (created) => this.addTablePresetAndRefresh(created, resolveLeaf()),
-			onDuplicate: (created) => this.addTablePresetAndRefresh(created, resolveLeaf()),
-			onDelete: (deletedPresetId) => this.deleteTablePresetAndRefresh(deletedPresetId, resolveLeaf()),
-			onSetDefault: (defaultPresetId) => this.setDefaultTablePresetAndRefresh(defaultPresetId),
+			onDuplicate: (created) => this.addTablePresetAndRefresh(created, resolveLeaf(), presetId),
+			...(source?.kind === 'table-file'
+				? { onDelete: (deletedPresetId: string) => this.deleteTablePresetAndRefresh(deletedPresetId, resolveLeaf()) }
+				: source?.kind === 'legacy' || !source
+				? { onDelete: (deletedPresetId: string) => this.deleteTablePresetAndRefresh(deletedPresetId, resolveLeaf()) }
+				: {}),
+			onToggleFavorite: (favoritePresetId) => this.toggleTablePresetFavoriteAndRefresh(favoritePresetId),
+			onToggleFilterFavorite: (filterSetId) => this.togglePresetFavoriteAndRefresh('filter', filterSetId),
 			onSaveFilterSet: (filterSet) => this.saveFilterSetAndRefresh(filterSet),
 			getFilterModalEvalDeps: () => this.buildFilterModalEvalDeps(),
+			managementMode: options.managementMode ?? 'full',
 		}).open();
 	}
 
@@ -5218,60 +6296,65 @@ export default class OperonPlugin extends Plugin {
 
 		await this.ensureParentFolderPathExists(filePath);
 		const template = await this.loadDailyNoteTemplateSource(config.template);
-		await this.app.vault.create(filePath, template.content);
+		this.workflowNormalizationInProgress.add(filePath);
+		try {
+			await this.app.vault.create(filePath, template.content);
 
-		const created = this.app.vault.getAbstractFileByPath(filePath);
-		if (!(created instanceof TFile)) {
+			const created = this.app.vault.getAbstractFileByPath(filePath);
+			if (!(created instanceof TFile)) {
+				return {
+					file: null,
+					wasCreated: false,
+					operonParentTaskId: null,
+					operonParentFieldValues: null,
+					operonParentTags: null,
+				};
+			}
+
+			const renderedContent = await this.maybeProcessDailyNoteTemplateContent(created, template.file, template.content);
+			const now = localNow();
+			const templatesConfig = await loadTemplatesCoreConfig(this.app);
+			const coreResolvedContent = resolveCoreTemplateVariables(renderedContent, {
+				title: created.basename,
+				date: now.slice(0, 10),
+				now,
+				dateFormat: templatesConfig.dateFormat,
+				timeFormat: templatesConfig.timeFormat,
+			});
+			const initializedDocument = await this.maybeInitializeDailyNoteAsOperonTask(created, coreResolvedContent, now);
+			if (!initializedDocument) {
+				if (coreResolvedContent !== await this.app.vault.cachedRead(created)) {
+					await this.app.vault.modify(created, coreResolvedContent);
+				}
+			}
 			return {
-				file: null,
-				wasCreated: false,
-				operonParentTaskId: null,
-				operonParentFieldValues: null,
-				operonParentTags: null,
+				file: created,
+				wasCreated: true,
+				operonParentTaskId: initializedDocument?.managedFieldValues['operonId']?.trim() || null,
+				operonParentFieldValues: initializedDocument?.managedFieldValues
+					? { ...initializedDocument.managedFieldValues }
+					: null,
+				operonParentTags: initializedDocument ? [...initializedDocument.tags] : null,
 			};
+		} finally {
+			this.workflowNormalizationInProgress.delete(filePath);
+			this.templatedFileTaskCreationCandidates.delete(filePath);
+			this.indexer.scheduleReindex(filePath);
+			if (this.workflowNormalizationPending.delete(filePath)) {
+				void this.normalizeWorkflowStateAfterRawEdit(filePath);
+			}
 		}
-
-		const renderedContent = await this.maybeProcessDailyNoteTemplateContent(created, template.file, template.content);
-		const now = localNow();
-		const templatesConfig = await loadTemplatesCoreConfig(this.app);
-		const resolvedContent = resolveCoreTemplateVariables(renderedContent, {
-			title: created.basename,
-			date: now.slice(0, 10),
-			now,
-			dateFormat: templatesConfig.dateFormat,
-			timeFormat: templatesConfig.timeFormat,
-		});
-		if (resolvedContent !== await this.app.vault.cachedRead(created)) {
-			await this.app.vault.modify(created, resolvedContent);
-		}
-
-		const initializedDocument = await this.maybeInitializeDailyNoteAsOperonTask(created);
-		return {
-			file: created,
-			wasCreated: true,
-			operonParentTaskId: initializedDocument?.managedFieldValues['operonId']?.trim() || null,
-			operonParentFieldValues: initializedDocument?.managedFieldValues
-				? { ...initializedDocument.managedFieldValues }
-				: null,
-			operonParentTags: initializedDocument ? [...initializedDocument.tags] : null,
-		};
 	}
 
-	private async maybeInitializeDailyNoteAsOperonTask(file: TFile): Promise<ParsedFrontmatterDocument | null> {
-		if (!this.settings.createDailyNotesAsOperonTask) return null;
-
-		const document = await this.loadParsedFrontmatterDocument(file);
-		const draft = this.buildFileTaskDraft({
-			description: file.basename,
-			fieldValues: { ...document.managedFieldValues },
-			fieldPresence: document.managedFieldPresence,
-			tags: [...document.tags],
-			tagsPresent: document.tagsPresent,
-			frontmatterDocument: document,
-		}, null, localNow(), 'preserve-source');
+	private async maybeInitializeDailyNoteAsOperonTask(
+		file: TFile,
+		content: string,
+		now: string,
+	): Promise<ParsedFrontmatterDocument | null> {
+		if (!this.settings.createDailyNotesAsOperonTask && !this.hasTemplatedFileTaskIdentity(content)) return null;
 
 		const currentContent = await this.app.vault.cachedRead(file);
-		const resolvedContent = this.resolveOperonIdPlaceholdersInContent(draft.content);
+		const resolvedContent = this.resolveTemplatedFileTaskContent(content, file.basename, now);
 		if (resolvedContent !== currentContent) {
 			await this.app.vault.modify(file, resolvedContent);
 		}
@@ -6117,6 +7200,7 @@ export default class OperonPlugin extends Plugin {
 				openDailyNote: (dateKey: string) => this.openDailyNoteFromDateKey(dateKey),
 				duplicateFilterSet: (filterSet: FilterSet) => this.duplicateFilterSetAndRefresh(filterSet),
 				deleteFilterSet: (filterSetId: string) => this.deleteFilterSetAndRefresh(filterSetId),
+				toggleFilterFavorite: (filterSetId: string) => this.togglePresetFavoriteAndRefresh('filter', filterSetId),
 			};
 	}
 
@@ -6149,6 +7233,8 @@ export default class OperonPlugin extends Plugin {
 			app: this.app,
 			indexer: this.indexer,
 			getSettings: () => this.settings,
+			resolveTablePreset: presetId => this.resolveTablePresetForSurface(presetId),
+			getTablePresets: () => this.getTablePresetsForSurfaces(),
 			getPinnedCache: () => this.pinnedCache,
 			openTaskEditor: (operonId: string) => this.openEditorForId(operonId),
 			openTaskSource: (operonId: string) => this.openMaterializedTaskSourceInNewTab(operonId),
@@ -6161,8 +7247,14 @@ export default class OperonPlugin extends Plugin {
 			onStatusIconClick: (taskId) => this.handleCalendarStatusIconClick(taskId),
 			onContextualAction: (taskId, actionId, context, invocation) => this.handleContextualMenuAction(taskId, actionId, context, invocation),
 			onOpenPresetSettings: (presetId) => this.openTablePresetSettingsModal(presetId, () => this.resolveTablePresetSettingsLeafForEmbed()),
-			onSavePresetPatch: (patch) => this.saveTablePresetPatchAndRefresh(patch),
+			onSavePresetPatch: (patch) => this.queueTablePresetPatchAndRefresh(
+				patch,
+				this.getTablePresetPatchScope(patch),
+				'embed-table',
+			).settled,
 			onSaveFilterSet: (filterSet) => this.saveFilterSetAndRefresh(filterSet),
+			onOpenRelatedView: (target) => this.openRelatedViewTarget(target),
+			onCreateRelatedView: (target) => this.createRelatedViewPresetAndOpen(target),
 			getProjectSerialDisplay: (operonId, task) => task
 				? this.getReadingProjectSerialDisplayForTask(operonId, task)
 				: this.getProjectSerialDisplayForTask(operonId),
@@ -8360,7 +9452,6 @@ export default class OperonPlugin extends Plugin {
 			this.app.vault.on('modify', (file: TAbstractFile) => {
 				if (!(file instanceof TFile) || file.extension !== 'md') return;
 				if (this.shouldSuppressInternalTaskWrite(file.path)) return;
-				if (this.workflowNormalizationInProgress.has(file.path)) return;
 				void this.normalizeWorkflowStateAfterRawEdit(file.path);
 			})
 		);
@@ -8371,7 +9462,11 @@ export default class OperonPlugin extends Plugin {
 				if (file instanceof TFile && file.extension === 'md') {
 					invalidateCustomFieldValueCandidateCache(this.app);
 					invalidateLocationPlaceIndex(this.app);
+					this.markTemplatedFileTaskCreationCandidate(file.path);
 					this.indexer.scheduleReindex(file.path);
+					getActiveWindow().setTimeout(() => {
+						void this.normalizeWorkflowStateAfterRawEdit(file.path);
+					}, 0);
 				}
 			})
 		);
@@ -8382,6 +9477,8 @@ export default class OperonPlugin extends Plugin {
 					if (file instanceof TFile && file.extension === 'md') {
 						invalidateCustomFieldValueCandidateCache(this.app);
 						invalidateLocationPlaceIndex(this.app);
+						this.templatedFileTaskCreationCandidates.delete(file.path);
+						this.workflowNormalizationPending.delete(file.path);
 						void this.indexer.handleFileDelete(file.path);
 					}
 				})
@@ -8394,6 +9491,18 @@ export default class OperonPlugin extends Plugin {
 
 				invalidateCustomFieldValueCandidateCache(this.app);
 				invalidateLocationPlaceIndex(this.app);
+				const movedTemplatedCandidate = this.moveTemplatedFileTaskCreationCandidate(oldPath, file.path);
+				if (movedTemplatedCandidate) {
+					if (this.workflowNormalizationPending.delete(oldPath)) {
+						this.workflowNormalizationPending.add(file.path);
+					}
+					const normalizationOwner = this.findWorkflowNormalizationOwner(oldPath);
+					if (normalizationOwner) {
+						this.workflowNormalizationRenameTargets.set(normalizationOwner, file.path);
+					} else {
+						void this.normalizeWorkflowStateAfterRawEdit(file.path);
+					}
+				}
 				this.indexer.handleFileRename(oldPath, file.path);
 
 				// Reindex must wait for Obsidian's metadataCache to update — it's async.
@@ -9101,8 +10210,32 @@ export default class OperonPlugin extends Plugin {
 	}
 
 	private async normalizeWorkflowStateAfterRawEdit(filePath: string): Promise<void> {
-		if (this.workflowNormalizationInProgress.has(filePath)) return;
+		if (this.workflowNormalizationInProgress.has(filePath)) {
+			this.workflowNormalizationPending.add(filePath);
+			return;
+		}
 
+		this.workflowNormalizationInProgress.add(filePath);
+		try {
+			do {
+				this.workflowNormalizationPending.delete(filePath);
+				await this.normalizeWorkflowStateAfterRawEditPass(filePath);
+			} while (this.workflowNormalizationPending.delete(filePath));
+		} finally {
+			const renamedFilePath = this.workflowNormalizationRenameTargets.get(filePath);
+			this.workflowNormalizationRenameTargets.delete(filePath);
+			this.indexer.scheduleReindex(renamedFilePath ?? filePath);
+			this.workflowNormalizationInProgress.delete(filePath);
+			if (renamedFilePath) {
+				this.workflowNormalizationPending.delete(filePath);
+				void this.normalizeWorkflowStateAfterRawEdit(renamedFilePath);
+			} else if (this.workflowNormalizationPending.delete(filePath)) {
+				void this.normalizeWorkflowStateAfterRawEdit(filePath);
+			}
+		}
+	}
+
+	private async normalizeWorkflowStateAfterRawEditPass(filePath: string): Promise<void> {
 		const file = this.app.vault.getAbstractFileByPath(filePath);
 		if (!(file instanceof TFile) || file.extension !== 'md') return;
 		if (isOperonExcludedPath(file.path, this.settings)) {
@@ -9110,42 +10243,51 @@ export default class OperonPlugin extends Plugin {
 			return;
 		}
 
-		this.workflowNormalizationInProgress.add(filePath);
-		try {
-			const rawContent = await this.app.vault.cachedRead(file);
-			const resolvedContent = this.resolveOperonIdPlaceholdersInContent(rawContent, {
+		const rawContent = await this.app.vault.cachedRead(file);
+		if (this.workflowNormalizationRenameTargets.has(filePath)) return;
+		const resolvesTemplatedFileTask = this.isTemplatedFileTaskCreationCandidate(filePath)
+			&& this.hasTemplatedFileTaskIdentity(rawContent);
+		const resolvedContent = resolvesTemplatedFileTask
+			? this.resolveTemplatedFileTaskContent(rawContent, file.basename, localNow())
+			: this.resolveOperonIdPlaceholdersInContent(rawContent, {
 				resolveRawDateTime: true,
 			});
-			if (resolvedContent !== rawContent) {
-				await this.app.vault.modify(file, resolvedContent);
-			}
-
-			const indexedTasks = this.indexer.getAllTasks().filter(task => task.primary.filePath === filePath);
-			if (indexedTasks.length === 0) {
-				this.indexer.scheduleReindex(filePath);
+		if (resolvedContent !== rawContent) {
+			const latestContent = await this.app.vault.cachedRead(file);
+			if (this.workflowNormalizationRenameTargets.has(filePath)) return;
+			if (latestContent !== rawContent) {
+				this.workflowNormalizationPending.add(filePath);
 				return;
 			}
+			await this.app.vault.modify(file, resolvedContent);
+		}
 
-			const scan = await scanFileWithMappings(this.app, file, this.settings.keyMappings);
-			const currentById = new Map<string, Record<string, string>>();
-			for (const inlineTask of scan.inlineTasks) {
-				if (!inlineTask.operonId) continue;
-				currentById.set(
-					inlineTask.operonId,
-					Object.fromEntries(inlineTask.fields.map(field => [field.key, field.value])),
-				);
-			}
-			if (scan.yamlTask?.operonId) {
-				currentById.set(scan.yamlTask.operonId, { ...scan.yamlTask.fieldValues });
-			}
+		const indexedTasks = this.indexer.getAllTasks().filter(task => task.primary.filePath === filePath);
+		if (indexedTasks.length === 0) {
+			this.indexer.scheduleReindex(filePath);
+			return;
+		}
 
-			type NormalizationEntry = {
-				task: IndexedTask;
-				payload: Record<string, string>;
-			};
-			const pending: NormalizationEntry[] = [];
+		const scan = await scanFileWithMappings(this.app, file, this.settings.keyMappings);
+		const currentById = new Map<string, Record<string, string>>();
+		for (const inlineTask of scan.inlineTasks) {
+			if (!inlineTask.operonId) continue;
+			currentById.set(
+				inlineTask.operonId,
+				Object.fromEntries(inlineTask.fields.map(field => [field.key, field.value])),
+			);
+		}
+		if (scan.yamlTask?.operonId) {
+			currentById.set(scan.yamlTask.operonId, { ...scan.yamlTask.fieldValues });
+		}
 
-			for (const task of indexedTasks) {
+		type NormalizationEntry = {
+			task: IndexedTask;
+			payload: Record<string, string>;
+		};
+		const pending: NormalizationEntry[] = [];
+
+		for (const task of indexedTasks) {
 				const currentFieldValues = currentById.get(task.operonId);
 				if (!currentFieldValues) continue;
 
@@ -9194,17 +10336,13 @@ export default class OperonPlugin extends Plugin {
 						datetimeRepeatEnd: nextEndValue,
 					},
 				});
-			}
+		}
 
-			if (pending.length > 0) {
-				for (const entry of pending) {
-					await this.writer.writeTaskFields(entry.task.operonId, entry.payload, { reindex: 'none' });
-				}
-				this.refreshViews();
+		if (pending.length > 0) {
+			for (const entry of pending) {
+				await this.writer.writeTaskFields(entry.task.operonId, entry.payload, { reindex: 'none' });
 			}
-		} finally {
-			this.indexer.scheduleReindex(filePath);
-			getActiveWindow().setTimeout(() => this.workflowNormalizationInProgress.delete(filePath), 0);
+			this.refreshViews();
 		}
 	}
 
@@ -9880,6 +11018,103 @@ export default class OperonPlugin extends Plugin {
 			status: (fieldValues['status'] ?? '').trim(),
 			priority: (fieldValues['priority'] ?? '').trim(),
 		};
+	}
+
+	private hasTemplatedFileTaskIdentity(content: string): boolean {
+		const document = parseFrontmatterDocument(content, this.settings.keyMappings);
+		return OPERON_ID_PLACEHOLDER_VALUE_PATTERN.test(
+			(document.managedFieldValues['operonId'] ?? '').trim(),
+		);
+	}
+
+	private markTemplatedFileTaskCreationCandidate(filePath: string): void {
+		const expiresAt = Date.now() + TEMPLATED_FILE_TASK_CREATION_WINDOW_MS;
+		this.templatedFileTaskCreationCandidates.set(filePath, expiresAt);
+		this.scheduleTemplatedFileTaskCreationCandidateExpiry(filePath, expiresAt);
+	}
+
+	private moveTemplatedFileTaskCreationCandidate(oldPath: string, newPath: string): boolean {
+		const expiresAt = this.templatedFileTaskCreationCandidates.get(oldPath);
+		if (expiresAt === undefined) return false;
+		this.templatedFileTaskCreationCandidates.delete(oldPath);
+		if (expiresAt < Date.now()) return false;
+		this.templatedFileTaskCreationCandidates.set(newPath, expiresAt);
+		this.scheduleTemplatedFileTaskCreationCandidateExpiry(newPath, expiresAt);
+		return true;
+	}
+
+	private findWorkflowNormalizationOwner(filePath: string): string | null {
+		if (this.workflowNormalizationInProgress.has(filePath)) return filePath;
+		for (const [ownerPath, renamedPath] of this.workflowNormalizationRenameTargets) {
+			if (renamedPath === filePath) return ownerPath;
+		}
+		return null;
+	}
+
+	private scheduleTemplatedFileTaskCreationCandidateExpiry(filePath: string, expiresAt: number): void {
+		getActiveWindow().setTimeout(() => {
+			if (this.templatedFileTaskCreationCandidates.get(filePath) === expiresAt) {
+				this.templatedFileTaskCreationCandidates.delete(filePath);
+			}
+		}, Math.max(0, expiresAt - Date.now()));
+	}
+
+	private isTemplatedFileTaskCreationCandidate(filePath: string): boolean {
+		const expiresAt = this.templatedFileTaskCreationCandidates.get(filePath);
+		if (expiresAt === undefined) return false;
+		if (expiresAt >= Date.now()) return true;
+		this.templatedFileTaskCreationCandidates.delete(filePath);
+		return false;
+	}
+
+	private resolveTemplatedFileTaskContent(content: string, title: string, now: string): string {
+		const initialContext: OperonTemplatePlaceholderContext = {
+			...this.buildOperonTemplatePlaceholderContext(title, {}, now),
+			note: '{{note}}',
+			dateStarted: '{{dateStarted}}',
+			dateScheduled: '{{dateScheduled}}',
+			dateDue: '{{dateDue}}',
+			status: '{{status}}',
+			priority: '{{priority}}',
+		};
+		const preResolvedContent = this.resolveFileTaskTemplatePlaceholdersInContent(
+			content,
+			initialContext,
+			title,
+			{ resolveBodyText: false },
+		);
+		const document = parseFrontmatterDocument(preResolvedContent, this.settings.keyMappings);
+		const draftFieldValues = Object.fromEntries(
+			Object.entries(document.managedFieldValues).map(([key, value]) => [
+				key,
+				value.replace(DEFERRED_FILE_TASK_TEMPLATE_PLACEHOLDER_PATTERN, ''),
+			]),
+		);
+		const draftDocument: ParsedFrontmatterDocument = {
+			...document,
+			managedFieldValues: draftFieldValues,
+		};
+		const draft = this.buildFileTaskDraft({
+			description: title,
+			fieldValues: draftFieldValues,
+			fieldPresence: document.managedFieldPresence,
+			tags: [...document.tags],
+			tagsPresent: document.tagsPresent,
+			frontmatterDocument: draftDocument,
+		}, null, now, 'preserve-source');
+		const frontmatterResolvedContent = this.resolveFileTaskTemplatePlaceholdersInContent(
+			draft.content,
+			this.buildOperonTemplatePlaceholderContext(title, draft.fieldValues, now),
+			title,
+			{ resolveBodyText: false },
+		);
+		const resolvedDocument = parseFrontmatterDocument(frontmatterResolvedContent, this.settings.keyMappings);
+		const finalContext = this.buildOperonTemplatePlaceholderContext(title, resolvedDocument.managedFieldValues, now);
+		return this.resolveFileTaskTemplatePlaceholdersInContent(
+			frontmatterResolvedContent,
+			finalContext,
+			title,
+		);
 	}
 
 	private buildRawTaskLinePlaceholderContext(): RawOperonTaskLinePlaceholderContext {

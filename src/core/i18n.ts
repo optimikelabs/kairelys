@@ -53,6 +53,7 @@ function normalizeLocale(rawLocale: string): LangCode | null {
 /** Structure of a locale file — matches Spec Section 25.4 */
 export interface LocaleData {
 	commands: Record<string, string>;
+	presetFavorites: Record<string, string>;
 	contextMenu: Record<string, string>;
 	modals: Record<string, string>;
 	notifications: Record<string, string>;

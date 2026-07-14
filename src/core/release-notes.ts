@@ -13,6 +13,53 @@ const RELEASE_NOTE_LIMIT = 5;
 
 export const OPERON_RELEASE_NOTES: OperonReleaseNote[] = [
 	{
+		version: '2.2.0',
+		date: '2026-07-14',
+		title: 'Tables as Files',
+		showOnUpdate: true,
+		bannerUrl: 'operon-2-2-0-tables-as-files.png',
+		body: `
+This release turns Operon Table presets into portable vault files and makes favorite presets faster to reach across Table, Calendar, Kanban, and Filters, alongside smoother Table rendering and focused workflow fixes.
+
+### New
+- Added an **Operon Table ribbon action** that opens the default Table in a new tab with the same behavior as the existing command.
+- Added persistent, independent **favorite presets** for Table, Calendar, Kanban, and saved Filters, with immediate favorite toggles across preset management cards and editors; stars now represent favorites only, while default preset badges use a neutral text label and remain separate.
+- Added **Operon Table files** as portable, canonical \`.table\` preset sources: validated files open as file-backed Table views with the standard **Operon Table** header, restore with the workspace, participate in wikilinks and Page Preview, and keep malformed or duplicate-ID files read-only without rewriting them; new, duplicated, and related presets are created as files, edits sync across open Table surfaces with coalesced saves, and external file or name changes stay linked through stable preset IDs.
+- Added preset-specific custom names to **Operon Table column headers** through a compact, anchored rename popover, while keeping the underlying task property unchanged and using the custom name in compact header tooltips.
+- Added a configurable subtask auto-expand limit to **Filter View Behavior**, defaulting existing profiles to 10 or fewer so small task trees open automatically while larger trees remain available for manual expansion.
+
+### Improved
+- Improved **Operon Table toolbar controls** so Settings and Export use the same Operon hover feedback as the neighboring preset, grouping, and filter controls, with icon-only preset and Group & Sort controls, neutral outlined hover and open states, accent borders and icons without filled backgrounds for selected filters and grouping, and five duplicate search-scope shortcuts removed from outside the search box for a calmer, more compact header.
+- Improved the **Operon Table toolbar** with centered favorite preset shortcuts across workspace, file-backed, and embedded Tables; narrow panes move the shortcuts to a second row while preserving the right-side control geometry and shrinking only the search field, the preset picker highlights an active non-favorite preset, and embedded Tables use the same title, favorites, Related Views, controls, ordering, export menu, and full preset management as the normal Leaf header.
+- Improved **Calendar preset navigation** across the toolbar and desktop Sidebar with compact favorite-only shortcuts, a searchable keyboard-accessible picker for every preset beside the Calendars section toggle, and a calm accent state that keeps the active preset visible even when it is not a favorite, without letting long preset names consume toolbar space.
+- Improved the **Kanban preset toolbar** so the centered shortcuts show only favorite presets, while a searchable Kanban picker keeps every preset available and highlights the active selection when it is not a favorite.
+- Improved \`.table\` **Page Preview** into a fully editable Table surface: task and preset changes save to the canonical file and update other open surfaces immediately, while the full Leaf header provides the same preset switching, duplication, deletion, ordering, search, export, full preset management, and Related Views controls, including clear choices to create Table, Kanban, or Calendar views with or without the current filter.
+- Improved **Operon Table file lifecycle** with Obsidian Trash deletion, moved-file rebinding, and read-only missing or ID-conflict states that preserve preset identity when a bound \`.table\` file is temporarily unavailable during sync.
+- Improved **Operon Table file migration** so existing legacy presets move automatically into portable \`.table\` files with stable IDs and ordering, remain available throughout Table Settings, preset search, and existing \`operon-table\` embeds, can be recovered as independent Tables, resolve duplicate IDs by choosing the original file, and finalize with verified permanent backup cleanup; maintenance actions stay inside Table Settings instead of cluttering the Command Palette, recovery backups remain collapsed until requested, and empty blocked or failed counts stay hidden.
+- Improved **Table column display switching** so double-clicking a column edge changes compact or detailed mode immediately without an intermediate stale refresh or successful-save flicker.
+- Improved **Operon Table refresh stability** so timer updates, task creation, and other background index changes reuse the existing Table shell instead of visibly rebuilding the whole view.
+- Improved **status renaming** so unused statuses save immediately without an unnecessary migration confirmation, while statuses used by tasks retain the existing review step.
+- Improved **Operon Table** Date Time Start and Date Time End cells: detailed mode now separates the date and time with a space, while compact mode shows only hours and minutes without an icon and matches the detailed value's text scale.
+
+### Fixed
+- Fixed saved **Filter** field, operator, grouping, and sorting pickers not opening when Operon Settings is opened in a separate Obsidian window.
+- Fixed Operon template variables such as \`{{datetime}}\` remaining literal when a Daily Note template explicitly creates a File Task with \`{{operonId}}\`, including Templater-created Daily Notes when automatic Daily Note File Task creation is disabled.
+- Fixed numeric Custom Key **Kanban swimlanes** so values follow numerical order, such as 0, 1, 2, 10, while preserving distinct lane labels and placing empty values last.
+- Fixed **Kanban column scroll position** so height-limited columns restore the visible-card anchor after pipeline-status or drag-and-drop moves, preserving scroll depth with or without swimlanes and preventing the remaining cards from shifting upward when the moved card leaves the lane.
+
+### New Docs
+- [[DOCS-114 Table files|Table files]]
+
+### Updated Docs
+- [[DOCS-006 Glossary of Operon terms|Glossary of Operon terms]]
+- [[DOCS-025 Filter View|Filter View]]
+- [[DOCS-046 Plugin data and state files|Plugin data and state files]]
+- [[DOCS-030 Kanban overview|Kanban overview]]
+- [[DOCS-105 Table overview|Table overview]]
+- And 8 more updated docs.
+`.trim(),
+	},
+	{
 		version: '2.1.0',
 		date: '2026-07-11',
 		title: 'Smoother Systems, Safer Workflows',

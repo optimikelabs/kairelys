@@ -124,6 +124,17 @@ export function collectPipelineRenamePreview(
 	return toPipelineRenamePreview(buildFieldRenamePreview(plan, affectedTasksById));
 }
 
+export function shouldConfirmPipelineRenameMigration(
+	preview: PipelineRenamePreview,
+	hasIndexer: boolean,
+): boolean {
+	const pipelineRenamed = preview.plan.oldPipeline.name !== preview.plan.newPipeline.name;
+	const hasStatusRename = preview.plan.operations.some(operation => (
+		operation.oldStatusLabel !== operation.newStatusLabel
+	));
+	return !hasIndexer || pipelineRenamed || !hasStatusRename || preview.totalTaskCount > 0;
+}
+
 export async function executePipelineRenamePreview(
 	preview: PipelineRenamePreview,
 	deps: PipelineRenameExecutionDeps,

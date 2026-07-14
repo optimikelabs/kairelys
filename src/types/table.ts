@@ -2,6 +2,7 @@ import type { ProjectSearchMode } from '../systems/task-search';
 import type { FilterSet } from './settings';
 
 export const OPERON_TABLE_VIEW_TYPE = 'operon-table-view';
+export const OPERON_TABLE_FILE_VIEW_TYPE = 'operon-table-file-view';
 export const DEFAULT_TABLE_PRESET_ID = 'table-preset-my-first-table';
 export const TABLE_LINE_NUMBER_COLUMN_KEY = '__lineNumber';
 export const TABLE_TASK_ICON_COLUMN_KEY = '__taskIcon';
@@ -106,6 +107,11 @@ export interface TablePresetSearchState {
 	parent: TablePresetSearchParent | null;
 }
 
+export interface TablePresetFileBinding {
+	id: string;
+	path: string;
+}
+
 export interface TablePreset {
 	id: string;
 	name: string;
@@ -150,6 +156,10 @@ export interface TablePresetNormalizationOptions {
 
 export interface TablePresetStoreSettings {
 	tablePresets: TablePreset[];
+	tablePresetOrderIds?: string[];
+	tablePresetFileBindings?: TablePresetFileBinding[];
+	tablePresetFileMigrationVersion: number;
+	tablePresetFileMigrationFinalizedVersion: number;
 	tableDefaultPresetId: string | null;
 	tableEmbedVisibleRows: TableEmbedVisibleRows;
 	tableShowLineNumbers: boolean;
@@ -159,6 +169,9 @@ export interface TablePresetStoreSettings {
 
 export interface TablePresetPackageSettings {
 	presetIds?: string[];
+	fileBindings?: TablePresetFileBinding[];
+	fileMigrationVersion?: number;
+	fileMigrationFinalizedVersion?: number;
 	tableDefaultPresetId: string | null;
 	tableEmbedVisibleRows: TableEmbedVisibleRows;
 	tableShowLineNumbers: boolean;
@@ -405,7 +418,7 @@ function createUniqueTablePresetId(seen: ReadonlySet<string>): string {
 	return id;
 }
 
-function isSafeTablePresetId(id: string): boolean {
+export function isSafeTablePresetId(id: string): boolean {
 	return id.trim().length > 0 && !/["\\\r\n`]/u.test(id);
 }
 

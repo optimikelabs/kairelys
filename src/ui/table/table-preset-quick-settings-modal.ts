@@ -7,7 +7,9 @@ import type { FilterModalEvalDeps } from '../filter-set-modal';
 import { setAccessibleLabelWithoutTooltip } from '../accessibility-label';
 import { showSearchableFieldPicker } from '../field-pickers/searchable-field-picker';
 import { bindOperonHoverTooltip } from '../operon-hover-tooltip';
+import { createPresetFavoriteButton } from '../preset-favorite-button';
 import { renderPresetFilterActions } from '../preset-filter-actions';
+import { isPresetFavorite } from '../../core/preset-favorites';
 import {
 	buildTableGroupSortFieldCatalog,
 	buildTableTaskFieldCatalog,
@@ -41,11 +43,13 @@ interface TablePresetQuickSettingsModalOptions {
 	onSave: (patch: TablePresetPatch, preset: TablePreset) => Promise<void>;
 	onCreate: (preset: TablePreset) => Promise<void>;
 	onDuplicate: (preset: TablePreset) => Promise<void>;
-	onDelete: (presetId: string) => Promise<void>;
-	onSetDefault: (presetId: string) => Promise<void>;
+	onDelete?: (presetId: string) => Promise<void>;
+	onToggleFavorite: (presetId: string) => Promise<void>;
 	onSaveFilterSet: (filterSet: FilterSet) => Promise<void>;
+	onToggleFilterFavorite?: (filterSetId: string) => Promise<void>;
 	getFilterModalEvalDeps?: () => FilterModalEvalDeps | null;
 	saveWhenClean?: boolean;
+	managementMode?: 'full' | 'current-only';
 }
 
 export type TablePresetDirtyField = 'name' | 'filterSetId' | 'columns' | 'sortRules' | 'grouping' | 'summaries' | 'display';
@@ -152,6 +156,7 @@ export class TablePresetQuickSettingsModal extends Modal {
 				this.markDirty('filterSetId');
 			},
 			onSaveFilterSet: this.options.onSaveFilterSet,
+			onToggleFilterFavorite: this.options.onToggleFilterFavorite,
 			getFilterModalEvalDeps: this.options.getFilterModalEvalDeps,
 			onRefresh: () => this.renderPreservingScroll(),
 			errorContextPrefix: 'table preset',
@@ -566,38 +571,49 @@ export class TablePresetQuickSettingsModal extends Modal {
 
 	private renderButtons(container: HTMLElement, preset: TablePreset): void {
 		const settings = this.options.getSettings();
+		const isStoredPreset = settings.tablePresets.some(entry => entry.id === preset.id);
+		const isFavorite = isPresetFavorite(settings.presetFavorites, 'table', preset.id);
 		const buttons = container.createDiv('operon-table-preset-settings-buttons');
-		const dangerButtons = buttons.createDiv('operon-table-preset-settings-danger-actions');
+		const fullManagement = this.options.managementMode !== 'current-only';
+		const dangerButtons = fullManagement
+			? buttons.createDiv('operon-table-preset-settings-danger-actions')
+			: null;
 		const managementButtons = buttons.createDiv('operon-table-preset-settings-management-actions');
 		const primaryButtons = buttons.createDiv('operon-table-preset-settings-primary-actions');
 
-		const deleteButton = dangerButtons.createEl('button', {
-			cls: 'operon-table-preset-settings-footer-button mod-warning',
-			text: t('table', 'deletePreset'),
-			attr: { type: 'button' },
-		});
-		deleteButton.disabled = settings.tablePresets.length <= 1;
-		deleteButton.addEventListener('click', () => {
-			void this.runAndClose(() => this.options.onDelete(preset.id));
-		});
+		if (dangerButtons) {
+			const deleteButton = dangerButtons.createEl('button', {
+				cls: 'operon-table-preset-settings-footer-button mod-warning',
+				text: t('table', 'deletePreset'),
+				attr: { type: 'button' },
+			});
+			deleteButton.disabled = settings.tablePresets.length <= 1 || !this.options.onDelete;
+			deleteButton.addEventListener('click', () => {
+				const onDelete = this.options.onDelete;
+				if (!onDelete) return;
+				void this.runAndClose(() => onDelete(preset.id));
+			});
+		}
 
+		if (fullManagement) {
 			this.createFooterIconButton(managementButtons, {
-				label: t('table', 'newPreset'),
+					label: t('table', 'newPreset'),
 				icon: 'plus',
 				onClick: () => {
 					const next = this.sanitizePresetForSave(createTablePresetFromSource(null, this.buildPresetName(t('table', 'newPresetName'))));
 					void this.runAndClose(() => this.options.onCreate(next));
 				},
-			});
+				});
 
-		this.createFooterIconButton(managementButtons, {
-			label: t('table', 'duplicatePreset'),
-			icon: 'copy',
-			onClick: () => {
-				const next = this.sanitizePresetForSave(createTablePresetFromSource(preset, this.buildPresetName(t('table', 'duplicatePresetName', { name: preset.name }))));
-				void this.runAndClose(() => this.options.onDuplicate(next));
-			},
-		});
+			this.createFooterIconButton(managementButtons, {
+				label: t('table', 'duplicatePreset'),
+				icon: 'copy',
+				onClick: () => {
+					const next = this.sanitizePresetForSave(createTablePresetFromSource(preset, this.buildPresetName(t('table', 'duplicatePresetName', { name: preset.name }))));
+					void this.runAndClose(() => this.options.onDuplicate(next));
+				},
+			});
+		}
 
 		this.createFooterIconButton(managementButtons, {
 			label: t('table', 'copyEmbedCode'),
@@ -609,14 +625,14 @@ export class TablePresetQuickSettingsModal extends Modal {
 			},
 		});
 
-		this.createFooterIconButton(managementButtons, {
-			label: settings.tableDefaultPresetId === preset.id ? t('table', 'defaultPreset') : t('table', 'setDefaultPreset'),
-			icon: 'star',
-			active: settings.tableDefaultPresetId === preset.id,
-			disabled: settings.tableDefaultPresetId === preset.id,
+		createPresetFavoriteButton({
+			containerEl: managementButtons,
+			className: 'operon-table-preset-settings-footer-button operon-table-preset-settings-icon-button',
+			active: isFavorite,
+			disabled: !isStoredPreset,
 			onClick: () => {
 				void this.runAction(async () => {
-					await this.options.onSetDefault(preset.id);
+					await this.options.onToggleFavorite(preset.id);
 					this.renderPreservingScroll();
 				});
 			},
@@ -640,18 +656,22 @@ export class TablePresetQuickSettingsModal extends Modal {
 			text?: string;
 			monospace?: boolean;
 			danger?: boolean;
+			className?: string;
 			active?: boolean;
 			disabled?: boolean;
 			onClick: () => void;
 		},
 	): HTMLButtonElement {
 		const button = container.createEl('button', {
-			cls: 'operon-table-preset-settings-footer-button operon-table-preset-settings-icon-button',
+			cls: `operon-table-preset-settings-footer-button operon-table-preset-settings-icon-button ${options.className ?? ''}`.trim(),
 			attr: { type: 'button' },
 		});
 		setAccessibleLabelWithoutTooltip(button, options.label);
 		if (options.danger) button.addClass('mod-warning');
 		if (options.active) button.addClass('is-active');
+		if (typeof options.active === 'boolean') {
+			button.setAttribute('aria-pressed', String(options.active));
+		}
 		if (options.monospace) button.addClass('is-monospace');
 		if (options.icon) {
 			setIcon(button, options.icon);

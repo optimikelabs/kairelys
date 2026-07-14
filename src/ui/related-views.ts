@@ -5,12 +5,16 @@ import type { OperonSettings, FilterSet } from '../types/settings';
 import type {
 	RelatedFilterablePreset,
 	RelatedPresetViewType,
+	RelatedViewCreateGroup,
+	RelatedViewCreateGroupKind,
 	RelatedViewCreateTarget,
+	RelatedViewFilteredCreateTarget,
 	RelatedViewGroup,
 	RelatedViewItem,
 	RelatedViewOpenTarget,
 	RelatedViewSource,
 	RelatedViewType,
+	RelatedViewUnfilteredCreateTarget,
 } from '../types/related-views';
 import { bindOperonHoverTooltip } from './operon-hover-tooltip';
 import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
@@ -54,20 +58,26 @@ export function buildRelatedViewGroups(
 	return groups.filter(group => group.items.length > 0);
 }
 
-export function buildRelatedCreateTargets(
+export function buildRelatedCreateGroups(
 	settings: RelatedViewSettings,
 	source: RelatedViewSource,
-): RelatedViewCreateTarget[] {
+): RelatedViewCreateGroup[] {
 	const activeFilterSetId = resolveRelatedViewSourceFilterSetId(settings, source);
-	if (activeFilterSetId === undefined) return [];
-	const inheritedPresetName = getInheritedCreatePresetName(settings, activeFilterSetId);
-	return [
-		{ type: 'calendar', variant: 'timeGrid', filterSetId: activeFilterSetId, ...inheritedPresetName },
-		{ type: 'calendar', variant: 'timeTrackerGrid', filterSetId: activeFilterSetId, ...inheritedPresetName },
-		{ type: 'calendar', variant: 'multiWeek', filterSetId: activeFilterSetId, ...inheritedPresetName },
-		{ type: 'kanban', variant: 'defaultPipeline', filterSetId: activeFilterSetId, ...inheritedPresetName },
-		{ type: 'table', variant: 'defaultTable', filterSetId: activeFilterSetId, ...inheritedPresetName },
-	];
+	const groups: RelatedViewCreateGroup[] = [];
+	if (activeFilterSetId) {
+		groups.push({
+			kind: 'with-filter',
+			targets: buildCrossViewCreateTargets(settings, activeFilterSetId),
+		});
+	}
+	const unfilteredTargets = buildUnfilteredCreateTargets(source);
+	if (unfilteredTargets.length > 0) {
+		groups.push({
+			kind: 'without-filter',
+			targets: unfilteredTargets,
+		});
+	}
+	return groups;
 }
 
 export function buildTableRelatedViewGroups(
@@ -77,11 +87,11 @@ export function buildTableRelatedViewGroups(
 	return buildRelatedViewGroups(settings, { type: 'table', preset: currentPreset });
 }
 
-export function buildTableRelatedCreateTargets(
+export function buildTableRelatedCreateGroups(
 	settings: RelatedViewSettings,
 	currentPreset: RelatedFilterablePreset,
-): RelatedViewCreateTarget[] {
-	return buildRelatedCreateTargets(settings, { type: 'table', preset: currentPreset });
+): RelatedViewCreateGroup[] {
+	return buildRelatedCreateGroups(settings, { type: 'table', preset: currentPreset });
 }
 
 export function buildUniqueRelatedPresetName(
@@ -144,11 +154,18 @@ function showRelatedViewsMenu(anchor: HTMLElement, options: RelatedViewsLauncher
 		anchor.setAttribute('aria-expanded', 'false');
 	});
 	const groups = buildRelatedViewGroups(options.settings, options.source);
+	const createGroups = options.onCreateRelatedView
+		? buildRelatedCreateGroups(options.settings, options.source)
+		: [];
+	let hasMenuContent = false;
 	if (groups.length === 0) {
-		menu.addItem(item => item
-			.setTitle(t('table', 'relatedViewsEmpty'))
-			.setIcon('info')
-			.setDisabled(true));
+		if (resolveRelatedViewSourceFilterSetId(options.settings, options.source)) {
+			menu.addItem(item => item
+				.setTitle(t('table', 'relatedViewsEmpty'))
+				.setIcon('info')
+				.setDisabled(true));
+			hasMenuContent = true;
+		}
 	} else {
 		for (const [index, group] of groups.entries()) {
 			if (index > 0) menu.addSeparator();
@@ -162,21 +179,20 @@ function showRelatedViewsMenu(anchor: HTMLElement, options: RelatedViewsLauncher
 					.onClick(() => openRelatedView(options, relatedView)));
 			}
 		}
+		hasMenuContent = true;
 	}
-	const createTargets = options.onCreateRelatedView
-		? buildRelatedCreateTargets(options.settings, options.source)
-		: [];
-	if (createTargets.length > 0) {
-		menu.addSeparator();
+	for (const createGroup of createGroups) {
+		if (hasMenuContent) menu.addSeparator();
 		menu.addItem(item => item
-			.setTitle(getRelatedCreateGroupLabel(createTargets))
+			.setTitle(getRelatedCreateGroupLabel(createGroup.kind))
 			.setIsLabel(true));
-		for (const createTarget of createTargets) {
+		for (const createTarget of createGroup.targets) {
 			menu.addItem(item => item
 				.setTitle(getRelatedCreateLabel(createTarget))
 				.setIcon(getRelatedCreateIcon(createTarget))
 				.onClick(() => createRelatedView(options, createTarget)));
 		}
+		hasMenuContent = true;
 	}
 	menu.showAtPosition(getRelatedViewsMenuPosition(anchor), anchor.ownerDocument);
 }
@@ -186,10 +202,10 @@ function getRelatedViewsMenuLabel(settings: RelatedViewSettings, source: Related
 	return t('table', hasActiveFilter ? 'relatedViewsMenuLabelWithFilter' : 'relatedViewsMenuLabel');
 }
 
-function getRelatedCreateGroupLabel(targets: RelatedViewCreateTarget[]): string {
-	return targets.some(target => !!target.filterSetId)
-		? t('table', 'relatedViewsAddNewWithFilterGroup')
-		: t('table', 'relatedViewsAddNewGroup');
+function getRelatedCreateGroupLabel(kind: RelatedViewCreateGroupKind): string {
+	return t('table', kind === 'with-filter'
+		? 'relatedViewsAddNewWithFilterGroup'
+		: 'relatedViewsAddNewWithoutFilterGroup');
 }
 
 function openRelatedView(options: RelatedViewsLauncherOptions, relatedView: RelatedViewItem): void {
@@ -277,6 +293,37 @@ function getInheritedCreatePresetName(
 	const filterSet = settings.filterSets.find(entry => entry.id === filterSetId);
 	if (!filterSet) return {};
 	return { presetName: getFilterSetDisplayName(filterSet) };
+}
+
+function buildCrossViewCreateTargets(
+	settings: RelatedViewSettings,
+	filterSetId: string,
+): RelatedViewFilteredCreateTarget[] {
+	const inheritedPresetName = getInheritedCreatePresetName(settings, filterSetId);
+	return [
+		{ type: 'calendar', variant: 'timeGrid', filterSetId, ...inheritedPresetName },
+		{ type: 'calendar', variant: 'timeTrackerGrid', filterSetId, ...inheritedPresetName },
+		{ type: 'calendar', variant: 'multiWeek', filterSetId, ...inheritedPresetName },
+		{ type: 'kanban', variant: 'defaultPipeline', filterSetId, ...inheritedPresetName },
+		{ type: 'table', variant: 'defaultTable', filterSetId, ...inheritedPresetName },
+	];
+}
+
+function buildUnfilteredCreateTargets(source: RelatedViewSource): RelatedViewUnfilteredCreateTarget[] {
+	if (source.type === 'calendar') {
+		return [
+			{ type: 'calendar', variant: 'timeGrid', filterSetId: null },
+			{ type: 'calendar', variant: 'timeTrackerGrid', filterSetId: null },
+			{ type: 'calendar', variant: 'multiWeek', filterSetId: null },
+		];
+	}
+	if (source.type === 'kanban') {
+		return [{ type: 'kanban', variant: 'defaultPipeline', filterSetId: null }];
+	}
+	if (source.type === 'table') {
+		return [{ type: 'table', variant: 'defaultTable', filterSetId: null }];
+	}
+	return [];
 }
 
 function resolveRelatedViewPresetFilterSetId(settings: RelatedViewSettings, preset: RelatedFilterablePreset): string | null | undefined {

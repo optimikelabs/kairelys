@@ -25,10 +25,11 @@ import {
 	sortFilterTasks,
 } from '../core/filter-evaluator';
 import { PinnedCache } from '../storage/pinned-cache';
-import { buildFilterTaskRowElement, FilterTaskRowCallbacks } from './filter-task-row';
+import { buildFilterTaskRowElement, FilterTaskRowCallbacks, shouldAutoExpandFilterTaskSubtasks } from './filter-task-row';
 import { shouldResolveLocationCompactChips } from './compact-task-layout';
 import { FilterSetModal, type FilterSetModalQuickActions } from './filter-set-modal';
 import { ConfirmActionModal } from './confirm-action-modal';
+import { clonePresetFavorites, removePresetFavorite } from '../core/preset-favorites';
 import type { ContextualMenuActionHandler } from '../core/contextual-menu-engine';
 import { bindOperonHoverTooltip } from './operon-hover-tooltip';
 import { applyFilterSearch, buildFilterTreeScope, isFilterSearchActive } from '../systems/filter-search';
@@ -132,6 +133,7 @@ export class FilterView extends ItemView {
 	private openDailyNote?: (dateKey: string) => void | Promise<void>;
 	private duplicateFilterSet?: (filterSet: FilterSet) => Promise<void>;
 	private deleteFilterSet?: (filterSetId: string) => Promise<void>;
+	private toggleFilterFavorite?: (filterSetId: string) => Promise<void>;
 	private onOpenRelatedView?: (target: RelatedViewOpenTarget) => void | Promise<void>;
 	private onCreateRelatedView?: (target: RelatedViewCreateTarget) => void | Promise<void>;
 	private currentFilterSetId: string | null = null;
@@ -189,6 +191,7 @@ export class FilterView extends ItemView {
 		openDailyNote?: (dateKey: string) => void | Promise<void>,
 		duplicateFilterSet?: (filterSet: FilterSet) => Promise<void>,
 		deleteFilterSet?: (filterSetId: string) => Promise<void>,
+		toggleFilterFavorite?: (filterSetId: string) => Promise<void>,
 		onOpenRelatedView?: (target: RelatedViewOpenTarget) => void | Promise<void>,
 		onCreateRelatedView?: (target: RelatedViewCreateTarget) => void | Promise<void>,
 	) {
@@ -223,6 +226,7 @@ export class FilterView extends ItemView {
 		this.openDailyNote = openDailyNote;
 		this.duplicateFilterSet = duplicateFilterSet;
 		this.deleteFilterSet = deleteFilterSet;
+		this.toggleFilterFavorite = toggleFilterFavorite;
 		this.onOpenRelatedView = onOpenRelatedView;
 		this.onCreateRelatedView = onCreateRelatedView;
 		this.currentFilterSetId =
@@ -391,7 +395,13 @@ export class FilterView extends ItemView {
 			},
 		);
 		const taskRowOptions = {
-			defaultExpandAll: globalShowSubtasks,
+			allowExpand: globalShowSubtasks,
+			defaultExpandAll: (task: IndexedTask) => shouldAutoExpandFilterTaskSubtasks(
+				task.operonId,
+				callbacks,
+				globalShowOnlyOpenSubtasks,
+				this.settings.filterSubtaskAutoExpandLimit,
+			),
 			showOnlyOpenSubtasks: globalShowOnlyOpenSubtasks,
 			showSubtaskAction: this.settings.filterTaskShowSubtaskAction,
 			subtaskSorts: effectiveSubtaskSorts,
@@ -455,6 +465,8 @@ export class FilterView extends ItemView {
 					toggleTimer: this.toggleTimer,
 				}, {
 					quickActions: this.createFilterSetModalQuickActions(currentFs, () => modal?.close()),
+					getSettings: this.getSettings,
+					onToggleFavorite: this.toggleFilterFavorite,
 				});
 				modal.open();
 			};
@@ -687,6 +699,9 @@ export class FilterView extends ItemView {
 			pinnedCache: this.pinnedCache ?? undefined,
 			isTaskTracking: this.isTaskTracking,
 			toggleTimer: this.toggleTimer,
+		}, {
+			getSettings: this.getSettings,
+			onToggleFavorite: this.toggleFilterFavorite,
 		}).open();
 	}
 
@@ -720,8 +735,17 @@ export class FilterView extends ItemView {
 				if (this.deleteFilterSet) {
 					await this.deleteFilterSet(filterSet.id);
 				} else {
-					this.settings.filterSets = this.settings.filterSets.filter(entry => entry.id !== filterSet.id);
-					await this.saveSettings();
+					const previousFilters = this.settings.filterSets;
+					const previousFavorites = clonePresetFavorites(this.settings.presetFavorites);
+					this.settings.filterSets = previousFilters.filter(entry => entry.id !== filterSet.id);
+					this.settings.presetFavorites = removePresetFavorite(this.settings.presetFavorites, 'filter', filterSet.id);
+					try {
+						await this.saveSettings();
+					} catch (error) {
+						this.settings.filterSets = previousFilters;
+						this.settings.presetFavorites = previousFavorites;
+						throw error;
+					}
 				}
 				closeModal();
 				this.restoreCurrentFilterSetId();
@@ -1055,6 +1079,9 @@ export class FilterView extends ItemView {
 			this.currentFilterSetId ?? '',
 			this.searchQuery.trim().toLocaleLowerCase(),
 			JSON.stringify(filterSet),
+			this.settings.filterShowSubtasks ? 'show-subtasks' : 'hide-subtasks',
+			String(this.settings.filterSubtaskAutoExpandLimit),
+			this.settings.filterShowOnlyOpenSubtasks ? 'open-subtasks' : 'all-subtasks',
 			compactSettingsSignature,
 			filterActionSettingsSignature,
 				overlaySettingsSignature,

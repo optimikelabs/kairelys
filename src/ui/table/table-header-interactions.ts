@@ -44,6 +44,7 @@ import {
 	setTablePresetColumnColorMode,
 	setTablePresetColumnDisplayMode,
 	setTablePresetColumnDurationDisplayMode,
+	setTablePresetColumnLabel,
 	setTablePresetColumnPinned,
 	setTablePresetColumnVisible,
 	setTablePresetSummary,
@@ -51,8 +52,12 @@ import {
 import { getTableSummaryFunctionsForField, type TableSummaryCell, type TableSummaryValueResolver } from './table-summary';
 import { showTableSummaryPicker } from './table-summary-picker';
 import { showSearchableFieldPicker } from '../field-pickers/searchable-field-picker';
+import type { FloatingHostOptions } from '../field-pickers/common';
 import { buildTableFieldPickerOptions } from './table-field-picker-options';
 import { bindOperonHoverTooltip } from '../operon-hover-tooltip';
+import { showTableColumnRenamePopover } from './table-column-rename-popover';
+
+const TABLE_COLUMN_RESIZE_DRAG_THRESHOLD_PX = 4;
 
 export interface TableHeaderRenderState {
 	preset: TablePreset;
@@ -86,6 +91,8 @@ export interface TableHeaderInteractionOptions {
 	getActivePickerClose: () => (() => void) | null;
 	setActivePickerClose: (close: (() => void) | null) => void;
 	onOpenPresetSettings?: (presetId: string) => void;
+	readOnly?: boolean;
+	floatingHostOptions?: FloatingHostOptions;
 }
 
 export function createTableHeaderInteractionState(): TableHeaderInteractionState {
@@ -135,6 +142,13 @@ export function renderInteractiveTableHeaderCell(
 	if (!renderState || !settings) {
 		cell.addClass('operon-table-header-cell-readonly');
 		renderTableHeaderLabel(cell, column, null, null);
+		return;
+	}
+	if (options.readOnly) {
+		cell.addClass('operon-table-header-cell-readonly');
+		applyTableColumnAlignmentClass(cell, column);
+		cell.setAttribute('aria-sort', 'none');
+		renderTableHeaderLabel(cell, column, settings, null);
 		return;
 	}
 	applyTableColumnAlignmentClass(cell, column);
@@ -357,6 +371,13 @@ function buildTableColumnHeaderMenu(
 	const renderState = options.getRenderState();
 	if (!renderState) return null;
 	const menu = new Menu();
+	menu.addItem(item => item
+		.setTitle(t('table', 'renameColumn'))
+		.setIcon('text-cursor-input')
+		.onClick(() => {
+			deferTableHeaderMenuAction(anchor, () => openTableColumnRenamePopover(anchor, column, options));
+		}));
+	menu.addSeparator();
 	addTableAlignmentMenuItem(menu, column, 'left', t('table', 'alignColumnLeft'), 'align-left', options);
 	addTableAlignmentMenuItem(menu, column, 'center', t('table', 'alignColumnCenter'), 'align-center', options);
 	addTableAlignmentMenuItem(menu, column, 'right', t('table', 'alignColumnRight'), 'align-right', options);
@@ -423,6 +444,47 @@ function buildTableColumnHeaderMenu(
 	return menu;
 }
 
+function openTableColumnRenamePopover(
+	anchor: HTMLElement,
+	column: TableColumn,
+	options: TableHeaderInteractionOptions,
+): void {
+	const renderState = options.getRenderState();
+	if (!renderState || isTableAdminColumn(column)) return;
+	options.closeActivePicker();
+	const presetId = renderState.preset.id;
+	const originalLabel = getTableTaskFieldLabel(column.key, renderState.settings);
+	let closePopover: (() => void) | null = null;
+	closePopover = showTableColumnRenamePopover({
+		anchor,
+		...options.floatingHostOptions,
+		initialValue: column.label?.trim() ?? '',
+		placeholder: originalLabel,
+		onSubmit: label => {
+			const currentPreset = options.getCurrentPreset();
+			if (currentPreset.id !== presetId) return;
+			options.savePreset(setTablePresetColumnLabel(
+				currentPreset,
+				column.key,
+				label,
+			), 'columns');
+		},
+		onClose: () => {
+			if (closePopover && options.getActivePickerClose() === closePopover) {
+				options.setActivePickerClose(null);
+			}
+			const ownerDocument = anchor.ownerDocument;
+			const ownerWindow = ownerDocument.defaultView ?? window;
+			ownerWindow.requestAnimationFrame(() => {
+				if (anchor.isConnected && ownerDocument.activeElement === ownerDocument.body) {
+					anchor.focus({ preventScroll: true });
+				}
+			});
+		},
+	});
+	options.setActivePickerClose(closePopover);
+}
+
 function deferTableHeaderMenuAction(anchor: HTMLElement, callback: () => void): void {
 	const ownerWindow = anchor.ownerDocument.defaultView ?? window;
 	ownerWindow.setTimeout(callback, 0);
@@ -463,6 +525,7 @@ function openHeaderSummaryPicker(anchor: HTMLElement, column: TableColumn, optio
 		settings: renderState.settings,
 		...(renderState.valueResolver ? { valueResolver: renderState.valueResolver } : {}),
 		currentFunction: getConfiguredSummaryFunction(column.key, renderState),
+		...options.floatingHostOptions,
 		onSelect: summaryFunction => {
 			options.savePreset(setTablePresetSummary(options.getCurrentPreset(), column.key, summaryFunction, supportedKeys), 'summaries');
 		},
@@ -639,8 +702,7 @@ function showTableAddColumnPicker(
 		},
 		variantClassName: 'operon-table-field-picker',
 		getSearchText: option => `${option.label} ${option.field} ${option.tableField?.aliases.join(' ') ?? ''}`,
-		floatingHost: options.root.ownerDocument.body,
-		floatingScrollHost: options.root.ownerDocument.defaultView ?? window,
+		...options.floatingHostOptions,
 		matchWidth: 320,
 		repositionOnWindowResize: true,
 		repositionOnScroll: true,
@@ -689,8 +751,11 @@ function startTableColumnResize(event: PointerEvent, columnKey: string, options:
 	if (shouldUseIconOnlyColumn(column, renderState.settings)) return;
 	const ownerDocument = getOwnerDocument(event.currentTarget as Node | null);
 	const startX = event.clientX;
+	const pointerId = event.pointerId;
 	const startWidth = resolveTableColumnWidth(column);
+	const configuredStartWidth = column.widthPx;
 	let latestWidth = startWidth;
+	let dragging = false;
 	const applyWidth = (widthPx: number): void => {
 		latestWidth = normalizeTableColumnWidth(widthPx);
 		column.widthPx = latestWidth;
@@ -698,15 +763,29 @@ function startTableColumnResize(event: PointerEvent, columnKey: string, options:
 	};
 	let cleanup = (): void => {};
 	const handlePointerMove = (moveEvent: PointerEvent): void => {
-		applyWidth(startWidth + moveEvent.clientX - startX);
+		if (moveEvent.pointerId !== pointerId) return;
+		const deltaX = moveEvent.clientX - startX;
+		if (!dragging && Math.abs(deltaX) < TABLE_COLUMN_RESIZE_DRAG_THRESHOLD_PX) return;
+		dragging = true;
+		applyWidth(startWidth + deltaX);
 	};
-	const handlePointerUp = (): void => {
+	const handlePointerUp = (upEvent: PointerEvent): void => {
+		if (upEvent.pointerId !== pointerId) return;
 		cleanup();
-		if (latestWidth !== startWidth) {
+		if (dragging && latestWidth !== startWidth) {
 			options.savePreset(resizeTablePresetColumn(options.getCurrentPreset(), columnKey, latestWidth), 'columns');
 		}
 	};
-	const handlePointerCancel = (): void => {
+	const handlePointerCancel = (cancelEvent: PointerEvent): void => {
+		if (cancelEvent.pointerId !== pointerId) return;
+		if (dragging) {
+			if (configuredStartWidth === undefined) {
+				delete column.widthPx;
+			} else {
+				column.widthPx = configuredStartWidth;
+			}
+			options.applyColumnTemplate(renderState.columns);
+		}
 		cleanup();
 	};
 	cleanup = (): void => {
@@ -718,8 +797,8 @@ function startTableColumnResize(event: PointerEvent, columnKey: string, options:
 		}
 	};
 	ownerDocument.addEventListener('pointermove', handlePointerMove);
-	ownerDocument.addEventListener('pointerup', handlePointerUp, { once: true });
-	ownerDocument.addEventListener('pointercancel', handlePointerCancel, { once: true });
+	ownerDocument.addEventListener('pointerup', handlePointerUp);
+	ownerDocument.addEventListener('pointercancel', handlePointerCancel);
 	options.state.activeResizeCleanup = cleanup;
 }
 

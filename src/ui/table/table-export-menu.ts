@@ -19,6 +19,9 @@ export interface TableExportMenuOptions {
 
 export function showTableExportMenu(options: TableExportMenuOptions): void {
 	const menu = new Menu();
+	menu.onHide(() => {
+		options.anchor.setAttribute('aria-expanded', 'false');
+	});
 	menu.addItem(item => item
 		.setTitle(t('table', 'copyMarkdownTable'))
 		.setIcon('table-2')

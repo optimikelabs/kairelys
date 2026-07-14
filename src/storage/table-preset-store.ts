@@ -66,7 +66,10 @@ export interface TablePresetStoreLoadResult {
 export function buildTablePresetPackageManifest(settings: TablePresetStoreSettings): TablePresetPackageSettings & { version: number } {
 	return {
 		version: TABLE_PRESET_MANIFEST_VERSION,
-		presetIds: settings.tablePresets.map(preset => preset.id),
+		presetIds: normalizePresetOrderIds(settings.tablePresetOrderIds, settings.tablePresets),
+		fileBindings: (settings.tablePresetFileBindings ?? []).map(binding => ({ ...binding })),
+		fileMigrationVersion: settings.tablePresetFileMigrationVersion,
+		fileMigrationFinalizedVersion: settings.tablePresetFileMigrationFinalizedVersion,
 		tableDefaultPresetId: settings.tableDefaultPresetId,
 		tableEmbedVisibleRows: settings.tableEmbedVisibleRows,
 		tableShowLineNumbers: settings.tableShowLineNumbers,
@@ -78,6 +81,10 @@ export function buildTablePresetPackageManifest(settings: TablePresetStoreSettin
 export function pickTablePresetStoreSettings(settings: TablePresetStoreSettings): TablePresetStoreSettings {
 	return {
 		tablePresets: settings.tablePresets.map(cloneTablePreset),
+		tablePresetOrderIds: normalizePresetOrderIds(settings.tablePresetOrderIds, settings.tablePresets),
+		tablePresetFileBindings: (settings.tablePresetFileBindings ?? []).map(binding => ({ ...binding })),
+		tablePresetFileMigrationVersion: settings.tablePresetFileMigrationVersion,
+		tablePresetFileMigrationFinalizedVersion: settings.tablePresetFileMigrationFinalizedVersion,
 		tableDefaultPresetId: settings.tableDefaultPresetId,
 		tableEmbedVisibleRows: settings.tableEmbedVisibleRows,
 		tableShowLineNumbers: settings.tableShowLineNumbers,
@@ -148,18 +155,38 @@ export class TablePresetStore {
 	): Promise<TablePresetStoreLoadResult> {
 		const previousSignature = buildStoreSettingsSignature(this.settings);
 		await this.ensureFolder();
-		const fallback = normalizeStoreSettings(legacySettings, legacySettings, options.availableFilterSetIds);
+		const allowEmptyLegacyStore = (legacySettings.tablePresetFileBindings?.length ?? 0) > 0
+			|| legacySettings.tablePresetFileMigrationVersion >= 1;
+		const fileBackedPresetIds = new Set((legacySettings.tablePresetFileBindings ?? []).map(binding => binding.id));
+		const fallbackInput = allowEmptyLegacyStore
+			? {
+				...legacySettings,
+				tablePresets: [],
+				tablePresetOrderIds: (legacySettings.tablePresetOrderIds ?? [])
+					.filter(presetId => !fileBackedPresetIds.has(presetId)),
+			}
+			: legacySettings;
+		const fallback = normalizeStoreSettings(
+			fallbackInput,
+			fallbackInput,
+			options.availableFilterSetIds,
+			allowEmptyLegacyStore,
+		);
 		const index = await this.readIndex();
 		if (index) {
-			const indexedRead = await this.readPresetFilesByIds(index.presetIds, options.availableFilterSetIds);
+			const legacyIndexPresetIds = index.presetIds.filter(presetId => !fileBackedPresetIds.has(presetId));
+			const indexedRead = await this.readPresetFilesByIds(legacyIndexPresetIds, options.availableFilterSetIds);
 			const settings = normalizeStoreSettings({
 				tablePresets: indexedRead.presets,
+				tablePresetOrderIds: legacyIndexPresetIds,
+				tablePresetFileMigrationVersion: fallback.tablePresetFileMigrationVersion,
+				tablePresetFileMigrationFinalizedVersion: fallback.tablePresetFileMigrationFinalizedVersion,
 				tableDefaultPresetId: index.tableDefaultPresetId,
 				tableEmbedVisibleRows: index.tableEmbedVisibleRows,
 				tableShowLineNumbers: index.tableShowLineNumbers,
 				tableShowTaskIcon: index.tableShowTaskIcon,
 				tableShowTaskTypeIcon: index.tableShowTaskTypeIcon,
-			}, fallback, options.availableFilterSetIds);
+			}, fallback, options.availableFilterSetIds, allowEmptyLegacyStore);
 			const normalizedIndexSerialized = JSON.stringify(buildIndexData(settings));
 			const diskIndexSerialized = JSON.stringify(index);
 			if (indexedRead.missingIds.length > 0) {
@@ -178,12 +205,15 @@ export class TablePresetStore {
 			return this.buildLoadResult(previousSignature);
 		}
 
-		const recoveredPresets = await this.readAllPresetFiles(options.availableFilterSetIds);
+		const recoveredPresets = (await this.readAllPresetFiles(options.availableFilterSetIds))
+			.filter(preset => !fileBackedPresetIds.has(preset.id));
 		if (recoveredPresets.length > 0) {
 			const settings = normalizeStoreSettings({
 				...fallback,
 				tablePresets: recoveredPresets,
-			}, fallback, options.availableFilterSetIds);
+				tablePresetOrderIds: recoveredPresets.map(preset => preset.id),
+				tableDefaultPresetId: recoveredPresets[0]?.id ?? null,
+			}, fallback, options.availableFilterSetIds, allowEmptyLegacyStore);
 			if (options.canSeedFromFallback !== false) {
 				await this.replaceAll(settings);
 			} else {
@@ -200,8 +230,11 @@ export class TablePresetStore {
 		return this.buildLoadResult(previousSignature);
 	}
 
-	async replaceAll(settings: TablePresetStoreSettings): Promise<void> {
-		const nextSettings = normalizeResolvedStoreSettings(settings, this.settings);
+	async replaceAll(
+		settings: TablePresetStoreSettings,
+		options: { preservePresetIds?: ReadonlySet<string>; allowEmpty?: boolean } = {},
+	): Promise<void> {
+		const nextSettings = normalizeResolvedStoreSettings(settings, this.settings, options.allowEmpty === true);
 		const { index: nextIndex, preservedMissingIds } = this.buildIndexDataForWrite(nextSettings);
 		const nextIndexSerialized = JSON.stringify(nextIndex);
 		const nextPresetSerializations = new Map<string, string>();
@@ -210,7 +243,9 @@ export class TablePresetStore {
 		}
 
 		const adapter = this.app.vault.adapter as TablePresetAdapter;
-		const deletedIds = [...this.serializedPresetsById.keys()].filter(presetId => !nextPresetSerializations.has(presetId));
+		const deletedIds = [...this.serializedPresetsById.keys()].filter(presetId =>
+			!nextPresetSerializations.has(presetId) && !options.preservePresetIds?.has(presetId)
+		);
 		const changedPresets: TablePreset[] = [];
 		for (const preset of nextSettings.tablePresets) {
 			const filePath = this.getPresetFilePath(preset.id);
@@ -254,15 +289,15 @@ export class TablePresetStore {
 		this.pendingIndexData = preservedMissingIds.length > 0 ? nextIndex : null;
 	}
 
-	private getFolderPath(): string {
+	getFolderPath(): string {
 		return this.folderPath;
 	}
 
-	private getIndexPath(): string {
+	getIndexPath(): string {
 		return joinVaultPath(this.getFolderPath(), 'index.json');
 	}
 
-	private getPresetFilePath(presetId: string): string {
+	getPresetFilePath(presetId: string): string {
 		return joinVaultPath(this.getFolderPath(), `${encodeURIComponent(presetId)}.json`);
 	}
 
@@ -452,20 +487,45 @@ function normalizePresetIds(value: unknown): string[] {
 	return ids;
 }
 
+function normalizePresetOrderIds(value: unknown, tablePresets: readonly TablePreset[]): string[] {
+	const ids = normalizePresetIds(value);
+	const seen = new Set(ids);
+	for (const preset of tablePresets) {
+		const id = preset.id.trim();
+		if (!id || seen.has(id)) continue;
+		seen.add(id);
+		ids.push(id);
+	}
+	return ids;
+}
+
 function normalizeStoreSettings(
 	settings: TablePresetStoreSettings,
 	fallback: TablePresetStoreSettings,
 	availableFilterSetIds: readonly string[],
+	allowEmpty = false,
 ): TablePresetStoreSettings {
-	const tablePresets = normalizeTablePresets(settings.tablePresets, { availableFilterSetIds });
-	const fallbackDefaultPresetId = fallback.tableDefaultPresetId && tablePresets.some(preset => preset.id === fallback.tableDefaultPresetId)
+	const tablePresets = allowEmpty && Array.isArray(settings.tablePresets) && settings.tablePresets.length === 0
+		? []
+		: normalizeTablePresets(settings.tablePresets, { availableFilterSetIds });
+	const tablePresetOrderIds = normalizePresetOrderIds(
+		settings.tablePresetOrderIds ?? fallback.tablePresetOrderIds,
+		tablePresets,
+	);
+	const fallbackDefaultPresetId = fallback.tableDefaultPresetId && tablePresetOrderIds.includes(fallback.tableDefaultPresetId)
 		? fallback.tableDefaultPresetId
 		: null;
-	const requestedDefaultPresetId = settings.tableDefaultPresetId && tablePresets.some(preset => preset.id === settings.tableDefaultPresetId)
+	const requestedDefaultPresetId = settings.tableDefaultPresetId && tablePresetOrderIds.includes(settings.tableDefaultPresetId)
 		? settings.tableDefaultPresetId
 		: null;
 	return {
 		tablePresets,
+		tablePresetOrderIds,
+		tablePresetFileBindings: (settings.tablePresetFileBindings ?? fallback.tablePresetFileBindings ?? []).map(binding => ({ ...binding })),
+		tablePresetFileMigrationVersion: settings.tablePresetFileMigrationVersion ?? fallback.tablePresetFileMigrationVersion ?? 0,
+		tablePresetFileMigrationFinalizedVersion: settings.tablePresetFileMigrationFinalizedVersion
+			?? fallback.tablePresetFileMigrationFinalizedVersion
+			?? 0,
 		tableDefaultPresetId: requestedDefaultPresetId
 			?? fallbackDefaultPresetId
 			?? tablePresets.find(preset => preset.id === DEFAULT_TABLE_PRESET_ID)?.id
@@ -481,6 +541,7 @@ function normalizeStoreSettings(
 function normalizeResolvedStoreSettings(
 	settings: TablePresetStoreSettings,
 	fallback: TablePresetStoreSettings,
+	allowEmpty = false,
 ): TablePresetStoreSettings {
 	const seen = new Set<string>();
 	const tablePresets = settings.tablePresets
@@ -490,16 +551,28 @@ function normalizeResolvedStoreSettings(
 			seen.add(preset.id);
 			return true;
 		});
-	const resolvedPresets = tablePresets.length > 0 ? tablePresets : fallback.tablePresets.map(cloneTablePreset);
-	const defaultPresetId = settings.tableDefaultPresetId && resolvedPresets.some(preset => preset.id === settings.tableDefaultPresetId)
+	const resolvedPresets = tablePresets.length > 0 || allowEmpty
+		? tablePresets
+		: fallback.tablePresets.map(cloneTablePreset);
+	const tablePresetOrderIds = normalizePresetOrderIds(
+		settings.tablePresetOrderIds ?? fallback.tablePresetOrderIds,
+		resolvedPresets,
+	);
+	const defaultPresetId = settings.tableDefaultPresetId && tablePresetOrderIds.includes(settings.tableDefaultPresetId)
 		? settings.tableDefaultPresetId
-		: fallback.tableDefaultPresetId && resolvedPresets.some(preset => preset.id === fallback.tableDefaultPresetId)
+		: fallback.tableDefaultPresetId && tablePresetOrderIds.includes(fallback.tableDefaultPresetId)
 			? fallback.tableDefaultPresetId
 			: resolvedPresets.find(preset => preset.id === DEFAULT_TABLE_PRESET_ID)?.id
 				?? resolvedPresets[0]?.id
 				?? null;
 	return {
 		tablePresets: resolvedPresets,
+		tablePresetOrderIds,
+		tablePresetFileBindings: (settings.tablePresetFileBindings ?? fallback.tablePresetFileBindings ?? []).map(binding => ({ ...binding })),
+		tablePresetFileMigrationVersion: settings.tablePresetFileMigrationVersion ?? fallback.tablePresetFileMigrationVersion ?? 0,
+		tablePresetFileMigrationFinalizedVersion: settings.tablePresetFileMigrationFinalizedVersion
+			?? fallback.tablePresetFileMigrationFinalizedVersion
+			?? 0,
 		tableDefaultPresetId: defaultPresetId,
 		tableEmbedVisibleRows: normalizeTableEmbedVisibleRows(settings.tableEmbedVisibleRows, fallback.tableEmbedVisibleRows),
 		tableShowLineNumbers: settings.tableShowLineNumbers,
@@ -511,7 +584,7 @@ function normalizeResolvedStoreSettings(
 function buildIndexData(settings: TablePresetStoreSettings): TablePresetIndexData {
 	return {
 		version: TABLE_PRESET_STORE_VERSION,
-		presetIds: settings.tablePresets.map(preset => preset.id),
+		presetIds: normalizePresetOrderIds(settings.tablePresetOrderIds, settings.tablePresets),
 		tableDefaultPresetId: settings.tableDefaultPresetId,
 		tableEmbedVisibleRows: settings.tableEmbedVisibleRows,
 		tableShowLineNumbers: settings.tableShowLineNumbers,
