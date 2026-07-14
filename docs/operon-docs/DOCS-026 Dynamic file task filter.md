@@ -12,7 +12,7 @@ tags:
   - subtasks
   - filterview
   - embed
-Updated: 2026-06-25T16:47:21
+Updated: 2026-07-13T23:40:03
 ---
 
 # Dynamic file task filter
@@ -51,6 +51,7 @@ This filter and the [[DOCS-059 Dynamic Subtasks Filter|Dynamic Subtasks Filter]]
 | Where it appears | Embedded in a file task's note body | A pop-up window |
 | How it opens | Automatically, in Reading View and Live Preview | On demand, from the Subtasks action |
 | Works on | File tasks only | Any open task with subtasks, inline or file |
+| Settings | Enabled, placement, auto-expand, show only open | Auto-expand, show only open |
 
 Use this filter when a file task should always carry its subtask tree inside its own note. Use the Dynamic Subtasks Filter for a quick look at any branch from anywhere.
 

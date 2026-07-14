@@ -11,7 +11,7 @@ tags:
   - externalcalendars
   - calendar
   - integration
-Updated: 2026-06-25T16:47:21
+Updated: 2026-07-13T23:36:16
 ---
 
 # External calendars
@@ -35,7 +35,7 @@ Its events then render in the Calendar as timed or all-day blocks, the same shap
 
 ## Per-preset visibility
 
-External calendars are shown per [[DOCS-029 Calendar presets and time grid|Calendar preset]]. Adding a source does not force it into every view; you enable it in the presets where you want it. So a focused work preset can stay task-only while a planning preset shows your meetings too. In [[DOCS-060 Calendar layout toolbar and sidebar|sidebar mode]], the Calendars section lets you toggle sources without opening settings.
+External calendars are shown per [[DOCS-029 Calendar presets and time grid|Calendar preset]]. Adding a source does not force it into every view; you enable it in the presets where you want it. So a focused work preset can stay task-only while a planning preset shows your meetings too. Toggle a source for the current preset from **Edit preset**'s **External Calendars** section; the [[DOCS-060 Calendar layout toolbar and sidebar|sidebar]]'s **Calendars** section is a preset switcher, not a place to toggle sources.
 
 ## Keeping it tidy
 
@@ -55,7 +55,7 @@ Operon re-fetches feeds on their refresh interval, and you can pull the latest a
 
 ## Settings
 
-Operon settings for this live in **Settings → Operon → Views → Calendar**, in the External Calendars section, where you add sources and set each one's URL, color, refresh interval, and behavior. Per-preset visibility is set in the calendar presets.
+Operon settings for this live in **Settings → Operon → Views → Calendar**, in the External Calendars section, where you add sources and set each one's URL, color, refresh interval, and behavior. Per-preset visibility is set from that preset's **Edit preset**, in its own **External Calendars** section.
 
 ## Related
 

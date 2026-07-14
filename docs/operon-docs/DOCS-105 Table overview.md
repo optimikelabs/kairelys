@@ -10,7 +10,7 @@ tags:
   - operon
   - table
   - plan
-Updated: 2026-07-08T23:32:00
+Updated: 2026-07-13T23:51:22
 ---
 
 # Table overview
@@ -38,6 +38,8 @@ So the table is a live picture of a preset: change a task and its row updates, a
 > **MEDIA-DOCS-105-2:** The table toolbar, with the preset selector, search box, Group & Sort, filter, export, and related views controls.
 
 ![MEDIA-DOCS-105-2 - The Operon Table toolbar](https://raw.githubusercontent.com/hasanyilmaz/operon/main/docs/media/MEDIA-DOCS-105-2.png)
+
+The toolbar's center holds a button for each **favorite** preset, mark a preset a favorite from its **Edit preset** settings or its row in **Settings → Operon → Views → Tables**, so your most-used tables sit one click away. Beside them, the **preset picker**, **Group & Sort**, and **filter** controls are compact, icon-only buttons; hover any of them for its tooltip. When the pane is too narrow to fit everything on one row, the favorite shortcuts drop to a second row and the search field is the only control that shrinks, so the rest keep their place. Opening a Table file directly (see [[DOCS-114 Table files|Table files]]) and embedding one in a note (see [[DOCS-110 Embed a table in a note|Embed a table in a note]]) both use this same toolbar, so a table looks and behaves the same wherever you meet it.
 
 ## Editing a cell changes the task
 
@@ -102,6 +104,8 @@ If your work is mostly date-driven, the [[DOCS-028 Calendar overview|Calendar]] 
 
 **Is the Table a different set of tasks from the Calendar or Kanban?** No. All three read the same task records. A table shares its filter with related Calendar and Kanban views through the related views control.
 
+**How do I switch tables quickly?** Favorite the presets you use most; their buttons sit in the toolbar's center. The picker button beside them searches every preset, favorite or not.
+
 ## Settings
 
 Operon settings for the Table live in **Settings → Operon → Views → Tables**, where you set the default preset, the maximum visible rows for embedded tables, and whether rows show the global line number, task icon helper, and task type helper columns. Each preset's own filter, columns, grouping, sorting, and summaries are edited from the table itself. See [[DOCS-109 Table presets|Table presets]].
@@ -114,6 +118,7 @@ Operon settings for the Table live in **Settings → Operon → Views → Tables
 - [[DOCS-107 Table grouping and sorting|Table grouping and sorting]]
 - [[DOCS-108 Table summaries|Table summaries]]
 - [[DOCS-109 Table presets|Table presets]]
+- [[DOCS-114 Table files|Table files]]
 - [[DOCS-110 Embed a table in a note|Embed a table in a note]]
 - [[DOCS-111 Export a table|Export a table]]
 - [[DOCS-025 Filter View|Filter View]]

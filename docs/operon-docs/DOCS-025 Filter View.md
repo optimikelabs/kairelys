@@ -11,7 +11,7 @@ tags:
   - filterview
   - plan
   - search
-Updated: 2026-07-08T23:32:00
+Updated: 2026-07-13T23:55:05
 ---
 
 # Filter View
@@ -36,6 +36,8 @@ A filter prevents one large task index from turning into noise. It is the differ
 ## Build and save
 
 Add conditions one at a time and watch the list narrow as each applies. When the result is useful, save it so you can return without rebuilding. Saved filters live with Operon's data in the plugin folder and become reusable views. Name each one for its purpose, such as "This week" or "High priority open." For a step-by-step first filter, see [[DOCS-010 Build your first filtered view|Build your first filtered view]].
+
+A saved filter can be marked a **favorite** with the star on its card, in **Settings → Operon → Views → Filters** or in the filter's own editor, the same favorite star used on Table, Calendar, and Kanban presets. For a saved filter it is an organizing marker for the ones you rely on; the Filter View's picker still lists every saved filter, favorite or not.
 
 ## Useful filters to keep
 
@@ -64,9 +66,15 @@ A filter row is not read-only. You can open a task's [[DOCS-042 Contextual menu 
 
 **How many filters should I keep?** As many as map to real moments in your work. Several focused filters beat one complicated one.
 
+**Why did a task's subtasks open by themselves?** Its subtask tree was at or below the **Auto-expand subtasks** limit in **Settings → Operon → Views → Filters**. Lower the limit, or set it to **Never**, if you would rather expand trees by hand.
+
+## Subtasks and auto-expand
+
+When a filter row shows subtasks, each visible subtask tree can expand automatically instead of waiting for a click. **Auto-expand subtasks**, in the same Filters settings as the subtask toggle, sets the size limit for this: a tree at or below the chosen count opens by itself, while a larger one stays collapsed until you expand it yourself. Set it to **Never** to always leave subtrees collapsed, or raise it if you would rather see bigger trees open automatically. The same limit and setting exist separately for the [[DOCS-026 Dynamic file task filter|dynamic file task filter]] and the [[DOCS-059 Dynamic Subtasks Filter|Dynamic Subtasks Filter]], so each surface can use its own threshold.
+
 ## Settings
 
-Operon settings for this live in **Settings → Operon → Views → Filters**, which configures Filter View behavior, including whether subtasks are shown.
+Operon settings for this live in **Settings → Operon → Views → Filters**, which configures Filter View behavior, including whether subtasks are shown and the subtask auto-expand limit.
 
 ## Related
 
@@ -75,3 +83,5 @@ Operon settings for this live in **Settings → Operon → Views → Filters**, 
 - [[DOCS-027 Task Finder|Task Finder]]
 - [[DOCS-028 Calendar overview|Calendar overview]]
 - [[DOCS-105 Table overview|Table overview]]
+- [[DOCS-026 Dynamic file task filter|Dynamic file task filter]]
+- [[DOCS-059 Dynamic Subtasks Filter|Dynamic Subtasks Filter]]

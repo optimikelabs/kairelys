@@ -10,7 +10,7 @@ tags:
   - operon
   - kanban
   - plan
-Updated: 2026-07-08T23:32:00
+Updated: 2026-07-13T23:51:22
 ---
 
 # Kanban overview
@@ -30,6 +30,8 @@ The columns come from your pipeline: each status in the pipeline is a column, an
 You can also split the board into **swimlanes**, horizontal rows that group cards by another field such as priority, assignee, context, or a date. With swimlanes on, each card sits where its status column meets its lane, which is how you see, say, what is in progress *per person* or *per priority* at a glance. See [[DOCS-074 Kanban swimlanes|Kanban swimlanes]].
 
 A board is shaped by a **Kanban preset**, which chooses the pipeline, the swimlane field, the sort order, the card color source, and an optional filter that limits which tasks appear. Saving presets lets you keep several boards for different pipelines or slices of work, and switch between them. See [[DOCS-037 Pipelines and statuses|Pipelines and statuses]].
+
+The toolbar's center holds one button per **favorite** preset, favorite any preset from its **Edit preset** settings or its row in **Settings → Operon → Views → Kanban**, so your most-used boards are one click away. A picker button beside them opens a searchable list of every preset, favorite or not, and picks up a calm accent when the active preset is not itself a favorite. On a narrow pane the favorite buttons wrap to a second row; on mobile a plain preset dropdown takes over instead.
 
 ## Card chips and actions
 
@@ -112,6 +114,8 @@ For exactly which fields are matched and how Task Finder ranks its own results, 
 **Does moving a card edit my note?** Yes. A move updates the task's `status` in Markdown, so the change is permanent and visible in every view.
 
 **Can I have more than one board?** Yes. Kanban presets let you save boards for different pipelines or slices of work.
+
+**How do I switch boards quickly?** Favorite the presets you use most; their buttons sit in the toolbar's center. The picker button beside them searches every preset, favorite or not.
 
 **Can I group cards into rows as well as columns?** Yes. Turn on swimlanes to group cards by a field such as priority or assignee, and dragging a card between lanes changes that field. See [[DOCS-074 Kanban swimlanes|Kanban swimlanes]].
 

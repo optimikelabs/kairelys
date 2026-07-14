@@ -10,7 +10,7 @@ tags:
   - operon
   - taskmodel
   - terms
-Updated: 2026-07-05T19:24:35
+Updated: 2026-07-14T00:13:46
 ---
 
 # Glossary of Operon terms
@@ -44,6 +44,8 @@ Short definitions for the words used across these docs. When a term has its own 
 - **Kanban**: tasks shown as cards in columns by status. See [[DOCS-030 Kanban overview|Kanban overview]].
 - **Table**: tasks shown as rows and columns, like a spreadsheet, for comparing, sorting, grouping, and summarizing many fields at once. See [[DOCS-105 Table overview|Table overview]].
 - **Table preset**: a saved table setup, its filter, columns, grouping, sorting, and summaries, that you switch between. See [[DOCS-109 Table presets|Table presets]].
+- **Table file**: a Table preset stored as its own `.table` file in your vault, which you can open, rename, move, and back up like any note. See [[DOCS-114 Table files|Table files]].
+- **Favorite preset**: a preset marked with a star for quick access. Table, Calendar, and Kanban favorites appear as shortcuts in the view's toolbar; saved filters can be favorited too. See [[DOCS-109 Table presets|Table presets]].
 - **Column summary**: a value rolled up at the foot of a table column, such as a count, a sum, or the earliest date, shown per group and for the whole table. See [[DOCS-108 Table summaries|Table summaries]].
 - **Pinned Task Dock**: a surface that keeps chosen tasks always in view, as a floating dock or a side panel. See [[DOCS-032 Pinned Task Dock|Pinned Task Dock]].
 - **Contextual menu**: the right-click and hover menu of task actions, with a configurable, context-aware action list. See [[DOCS-042 Contextual menu actions|Contextual menu actions]].

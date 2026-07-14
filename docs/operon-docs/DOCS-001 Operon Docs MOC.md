@@ -6,7 +6,7 @@ tags:
   - operon
   - start
   - navigation
-Updated: 2026-07-10T20:31:43
+Updated: 2026-07-13T23:17:23
 ---
 
 # Operon Docs
@@ -126,6 +126,7 @@ Follow these in order. They are enough to go from "what is this?" to doing real 
 - [[DOCS-107 Table grouping and sorting|Table grouping and sorting]]
 - [[DOCS-108 Table summaries|Table summaries]]
 - [[DOCS-109 Table presets|Table presets]]
+- [[DOCS-114 Table files|Table files]]
 - [[DOCS-110 Embed a table in a note|Embed a table in a note]]
 - [[DOCS-111 Export a table|Export a table]]
 - [[DOCS-032 Pinned Task Dock|Pinned Task Dock]]

@@ -11,12 +11,14 @@ tags:
   - table
   - presets
   - configure
-Updated: 2026-07-07T21:03:09
+Updated: 2026-07-13T23:51:22
 ---
 
 # Table presets
 
 A preset saves a table layout and scope. It bundles which tasks appear, which task-field columns show and in what order, how the rows are grouped and sorted, which summaries roll up, how dense the rows are, and which search scopes are saved with the preset, all under a name. Presets are what let you keep several tables for different questions and switch between them from the toolbar, and the **default preset** is the one a new table opens with or the **Insert Operon Table embed** command uses.
+
+Each preset is also a real file in your vault, with a `.table` extension. Editing a preset here writes straight to that file. See [[DOCS-114 Table files|Table files]] for the file itself: where it lives, what happens when you rename or move it, and what a broken or duplicate file looks like.
 
 > **MEDIA-DOCS-109-1:** The table preset settings, with the Filtering, Grouping, Sort, Summaries, Display, and Columns sections.
 
@@ -55,6 +57,10 @@ Most of these also have quicker paths: columns from a header menu, grouping and 
 
 The **Filtering** section sets the table's scope: choose a saved FilterSet to show only the tasks it matches, or **All Tasks** to show everything. This is the same FilterSet mechanism the [[DOCS-025 Filter View|Filter View]], Calendar, and Kanban use, which is why a table can share its filter with a related Calendar or Kanban through the related views control. See [[DOCS-025 Filter View|Filter View]].
 
+## Favorite presets
+
+Any preset can be marked a **favorite** with the star toggle, from its **Edit preset** settings or its row in the **Table Presets** list under **Settings → Operon → Views → Tables**. Favorites are about quick access, not defaults: the toolbar's centered preset shortcuts show only your favorites, so that row stays short even with many saved tables, while the toolbar's preset picker still lists every preset, favorite or not. A preset's favorite status is independent of the default preset described above; a preset can be one, both, or neither.
+
 ## Managing presets
 
 The footer of the preset settings carries the management actions:
@@ -62,13 +68,13 @@ The footer of the preset settings carries the management actions:
 | Action | What it does |
 |---|---|
 | Save | Saves your changes to the preset |
-| New | Creates a fresh preset from the current one |
-| Duplicate | Makes a copy of the preset |
-| Set as default | Makes this the preset new tables open with, shown as **Default** once set |
+| New | Creates a fresh preset from the current one, as a new `.table` file |
+| Duplicate | Makes a copy of the preset, as a new `.table` file with its own id |
+| Favorite / Unfavorite | Toggles the preset's favorite star |
 | Copy embed code | Copies the code block that embeds this table in a note. See [[DOCS-110 Embed a table in a note\|Embed a table in a note]] |
-| Delete | Removes the preset, disabled when only one remains |
+| Delete | Sends the preset's file to Obsidian's Trash, disabled when only one preset remains |
 
-You can also add and open presets from **Settings → Operon → Views → Tables**, where the **Table Presets** list has an **Add Table Preset** button and each row opens the same settings.
+The footer has no "set as default" action: the **default preset** is chosen from the dropdown in **Settings → Operon → Views → Tables**, where the **Table Presets** list also has an **Add Table Preset** button, each row opens the same settings, and the current default carries a **Default** label.
 
 ## The default preset and saved state
 
@@ -89,6 +95,10 @@ The **default preset** is chosen in **Settings → Operon → Views → Tables**
 
 **Do my columns and grouping affect other presets?** No. Each preset stores its own filter, columns, grouping, sorting, summaries, and density.
 
+**Where is a preset actually stored?** As a `.table` file in your vault, by default under `Operon/Tables`. See [[DOCS-114 Table files|Table files]].
+
+**What is the difference between a favorite and the default preset?** The default is the one preset a new table or embed starts with. A favorite is a preset pinned to the toolbar's short list for quick switching. A preset can be either, both, or neither.
+
 **Can I put a preset's table inside a note?** Yes. Use **Copy embed code**, the Table export menu, or **Insert Operon Table embed**. Existing embeds can also switch preset from their own toolbar. See [[DOCS-110 Embed a table in a note|Embed a table in a note]].
 
 ## Settings
@@ -102,6 +112,7 @@ Table presets and the default preset live in **Settings → Operon → Views →
 - [[DOCS-106 Table columns|Table columns]]
 - [[DOCS-107 Table grouping and sorting|Table grouping and sorting]]
 - [[DOCS-108 Table summaries|Table summaries]]
+- [[DOCS-114 Table files|Table files]]
 - [[DOCS-110 Embed a table in a note|Embed a table in a note]]
 - [[DOCS-111 Export a table|Export a table]]
 - [[DOCS-025 Filter View|Filter View]]

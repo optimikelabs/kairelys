@@ -11,7 +11,7 @@ tags:
   - table
   - columns
   - configure
-Updated: 2026-07-11T14:16:12
+Updated: 2026-07-13T23:28:24
 ---
 
 # Table columns
@@ -41,6 +41,7 @@ Right-click, or open the menu on, a column header to reach everything you can do
 
 | Action | What it does |
 |---|---|
+| Rename column... | Gives the column a custom display name for this preset |
 | Align left / Align center / Align right | Sets the column's text alignment |
 | Pin column / Unpin column | Freezes the column so it stays in view as you scroll sideways |
 | Show total / Show sessions | For the duration column only, switches what it counts (see below) |
@@ -52,6 +53,8 @@ Right-click, or open the menu on, a column header to reach everything you can do
 | Hide column | Removes the column from the table |
 
 You cannot hide the last remaining task column, so a table always shows at least one field.
+
+**Rename column...** opens a small popover to give the column a custom name, shown in its header instead of the field's normal label. It only relabels the column in this preset; the underlying task property is untouched, so a renamed **Due** column still edits and sorts the task's actual due date. If the column is also in compact cell mode, its hover tooltip shows the custom name too.
 
 ## Resize and reorder by dragging
 
@@ -128,6 +131,8 @@ These are global toggles rather than per-preset columns, so they appear the same
 ## FAQ
 
 **How do I add a column?** Use **Add column to left...** or **Add column to right...** from a header menu, or the **Columns** section of the preset settings.
+
+**Can I give a column a different label?** Yes. Use **Rename column...** from its header menu. It only changes the label shown in this preset; the column still reads and edits the same task field.
 
 **How do I remove a column?** Choose **Hide column** from its header. A table always keeps at least one task column.
 

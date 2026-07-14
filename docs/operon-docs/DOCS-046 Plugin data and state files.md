@@ -12,7 +12,7 @@ tags:
   - storage
   - index
   - settings
-Updated: 2026-06-25T16:47:21
+Updated: 2026-07-13T23:55:05
 ---
 
 # Plugin data and state files
@@ -22,6 +22,8 @@ Apart from your tasks, which live in your Markdown, Operon keeps its own configu
 ## What Operon keeps here
 
 The plugin's main data file holds your Operon configuration: [[DOCS-039 Key mappings|key mappings]], [[DOCS-037 Pipelines and statuses|pipelines]], [[DOCS-038 Task priorities|priorities]], saved [[DOCS-025 Filter View|filters]], Calendar and Kanban presets, contextual menu setup, and the rest of your settings.
+
+**Table presets are the exception.** Each one lives as its own `.table` file in your vault, by default under `Operon/Tables`, rather than inside the plugin's data. The plugin's data still records small bookkeeping about them, such as their order and which one is the default, but the preset itself is the vault file. See [[DOCS-114 Table files|Table files]].
 
 Alongside it, Operon keeps working state and caches in subfolders:
 
@@ -47,3 +49,4 @@ None of your tasks live in these files. They are in your Markdown notes. If thes
 
 - [[DOCS-001 Operon Docs MOC|Operon Docs MOC]]
 - [[DOCS-045 Markdown task storage|Markdown task storage]]
+- [[DOCS-114 Table files|Table files]]

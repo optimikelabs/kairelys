@@ -11,7 +11,7 @@ tags:
   - table
   - cells
   - configure
-Updated: 2026-07-08T23:32:00
+Updated: 2026-07-13T23:38:26
 ---
 
 # Table cells: display and behavior
@@ -61,6 +61,8 @@ In detailed cell mode, each field type renders its own way:
 | Line number, task icon helper, task type helper | The row number, a status icon, or an inline-or-file icon |
 
 In detailed cells, an empty field usually shows a plain `--`, so a blank detailed cell is never ambiguous. **Project Serial is the exception**: a task outside any [[DOCS-097 Project serials|Project serial]] scope renders a fully empty cell instead of `--`. Empty compact cells can render blank when there is no value to turn into an icon. Once a task is finished or cancelled, its Due and Scheduled cells drop the red and blue, because the deadline no longer presses, the same rule as [[DOCS-041 Task chips display and behavior|task chips]].
+
+**Date Time Start and Date Time End format their own way.** In detailed cell mode, the date and time show together with a space between them (`2026-07-13 14:30`) rather than a raw `T` separator. In compact cell mode, the cell shows just the time (`14:30`), with no icon, at the same text size as the detailed value rather than the smaller scale other compact cells use.
 
 ## What a cell does on click
 
