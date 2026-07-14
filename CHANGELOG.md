@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Validation
 
+## [2.2.1] - 2026-07-14
+
+### Improved
+- Improved the production bundle encoding to UTF-8, reducing `main.js` below the 5 MB sync limit without changing plugin behavior.
+
+### Validation
+- Local validation passed `npm run check:local`, including strict linting, the production build, the release guard, and 1,338/1,338 Phase 5 regression checks; the UTF-8 `main.js` output measured 4,793,699 bytes, 679,995 bytes smaller than the previous build.
+
 ## [2.2.0] - 2026-07-14
 
 This release turns Operon Table presets into portable vault files and makes favorite presets faster to reach across Table, Calendar, Kanban, and Filters, alongside smoother Table rendering and focused workflow fixes.

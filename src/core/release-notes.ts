@@ -13,6 +13,16 @@ const RELEASE_NOTE_LIMIT = 5;
 
 export const OPERON_RELEASE_NOTES: OperonReleaseNote[] = [
 	{
+		version: '2.2.1',
+		date: '2026-07-14',
+		title: 'Smaller Bundle, Same Operon',
+		showOnUpdate: true,
+		body: `
+### Improved
+- Improved the production bundle encoding to UTF-8, reducing \`main.js\` below the 5 MB sync limit without changing plugin behavior.
+`.trim(),
+	},
+	{
 		version: '2.2.0',
 		date: '2026-07-14',
 		title: 'Tables as Files',

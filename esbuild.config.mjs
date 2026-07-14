@@ -35,6 +35,7 @@ const context = await esbuild.context({
 		...builtinModules,
 	],
 	format: "cjs",
+	charset: "utf8",
 	target: "es2018",
 	logLevel: "info",
 	minify: prod,
