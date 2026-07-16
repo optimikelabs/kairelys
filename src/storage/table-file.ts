@@ -1,3 +1,4 @@
+import { normalizeTableCollapsedGroupKeys } from '../types/table';
 import type {
 	TableColumn,
 	TableColumnAlignment,
@@ -22,6 +23,7 @@ import {
 	OPERON_TABLE_FILE_EXTENSION,
 	OPERON_TABLE_FILE_FALLBACK_NAME,
 	OPERON_TABLE_FILE_FORMAT,
+	OPERON_TABLE_FILE_LEGACY_VERSION,
 	OPERON_TABLE_FILE_STEM_MAX_CODEPOINTS,
 	OPERON_TABLE_FILE_VERSION,
 	type DiscoveredOperonTableFile,
@@ -35,9 +37,13 @@ import {
 	type OperonTableFileReadCallback,
 } from '../types/table-file';
 
-const ROOT_FIELDS = [
+const ROOT_FIELDS_V1 = [
 	'format', 'version', 'id', 'name', 'filterSetId', 'columns', 'sortRules', 'groupBy', 'groupOrder',
 	'subgroupBy', 'subgroupOrder', 'summaries', 'display', 'search',
+] as const;
+const ROOT_FIELDS_V2 = [
+	'format', 'version', 'id', 'name', 'filterSetId', 'columns', 'sortRules', 'groupBy', 'groupOrder',
+	'subgroupBy', 'subgroupOrder', 'collapsedGroupKeys', 'summaries', 'display', 'search',
 ] as const;
 const COLUMN_FIELDS = [
 	'key', 'kind', 'label', 'widthPx', 'hidden', 'align', 'pinned', 'colorMode', 'durationDisplayMode', 'displayMode',
@@ -81,20 +87,23 @@ export function parseOperonTableFile(source: string, path?: string): OperonTable
 	}
 
 	const diagnostics: OperonTableFileDiagnostic[] = [];
-	checkKnownFields(value, ROOT_FIELDS, '', diagnostics, path);
 	if (value.format !== OPERON_TABLE_FILE_FORMAT) {
 		diagnostics.push(diagnostic('invalid-format', `format must be "${OPERON_TABLE_FILE_FORMAT}".`, path, 'format'));
 	}
-	if (value.version !== OPERON_TABLE_FILE_VERSION) {
-		diagnostics.push(diagnostic('unsupported-version', `version must be ${OPERON_TABLE_FILE_VERSION}.`, path, 'version'));
+	const version = value.version;
+	if (version !== OPERON_TABLE_FILE_LEGACY_VERSION && version !== OPERON_TABLE_FILE_VERSION) {
+		diagnostics.push(diagnostic('unsupported-version', `version must be ${OPERON_TABLE_FILE_LEGACY_VERSION} or ${OPERON_TABLE_FILE_VERSION}.`, path, 'version'));
 	}
+	checkKnownFields(value, version === OPERON_TABLE_FILE_LEGACY_VERSION ? ROOT_FIELDS_V1 : ROOT_FIELDS_V2, '', diagnostics, path);
 
-	const preset = readPreset(value, diagnostics, path);
+	const preset = readPreset(value, diagnostics, path, version === OPERON_TABLE_FILE_LEGACY_VERSION
+		? OPERON_TABLE_FILE_LEGACY_VERSION
+		: OPERON_TABLE_FILE_VERSION);
 	if (!preset || diagnostics.length > 0) return invalidResult(diagnostics);
 
 	const file: OperonTableFile = {
 		format: OPERON_TABLE_FILE_FORMAT,
-		version: OPERON_TABLE_FILE_VERSION,
+		version: version as typeof OPERON_TABLE_FILE_LEGACY_VERSION | typeof OPERON_TABLE_FILE_VERSION,
 		...preset,
 	};
 	return { status: 'valid', file, preset, diagnostics: [] };
@@ -265,7 +274,12 @@ export async function discoverOperonTableFiles<TDescriptor extends OperonTableFi
 	};
 }
 
-function readPreset(value: Record<string, unknown>, diagnostics: OperonTableFileDiagnostic[], path?: string): TablePreset | null {
+function readPreset(
+	value: Record<string, unknown>,
+	diagnostics: OperonTableFileDiagnostic[],
+	path: string | undefined,
+	version: typeof OPERON_TABLE_FILE_LEGACY_VERSION | typeof OPERON_TABLE_FILE_VERSION,
+): TablePreset | null {
 	const id = readNonEmptyString(value, 'id', diagnostics, path);
 	if (id !== null && !isSafeTablePresetId(id)) {
 		diagnostics.push(diagnostic('invalid-field', 'id must be an Operon Table preset ID.', path, 'id'));
@@ -278,12 +292,27 @@ function readPreset(value: Record<string, unknown>, diagnostics: OperonTableFile
 	const groupOrder = readEnum(value, 'groupOrder', SORT_DIRECTIONS, diagnostics, path);
 	const subgroupBy = readNullableNonEmptyString(value, 'subgroupBy', diagnostics, path);
 	const subgroupOrder = readEnum(value, 'subgroupOrder', SORT_DIRECTIONS, diagnostics, path);
+	const collapsedGroupKeys = version === OPERON_TABLE_FILE_LEGACY_VERSION
+		? []
+		: readCollapsedGroupKeys(value, diagnostics, path);
 	const summaries = readArray(value, 'summaries', readSummaryRule, diagnostics, path);
 	const display = readDisplay(value.display, diagnostics, path, 'display');
 	const search = readSearch(value.search, diagnostics, path, 'search');
 	if (id === null || name === null || filterSetId === undefined || !columns || !sortRules || groupBy === undefined
-		|| !groupOrder || subgroupBy === undefined || !subgroupOrder || !summaries || !display || !search) return null;
-	return { id, name, filterSetId, columns, sortRules, groupBy, groupOrder, subgroupBy, subgroupOrder, summaries, display, search };
+		|| !groupOrder || subgroupBy === undefined || !subgroupOrder || !collapsedGroupKeys || !summaries || !display || !search) return null;
+	return { id, name, filterSetId, columns, sortRules, groupBy, groupOrder, subgroupBy, subgroupOrder, collapsedGroupKeys, summaries, display, search };
+}
+
+function readCollapsedGroupKeys(value: Record<string, unknown>, diagnostics: OperonTableFileDiagnostic[], path?: string): string[] | null {
+	if (!hasOwn(value, 'collapsedGroupKeys')) {
+		diagnostics.push(diagnostic('missing-field', 'collapsedGroupKeys is required.', path, 'collapsedGroupKeys'));
+		return null;
+	}
+	if (!Array.isArray(value.collapsedGroupKeys)) {
+		diagnostics.push(diagnostic('invalid-field', 'collapsedGroupKeys must be an array.', path, 'collapsedGroupKeys'));
+		return null;
+	}
+	return normalizeTableCollapsedGroupKeys(value.collapsedGroupKeys);
 }
 
 function readColumn(value: unknown, field: string, diagnostics: OperonTableFileDiagnostic[], path?: string): TableColumn | null {
@@ -497,6 +526,7 @@ function clonePreset(preset: TablePreset): TablePreset {
 		...preset,
 		columns: preset.columns.map(column => ({ ...column })),
 		sortRules: preset.sortRules.map(rule => ({ ...rule })),
+		collapsedGroupKeys: [...preset.collapsedGroupKeys],
 		summaries: preset.summaries.map(summary => ({ ...summary })),
 		display: { ...preset.display },
 		search: { scope: { ...preset.search.scope }, parent: preset.search.parent ? { ...preset.search.parent } : null },

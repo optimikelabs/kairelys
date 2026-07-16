@@ -41,7 +41,7 @@ import {
 import { getOwnerDocument } from '../core/dom-compat';
 import { asyncHandler, runAsyncAction } from '../core/async-action';
 import { IndexedTask } from '../types/fields';
-import type { ProjectSerialDisplay } from '../core/project-serials';
+import { createProjectSerialScopeFilterResolver, type ProjectSerialDisplay } from '../core/project-serials';
 import { closeFloatingPanelsForRoot } from './field-pickers/common';
 import { closeIconOnlyChipPreviewsForRoot } from './icon-only-chip-preview';
 import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
@@ -392,6 +392,10 @@ export class FilterView extends ItemView {
 				priorities: this.getPriorities(),
 				pipelines: this.getPipelines(),
 				isTaskPinned: callbacks.isTaskPinned,
+				projectSerialScopeResolver: createProjectSerialScopeFilterResolver(
+					this.getSettings().projectSerialScopes,
+					this.indexer.getAllTasks(),
+				),
 			},
 		);
 		const taskRowOptions = {
@@ -463,6 +467,8 @@ export class FilterView extends ItemView {
 					pinnedCache: this.pinnedCache ?? undefined,
 					isTaskTracking: this.isTaskTracking,
 					toggleTimer: this.toggleTimer,
+					getProjectSerialDisplay: this.getProjectSerialDisplay,
+					getProjectSerialSignature: this.getProjectSerialSignature,
 				}, {
 					quickActions: this.createFilterSetModalQuickActions(currentFs, () => modal?.close()),
 					getSettings: this.getSettings,
@@ -477,19 +483,24 @@ export class FilterView extends ItemView {
 		this.listEl?.empty();
 		const list = this.listEl;
 		if (!list) return;
+		const allTasks = this.indexer.getAllTasks();
+		const filterEvaluationOptions = {
+			projectSerialScopes: this.getSettings().projectSerialScopes,
+			projectSerialScopeTasks: allTasks,
+		};
 
 			if (currentFs.groupBy) {
 				// Grouped rendering
-				const allTasks = this.indexer.getAllTasks();
 				const baseGrouped = evaluateFilterSetGrouped(
 					currentFs,
 					allTasks,
 					this.getPriorities(),
 					this.pinnedCache,
 					this.getPipelines(),
+					filterEvaluationOptions,
 				);
 				const searchActive = isFilterSearchActive(this.searchQuery);
-				const baseRootTasks = filterTasksOnly(currentFs, allTasks, this.getPriorities(), this.pinnedCache);
+				const baseRootTasks = filterTasksOnly(currentFs, allTasks, this.getPriorities(), this.pinnedCache, filterEvaluationOptions);
 				const treeScopeTasks = this.getCachedTreeScope(baseRootTasks);
 				this.syncSearchPlaceholder(treeScopeTasks.length);
 
@@ -500,6 +511,7 @@ export class FilterView extends ItemView {
 					this.getPriorities(),
 					this.pinnedCache,
 					this.getPipelines(),
+					filterEvaluationOptions,
 				);
 				if (tasks.length === 0) {
 					list.createDiv({ cls: 'operon-filter-empty', text: t('filters', 'noMatches') });
@@ -528,8 +540,7 @@ export class FilterView extends ItemView {
 
 			const visibleGrouped = getVisibleGroupedFilterResults(grouped, this.visibleTaskLimit);
 			for (const group of visibleGrouped.groups) {
-				const groupKey = group.key;
-				const label = groupKey || t('filterSets', 'groupEmpty');
+				const label = group.label || t('filterSets', 'groupEmpty');
 				const header = list.createDiv('operon-group-header');
 				// Make date-format labels (YYYY-MM-DD) clickable → opens daily note
 				if (/^\d{4}-\d{2}-\d{2}$/.test(label)) {
@@ -565,7 +576,7 @@ export class FilterView extends ItemView {
 						const subgroupHeader = list.createDiv('operon-group-header operon-subgroup-header');
 						subgroupHeader.createSpan({
 							cls: 'operon-group-header-label',
-							text: subgroup.key || t('filterSets', 'groupEmpty'),
+							text: subgroup.label || t('filterSets', 'groupEmpty'),
 						});
 						subgroupHeader.createSpan({ cls: 'operon-group-header-count', text: String(subgroup.count) });
 
@@ -586,10 +597,11 @@ export class FilterView extends ItemView {
 			// Flat rendering
 			const baseTasks = evaluateFilterSet(
 				currentFs,
-				this.indexer.getAllTasks(),
+				allTasks,
 				this.getPriorities(),
 				this.pinnedCache,
 				this.getPipelines(),
+				filterEvaluationOptions,
 			);
 			const searchActive = isFilterSearchActive(this.searchQuery);
 			const treeScopeTasks = this.getCachedTreeScope(baseTasks);
@@ -600,6 +612,7 @@ export class FilterView extends ItemView {
 					this.getPriorities(),
 					this.pinnedCache,
 					this.getPipelines(),
+					filterEvaluationOptions,
 				)
 				: baseTasks;
 			this.syncSearchPlaceholder(treeScopeTasks.length);

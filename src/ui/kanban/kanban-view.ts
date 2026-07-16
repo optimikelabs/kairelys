@@ -76,7 +76,7 @@ import {
 } from '../../systems/task-search';
 import { asHTMLElement, createOwnerElement, getOwnerBody, getOwnerDocument, getOwnerWindow } from '../../core/dom-compat';
 import { localNow } from '../../core/local-time';
-import { bindOperonHoverTooltip } from '../operon-hover-tooltip';
+import { bindOperonHoverTooltip, cleanupOperonHoverTooltips } from '../operon-hover-tooltip';
 import { renderRelatedViewsLauncher } from '../related-views';
 import { setAccessibleLabelWithoutTooltip } from '../accessibility-label';
 import { bindTaskTitleLinkPreview } from '../compact-chip-link-preview';
@@ -504,6 +504,7 @@ export class KanbanView extends ItemView {
 			this.app.workspace.requestSaveLayout();
 		}
 		this.clearRender();
+		cleanupOperonHoverTooltips(this.contentEl);
 		this.clearLaneColumnWidthFrame();
 		this.clearBoardLayoutRefresh();
 		this.clearToolbarLayout();
@@ -554,6 +555,7 @@ export class KanbanView extends ItemView {
 		this.clearKanbanLazyObservers();
 		this.captureSearchFocusState(container);
 		this.captureBoardScrollState(container);
+		cleanupOperonHoverTooltips(container);
 		container.empty();
 		container.addClass('operon-kanban-view');
 
@@ -615,6 +617,7 @@ export class KanbanView extends ItemView {
 			filterSet,
 			priorities: settings.priorities,
 			keyMappings: settings.keyMappings,
+			projectSerialScopes: settings.projectSerialScopes,
 			language: getCurrentLang(),
 			timeFormat: settings.timeFormat,
 			fallbackTaskIconSource: settings.fallbackTaskIconSource,
@@ -745,6 +748,7 @@ export class KanbanView extends ItemView {
 				? this.callbacks.getManualOrder?.(preset.id) ?? {}
 				: undefined,
 			keyMappings: settings.keyMappings,
+			projectSerialScopes: settings.projectSerialScopes,
 		});
 		this.reconcileOptimisticMoves(board, pipeline, preset);
 		this.applyOptimisticMoves(board, settings);
@@ -1172,6 +1176,7 @@ export class KanbanView extends ItemView {
 			this.clearBoardLayoutRefresh();
 			this.clearKanbanLazyObservers();
 			this.captureBoardScrollState(content);
+			cleanupOperonHoverTooltips(content);
 			content.empty();
 			this.renderBoardContent(content, state, preset, pipeline, filterSet, settings, parentSearchUi);
 		}
@@ -4467,7 +4472,11 @@ export class KanbanView extends ItemView {
 			this.indexer.getAllTasks(),
 			settings.priorities,
 			this.getPinnedCache(),
-				).filter(task => isTaskInPipelineWithIndex(task, pipeline, workflowStatusIdentityIndex));
+			{
+				projectSerialScopes: settings.projectSerialScopes,
+				projectSerialScopeTasks: this.indexer.getAllTasks(),
+			},
+		).filter(task => isTaskInPipelineWithIndex(task, pipeline, workflowStatusIdentityIndex));
 	}
 
 	private getCurrentSearchScopeTasks(

@@ -15,6 +15,12 @@ import {
 	type WorkflowStatusOrderIndex,
 } from './workflow-status-order';
 import { normalizePriorityValue } from './priority-rank';
+import {
+	createProjectSerialScopeFilterResolver,
+	PROJECT_SERIAL_SCOPE_FILTER_FIELD,
+	type ProjectSerialScopeFilterResolver,
+} from './project-serials';
+import type { ProjectSerialScope } from '../types/settings';
 
 export interface GroupedFilterSubgroup {
 	key: string;
@@ -45,12 +51,19 @@ interface EvalContext {
 	childIdsByParentId: Map<string, string[]>;
 	projectTreeMatchCache: Map<string, Set<string>>;
 	folderTreeMatchCache: Map<string, Set<string>>;
+	projectSerialScopeResolver: ProjectSerialScopeFilterResolver | null;
+}
+
+export interface FilterEvaluationOptions {
+	projectSerialScopes?: readonly ProjectSerialScope[];
+	projectSerialScopeTasks?: readonly IndexedTask[];
 }
 
 export interface TaskSortContext {
 	priorities?: { label: string }[];
 	pipelines?: readonly Pipeline[];
 	isTaskPinned?: (taskId: string) => boolean;
+	projectSerialScopeResolver?: ProjectSerialScopeFilterResolver | null;
 }
 
 export interface PreparedTaskSortContext extends TaskSortContext {
@@ -158,6 +171,15 @@ export const FOLDER_OPERATORS = [
 	{ id: 'isInFolderTree', label: 'is in folder tree' },
 ] as const;
 
+export const PROJECT_SERIAL_SCOPE_OPERATORS = [
+	{ id: 'isAnyOf', label: 'is any of' },
+	{ id: 'isNoneOf', label: 'is none of' },
+	{ id: 'startsWith', label: 'starts with' },
+	{ id: 'doesNotStartWith', label: 'does not start with' },
+	{ id: 'hasProjectSerialGroup', label: 'has any project serial group' },
+	{ id: 'hasNoProjectSerialGroup', label: 'has no project serial group' },
+] as const;
+
 /** Operators that require no value input */
 export const NO_VALUE_OPERATORS = new Set([
 	'hasAnyValue', 'hasNoValue', 'propPresent', 'propMissing',
@@ -166,6 +188,7 @@ export const NO_VALUE_OPERATORS = new Set([
 	'thisMonth', 'lastMonth', 'nextMonth',
 	'isOpen', 'isDone', 'isCancelled',
 	'isPinned',
+	'hasProjectSerialGroup', 'hasNoProjectSerialGroup',
 ]);
 
 /**
@@ -193,6 +216,7 @@ export function getOperatorsForType(type: FilterFieldType): readonly { id: strin
 		case 'pinned': return PINNED_OPERATORS;
 		case 'projectTree': return PROJECT_TREE_OPERATORS;
 		case 'folders': return FOLDER_OPERATORS;
+		case 'projectSerialScope': return PROJECT_SERIAL_SCOPE_OPERATORS;
 		default: return TEXT_OPERATORS;
 	}
 }
@@ -208,11 +232,12 @@ export function evaluateFilterSet(
 	priorities?: { label: string }[],
 	pinnedCache?: PinnedCache | null,
 	pipelines?: readonly Pipeline[],
+	options?: FilterEvaluationOptions,
 ): IndexedTask[] {
 	const sorts = getFilterSortSpecs(filterSet);
-	const context = createEvalContext(tasks, priorities, pinnedCache, pipelines, { sorts });
+	const context = createEvalContext(tasks, priorities, pinnedCache, pipelines, { sorts }, options);
 	const result = tasks.filter(task => matchesFilterSet(filterSet, task, context));
-	return sortTasks(result, sorts, context.priorityRankMap, context.workflowStatusOrder, context.pinnedCache);
+	return sortTasks(result, sorts, context.priorityRankMap, context.workflowStatusOrder, context.pinnedCache, context.projectSerialScopeResolver);
 }
 
 /** Sort a task list using a FilterSet definition without re-applying conditions. */
@@ -222,10 +247,11 @@ export function sortFilterTasks(
 	priorities?: { label: string }[],
 	pinnedCache?: PinnedCache | null,
 	pipelines?: readonly Pipeline[],
+	options?: FilterEvaluationOptions,
 ): IndexedTask[] {
 	const sorts = getFilterSortSpecs(filterSet);
-	const context = createEvalContext(tasks, priorities, pinnedCache, pipelines, { sorts });
-	return sortTasks(tasks, sorts, context.priorityRankMap, context.workflowStatusOrder, context.pinnedCache);
+	const context = createEvalContext(tasks, priorities, pinnedCache, pipelines, { sorts }, options);
+	return sortTasks(tasks, sorts, context.priorityRankMap, context.workflowStatusOrder, context.pinnedCache, context.projectSerialScopeResolver);
 }
 
 /** Filter tasks using filter-set matching only, preserving the original input order. */
@@ -234,8 +260,9 @@ export function filterTasksOnly(
 	tasks: IndexedTask[],
 	priorities?: { label: string }[],
 	pinnedCache?: PinnedCache | null,
+	options?: FilterEvaluationOptions,
 ): IndexedTask[] {
-	const context = createEvalContext(tasks, priorities, pinnedCache);
+	const context = createEvalContext(tasks, priorities, pinnedCache, undefined, undefined, options);
 	return tasks.filter(task => matchesFilterSet(filterSet, task, context));
 }
 
@@ -249,19 +276,21 @@ export function evaluateFilterSetGrouped(
 	priorities?: { label: string }[],
 	pinnedCache?: PinnedCache | null,
 	pipelines?: readonly Pipeline[],
+	options?: FilterEvaluationOptions,
 ): GroupedFilterResults {
 	const sorts = getFilterSortSpecs(filterSet);
 	const context = createEvalContext(tasks, priorities, pinnedCache, pipelines, {
 		sorts,
 		groupBy: filterSet.groupBy,
 		subgroupBy: filterSet.subgroupBy,
-	});
+	}, options);
 	const sortedTasks = sortTasks(
 		tasks.filter(task => matchesFilterSet(filterSet, task, context)),
 		sorts,
 		context.priorityRankMap,
 		context.workflowStatusOrder,
 		context.pinnedCache,
+		context.projectSerialScopeResolver,
 	);
 	return groupSortedFilterTasks(filterSet, sortedTasks, context);
 }
@@ -272,19 +301,21 @@ export function groupFilterTasks(
 	priorities?: { label: string }[],
 	pinnedCache?: PinnedCache | null,
 	pipelines?: readonly Pipeline[],
+	options?: FilterEvaluationOptions,
 ): GroupedFilterResults {
 	const sorts = getFilterSortSpecs(filterSet);
 	const context = createEvalContext(tasks, priorities, pinnedCache, pipelines, {
 		sorts,
 		groupBy: filterSet.groupBy,
 		subgroupBy: filterSet.subgroupBy,
-	});
+	}, options);
 	const sortedTasks = sortTasks(
 		tasks,
 		sorts,
 		context.priorityRankMap,
 		context.workflowStatusOrder,
 		context.pinnedCache,
+		context.projectSerialScopeResolver,
 	);
 	return groupSortedFilterTasks(filterSet, sortedTasks, context);
 }
@@ -300,13 +331,13 @@ function groupSortedFilterTasks(
 	const subgroupMaps = new Map<string, Map<string, IndexedTask[]>>();
 
 	for (const task of sortedTasks) {
-		const groupKey = getTaskGroupKey(task, groupBy, context.pinnedCache);
+		const groupKey = getTaskGroupKey(task, groupBy, context.pinnedCache, context.projectSerialScopeResolver);
 		if (!groupMap.has(groupKey)) groupMap.set(groupKey, []);
 		groupMap.get(groupKey)!.push(task);
 
 		if (subgroupBy) {
 			if (!subgroupMaps.has(groupKey)) subgroupMaps.set(groupKey, new Map());
-			const subgroupKey = getTaskGroupKey(task, subgroupBy, context.pinnedCache);
+			const subgroupKey = getTaskGroupKey(task, subgroupBy, context.pinnedCache, context.projectSerialScopeResolver);
 			const subgroupMap = subgroupMaps.get(groupKey)!;
 			if (!subgroupMap.has(subgroupKey)) subgroupMap.set(subgroupKey, []);
 			subgroupMap.get(subgroupKey)!.push(task);
@@ -314,14 +345,14 @@ function groupSortedFilterTasks(
 	}
 
 	const groups = [...groupMap.entries()]
-		.sort(([a], [b]) => compareGroupKeys(a, b, groupBy, filterSet.groupOrder, context.priorityRankMap, context.workflowStatusOrder))
+		.sort(([a], [b]) => compareGroupKeys(a, b, groupBy, filterSet.groupOrder, context.priorityRankMap, context.workflowStatusOrder, context.projectSerialScopeResolver))
 		.map(([key, groupTasks]) => {
 			const subgroups = subgroupBy
 				? [...(subgroupMaps.get(key)?.entries() ?? [])]
-					.sort(([a], [b]) => compareGroupKeys(a, b, subgroupBy, filterSet.subgroupOrder, context.priorityRankMap, context.workflowStatusOrder))
+					.sort(([a], [b]) => compareGroupKeys(a, b, subgroupBy, filterSet.subgroupOrder, context.priorityRankMap, context.workflowStatusOrder, context.projectSerialScopeResolver))
 					.map(([subgroupKey, subgroupTasks]) => ({
 						key: subgroupKey,
-						label: subgroupKey || '(no value)',
+						label: getTaskGroupLabel(subgroupKey, subgroupBy, context.projectSerialScopeResolver),
 						count: subgroupTasks.length,
 						tasks: subgroupTasks,
 					}))
@@ -329,7 +360,7 @@ function groupSortedFilterTasks(
 
 			return {
 				key,
-				label: key || '(no value)',
+				label: getTaskGroupLabel(key, groupBy, context.projectSerialScopeResolver),
 				count: groupTasks.length,
 				tasks: groupTasks,
 				subgroups,
@@ -342,13 +373,33 @@ function groupSortedFilterTasks(
 	};
 }
 
-export function getTaskGroupKey(task: IndexedTask, groupBy: string, pinnedCache?: PinnedCache | null): string {
+export function getTaskGroupKey(
+	task: IndexedTask,
+	groupBy: string,
+	pinnedCache?: PinnedCache | null,
+	projectSerialScopeResolver?: ProjectSerialScopeFilterResolver | null,
+): string {
 	if (groupBy === 'checkbox') return task.checkbox;
 	if (groupBy === 'description') return task.description;
 	if (groupBy === 'pinned') return pinnedCache?.isPinned(task.operonId) ? 'true' : '';
 	if (groupBy === 'happensOn') return getPrimaryHappensOnDateValue(task);
+	if (groupBy === PROJECT_SERIAL_SCOPE_FILTER_FIELD) {
+		return projectSerialScopeResolver?.resolve(task)?.scopeId ?? '';
+	}
 	const value = task.fieldValues[groupBy] ?? '';
 	return groupBy === 'status' ? value.trim() : value;
+}
+
+function getTaskGroupLabel(
+	key: string,
+	field: string,
+	projectSerialScopeResolver?: ProjectSerialScopeFilterResolver | null,
+): string {
+	if (!key) return '(no value)';
+	if (field === PROJECT_SERIAL_SCOPE_FILTER_FIELD) {
+		return projectSerialScopeResolver?.getLabel(key) ?? key;
+	}
+	return key;
 }
 
 function matchesFilterSet(filterSet: FilterSet, task: IndexedTask, context: EvalContext): boolean {
@@ -474,6 +525,14 @@ function evaluateCondition(cond: FilterSetCondition, task: IndexedTask, context:
 				context,
 			);
 
+		case 'projectSerialScope':
+			return evaluateProjectSerialScopeCondition(
+				cond.operator,
+				cond.value ?? '',
+				cond.values ?? [],
+				context.projectSerialScopeResolver?.resolve(task) ?? null,
+			);
+
 		case 'checkbox':
 			return evaluateCheckboxCondition(cond.operator, task.checkbox);
 
@@ -550,6 +609,24 @@ function evaluateFolderCondition(op: string, task: IndexedTask, target: string, 
 			return resolveFolderTreeMatches(target, context).has(task.operonId);
 		default:
 			return false;
+	}
+}
+
+function evaluateProjectSerialScopeCondition(
+	op: string,
+	prefix: string,
+	scopeIds: readonly string[],
+	resolved: { scopeId: string; prefix: string } | null,
+): boolean {
+	const normalizedPrefix = prefix.trim().toLocaleLowerCase();
+	switch (op) {
+		case 'isAnyOf': return scopeIds.length > 0 && resolved !== null && scopeIds.includes(resolved.scopeId);
+		case 'isNoneOf': return scopeIds.length > 0 && (resolved === null || !scopeIds.includes(resolved.scopeId));
+		case 'startsWith': return normalizedPrefix.length > 0 && resolved !== null && resolved.prefix.toLocaleLowerCase().startsWith(normalizedPrefix);
+		case 'doesNotStartWith': return normalizedPrefix.length > 0 && (resolved === null || !resolved.prefix.toLocaleLowerCase().startsWith(normalizedPrefix));
+		case 'hasProjectSerialGroup': return resolved !== null;
+		case 'hasNoProjectSerialGroup': return resolved === null;
+		default: return false;
 	}
 }
 
@@ -881,11 +958,13 @@ function sortTasks(
 	priorityRankMap: Record<string, number> | null | undefined,
 	workflowStatusOrder: WorkflowStatusOrderIndex,
 	pinnedCache?: PinnedCache | null,
+	projectSerialScopeResolver?: ProjectSerialScopeFilterResolver | null,
 ): IndexedTask[] {
 	return sortTasksBySpecs(tasks, sorts, {
 		priorityRankMap,
 		workflowStatusOrder,
 		isTaskPinned: pinnedCache ? taskId => pinnedCache.isPinned(taskId) : undefined,
+		projectSerialScopeResolver,
 	});
 }
 
@@ -904,7 +983,7 @@ export function sortTasksBySpecs(
 
 	return [...tasks].sort((a, b) => {
 		for (const sort of sorts) {
-			const cmp = compareTaskBySortSpec(a, b, sort, priorityRankMap, workflowStatusOrder, context.isTaskPinned);
+			const cmp = compareTaskBySortSpec(a, b, sort, priorityRankMap, workflowStatusOrder, context.isTaskPinned, context.projectSerialScopeResolver);
 			if (cmp !== 0) return cmp;
 		}
 		return 0;
@@ -938,6 +1017,7 @@ function compareTaskBySortSpec(
 	priorityRankMap: Record<string, number> | null | undefined,
 	workflowStatusOrder: WorkflowStatusOrderIndex,
 	isTaskPinned?: (taskId: string) => boolean,
+	projectSerialScopeResolver?: ProjectSerialScopeFilterResolver | null,
 ): number {
 	const asc = sort.order !== 'desc';
 	if (sort.field === 'status') {
@@ -964,6 +1044,10 @@ function compareTaskBySortSpec(
 		cmp = aPinned - bPinned;
 	} else if (sort.field === 'happensOn') {
 		cmp = getPrimaryHappensOnDateValue(a).localeCompare(getPrimaryHappensOnDateValue(b));
+	} else if (sort.field === PROJECT_SERIAL_SCOPE_FILTER_FIELD) {
+		const aValue = projectSerialScopeResolver?.resolve(a)?.label ?? '';
+		const bValue = projectSerialScopeResolver?.resolve(b)?.label ?? '';
+		cmp = aValue.localeCompare(bValue, undefined, { sensitivity: 'base' });
 	} else if (sort.field === 'priority' && priorityRankMap) {
 		const aRank = priorityRankMap[normalizePriorityValue(a.fieldValues['priority'] ?? '')] ?? 999;
 		const bRank = priorityRankMap[normalizePriorityValue(b.fieldValues['priority'] ?? '')] ?? 999;
@@ -984,6 +1068,7 @@ function compareGroupKeys(
 	order: 'asc' | 'desc' | undefined,
 	priorityRankMap: Record<string, number> | null | undefined,
 	workflowStatusOrder: WorkflowStatusOrderIndex,
+	projectSerialScopeResolver?: ProjectSerialScopeFilterResolver | null,
 ): number {
 	if (field === 'status') {
 		return compareWorkflowStatusValues(a, b, workflowStatusOrder, {
@@ -993,6 +1078,12 @@ function compareGroupKeys(
 	}
 	if (a === '') return 1;
 	if (b === '') return -1;
+	if (field === PROJECT_SERIAL_SCOPE_FILTER_FIELD) {
+		const aLabel = projectSerialScopeResolver?.getLabel(a) ?? a;
+		const bLabel = projectSerialScopeResolver?.getLabel(b) ?? b;
+		const cmp = aLabel.localeCompare(bLabel, undefined, { sensitivity: 'base' });
+		return order === 'desc' ? -cmp : cmp;
+	}
 	let cmp: number;
 	if (field === 'priority' && priorityRankMap) {
 		cmp = (priorityRankMap[normalizePriorityValue(a)] ?? 999) - (priorityRankMap[normalizePriorityValue(b)] ?? 999);
@@ -1054,6 +1145,7 @@ function createEvalContext(
 		groupBy?: string;
 		subgroupBy?: string;
 	} = {},
+	options?: FilterEvaluationOptions,
 ): EvalContext {
 	const taskById = new Map<string, IndexedTask>();
 	const childIdsByParentId = new Map<string, string[]>();
@@ -1085,6 +1177,9 @@ function createEvalContext(
 		childIdsByParentId,
 		projectTreeMatchCache: new Map<string, Set<string>>(),
 		folderTreeMatchCache: new Map<string, Set<string>>(),
+		projectSerialScopeResolver: options?.projectSerialScopes
+			? createProjectSerialScopeFilterResolver(options.projectSerialScopes, options.projectSerialScopeTasks ?? tasks)
+			: null,
 	};
 }
 

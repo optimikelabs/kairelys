@@ -378,6 +378,7 @@ function normalizeCompleteTablePresetContent(preset: TablePreset): unknown {
 		groupOrder: preset.groupOrder,
 		subgroupBy: preset.subgroupBy,
 		subgroupOrder: preset.subgroupOrder,
+		collapsedGroupKeys: [...preset.collapsedGroupKeys],
 		summaries: preset.summaries.map(summary => ({ key: summary.key, function: summary.function })),
 		display: { showSource: preset.display.showSource, density: preset.display.density },
 		search: {

@@ -313,7 +313,7 @@ export const FLOW_TIME_DEFAULT_SESSION_MINUTE_OPTIONS = [15, 20, 25, 30, 45, 60,
 // ============================================================
 
 /** Field types available in filter conditions */
-export type FilterFieldType = 'text' | 'number' | 'date' | 'datetime' | 'list' | 'checkbox' | 'tags' | 'pinned' | 'projectTree' | 'folders';
+export type FilterFieldType = 'text' | 'number' | 'date' | 'datetime' | 'list' | 'checkbox' | 'tags' | 'pinned' | 'projectTree' | 'folders' | 'projectSerialScope';
 
 /** A single condition within a filter set */
 export interface FilterSetCondition {
@@ -323,6 +323,8 @@ export interface FilterSetCondition {
 	fieldType: FilterFieldType;
 	operator: string;
 	value?: string;
+	/** Stable Project Serial scope IDs selected by projectSerialScope conditions. */
+	values?: string[];
 }
 
 export type FilterGroupLogic = 'all' | 'any' | 'none';
@@ -372,6 +374,7 @@ function cloneFilterCondition(condition: FilterSetCondition): FilterSetCondition
 		fieldType: condition.fieldType,
 		operator: condition.operator,
 		...(condition.value !== undefined ? { value: condition.value } : {}),
+		...(condition.values !== undefined ? { values: [...condition.values] } : {}),
 	};
 }
 
@@ -2101,6 +2104,7 @@ const FILTER_FIELD_TYPES = new Set<FilterFieldType>([
 	'pinned',
 	'projectTree',
 	'folders',
+	'projectSerialScope',
 ]);
 
 function normalizeOptionalString(value: unknown): string | undefined {
@@ -3036,6 +3040,7 @@ function normalizeFilterFieldType(field: string, rawType: unknown): FilterFieldT
 	if (field === 'pinned') return 'pinned';
 	if (field === 'projectTree') return 'projectTree';
 	if (field === 'folders') return 'folders';
+	if (field === 'projectSerialScope') return 'projectSerialScope';
 	if (field === 'happensOn') return 'date';
 	return 'text';
 }
@@ -3047,13 +3052,26 @@ function normalizeFilterCondition(raw: unknown): FilterSetCondition | null {
 	const field = normalizeOptionalString(src.field);
 	const operator = normalizeOptionalString(src.operator);
 	if (!id || !field || !operator) return null;
-	const value = typeof src.value === 'string' ? src.value : undefined;
+	const rawValue = typeof src.value === 'string' ? src.value : undefined;
+	const values = Array.isArray(src.values)
+		? [...new Set(src.values.filter((item): item is string => typeof item === 'string').map(item => item.trim()).filter(Boolean))]
+		: undefined;
+	const fieldType = normalizeFilterFieldType(field, src.fieldType);
+	const isProjectSerialScope = fieldType === 'projectSerialScope';
+	const value = isProjectSerialScope ? rawValue?.trim() || undefined : rawValue;
+	const normalizedValue = isProjectSerialScope && (operator === 'isAnyOf' || operator === 'isNoneOf' || operator === 'hasProjectSerialGroup' || operator === 'hasNoProjectSerialGroup')
+		? undefined
+		: value;
+	const normalizedValues = isProjectSerialScope && (operator === 'isAnyOf' || operator === 'isNoneOf')
+		? values
+		: undefined;
 	return {
 		id,
 		field,
-		fieldType: normalizeFilterFieldType(field, src.fieldType),
+		fieldType,
 		operator,
-		value,
+		...(normalizedValue !== undefined ? { value: normalizedValue } : {}),
+		...(normalizedValues !== undefined ? { values: normalizedValues } : {}),
 	};
 }
 

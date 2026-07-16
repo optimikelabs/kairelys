@@ -119,7 +119,7 @@ export function resolveTableSearchScopedTasks(options: {
 	priorities: { label: string; color?: string }[];
 	pinnedCache: PinnedCache | null;
 	scope: TaskSearchBoxScopeState;
-	settings: Pick<OperonSettings, 'taskFinderRecentModifiedDays'>;
+	settings: Pick<OperonSettings, 'taskFinderRecentModifiedDays' | 'projectSerialScopes'>;
 }): IndexedTask[] {
 	const recentModifiedCutoff = getTaskSearchBoxRecentModifiedCutoff(options.settings);
 	return resolveTableSearchBaseScopeTasks(options)
@@ -131,12 +131,17 @@ export function resolveTableSearchBaseScopeTasks(options: {
 	tasks: IndexedTask[];
 	priorities: { label: string; color?: string }[];
 	pinnedCache: PinnedCache | null;
+	projectSerialScopes?: OperonSettings['projectSerialScopes'];
 }): IndexedTask[] {
 	return filterTasksForCalendar(
 		options.filterSet,
 		options.tasks,
 		options.priorities,
 		options.pinnedCache,
+		{
+			projectSerialScopes: options.projectSerialScopes,
+			projectSerialScopeTasks: options.tasks,
+		},
 	);
 }
 

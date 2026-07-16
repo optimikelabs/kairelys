@@ -13,6 +13,12 @@ export interface OperonStoragePaths {
 	};
 	runtime: {
 		indexPath: string;
+		indexV8RecoveryRequiredPath: string;
+		indexV8: {
+			rootPath: string;
+			manifestPath: string;
+			shardsPath: string;
+		};
 	};
 	cache: {
 		externalCalendarsPath: string;
@@ -40,6 +46,12 @@ export function buildOperonStoragePaths(
 		},
 		runtime: {
 			indexPath: joinVaultPath(pluginDir, 'runtime', 'index.json'),
+			indexV8RecoveryRequiredPath: joinVaultPath(pluginDir, 'runtime', 'index-v8-recovery-required.json'),
+			indexV8: {
+				rootPath: joinVaultPath(pluginDir, 'runtime', 'index-v8'),
+				manifestPath: joinVaultPath(pluginDir, 'runtime', 'index-v8', 'manifest.json'),
+				shardsPath: joinVaultPath(pluginDir, 'runtime', 'index-v8', 'shards'),
+			},
 		},
 		cache: {
 			externalCalendarsPath: joinVaultPath(pluginDir, 'cache', 'external-calendars.json'),

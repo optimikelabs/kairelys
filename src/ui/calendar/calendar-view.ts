@@ -1073,6 +1073,10 @@ export class CalendarView extends ItemView {
 			this.getOptimisticCalendarTasksForRender(),
 			context.settings.priorities,
 			this.getPinnedCache(),
+			{
+				projectSerialScopes: context.settings.projectSerialScopes,
+				projectSerialScopeTasks: this.indexer.getAllTasks(),
+			},
 		);
 		return this.composeCalendarRenderContentSnapshot(context.renderPresetKey, context.preset.surfaceType, scopedTasks);
 	}
@@ -1424,6 +1428,10 @@ export class CalendarView extends ItemView {
 				[task],
 				settings.priorities,
 				this.getPinnedCache(),
+				{
+					projectSerialScopes: settings.projectSerialScopes,
+					projectSerialScopeTasks: this.indexer.getAllTasks(),
+				},
 			);
 			const queryAnchorDate = preset.surfaceType === 'multiWeek'
 				? this.resolveMultiWeekRangeStart(state.anchorDate, preset, settings.calendarWeekStart)
@@ -1516,6 +1524,10 @@ export class CalendarView extends ItemView {
 					[optimisticTask],
 					settings.priorities,
 					this.getPinnedCache(),
+					{
+						projectSerialScopes: settings.projectSerialScopes,
+						projectSerialScopeTasks: this.indexer.getAllTasks(),
+					},
 				);
 				if (scoped.length === 0) return [];
 			}
@@ -1797,6 +1809,10 @@ export class CalendarView extends ItemView {
 			renderTasks,
 			settings.priorities,
 			this.getPinnedCache(),
+			{
+				projectSerialScopes: settings.projectSerialScopes,
+				projectSerialScopeTasks: this.indexer.getAllTasks(),
+			},
 		);
 		this.lastRenderContentSnapshot = this.composeCalendarRenderContentSnapshot(
 			renderPresetKey,
@@ -2062,6 +2078,10 @@ export class CalendarView extends ItemView {
 			tasks,
 			settings.priorities,
 			this.getPinnedCache(),
+			{
+				projectSerialScopes: settings.projectSerialScopes,
+				projectSerialScopeTasks: this.indexer.getAllTasks(),
+			},
 		);
 	}
 

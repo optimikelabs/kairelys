@@ -1,5 +1,5 @@
 import { parseListValue } from '../core/parser';
-import { filterTasksOnly } from '../core/filter-evaluator';
+import { filterTasksOnly, type FilterEvaluationOptions } from '../core/filter-evaluator';
 import { t } from '../core/i18n';
 import {
 	CalendarFilterFieldChange,
@@ -68,9 +68,10 @@ export function filterTasksForCalendar(
 	tasks: IndexedTask[],
 	priorities?: { label: string }[],
 	pinnedCache?: PinnedCache | null,
+	evaluationOptions?: FilterEvaluationOptions,
 ): IndexedTask[] {
 	if (!filterSet) return tasks;
-	return filterTasksOnly(stripFilterViewOnlyOptions(filterSet), tasks, priorities, pinnedCache);
+	return filterTasksOnly(stripFilterViewOnlyOptions(filterSet), tasks, priorities, pinnedCache, evaluationOptions);
 }
 
 export function buildCalendarFilterMaterializationPlan(
@@ -92,7 +93,8 @@ export function buildCalendarFilterMaterializationPlan(
 
 	const scopeFilterSet = stripFilterViewOnlyOptions(filterSet);
 	const draft = cloneDraft(taskOrDraft);
-	const matchesFilterBefore = matchesFilter(scopeFilterSet, draft, options);
+	const hasProjectSerialScopeCondition = filterContainsProjectSerialScopeCondition(scopeFilterSet.rootGroup);
+	const matchesFilterBefore = !hasProjectSerialScopeCondition && matchesFilter(scopeFilterSet, draft, options);
 	if (matchesFilterBefore) {
 		return {
 			filterSetId: filterSet.id,
@@ -108,7 +110,7 @@ export function buildCalendarFilterMaterializationPlan(
 	const requirements = collectMaterializationRequirements(scopeFilterSet, options.keyMappings ?? []);
 	const fieldChanges = buildFieldChangesFromRequirements(draft, requirements);
 	const nextDraft = applyCalendarFilterFieldChanges(draft, fieldChanges);
-	const matchesFilterAfterSupportedChanges = matchesFilter(scopeFilterSet, nextDraft, options);
+	const matchesFilterAfterSupportedChanges = !hasProjectSerialScopeCondition && matchesFilter(scopeFilterSet, nextDraft, options);
 
 	let outcome: CalendarFilterMaterializationPlan['outcome'] = 'unsupportedOnly';
 	if (fieldChanges.length > 0 && requirements.unsupportedConditions.length === 0 && matchesFilterAfterSupportedChanges) {
@@ -128,6 +130,11 @@ export function buildCalendarFilterMaterializationPlan(
 		matchesFilterBefore,
 		matchesFilterAfterSupportedChanges,
 	};
+}
+
+function filterContainsProjectSerialScopeCondition(node: FilterNode): boolean {
+	if ('children' in node) return node.children.some(filterContainsProjectSerialScopeCondition);
+	return node.fieldType === 'projectSerialScope';
 }
 
 export function applyCalendarFilterFieldChanges(
@@ -405,7 +412,7 @@ function getFieldLabel(key: string, keyMappings: KeyMapping[]): string {
 }
 
 function isConditionUnsupportedByField(condition: FilterSetCondition): boolean {
-	if (condition.field === 'description' || condition.field === 'pinned' || condition.field === 'checkbox') {
+	if (condition.field === 'description' || condition.field === 'pinned' || condition.field === 'checkbox' || condition.fieldType === 'projectSerialScope') {
 		return true;
 	}
 	if (CALENDAR_OWNED_FILTER_KEYS.has(condition.field)) return true;

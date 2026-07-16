@@ -75,6 +75,7 @@ export function createTableValueResolver(
 	const displayValues = new Map<string, string>();
 	const sortValues = new Map<string, TableCachedSortValue>();
 	const groupValues = new Map<string, TableCachedGroupValue>();
+	const projectSerialDisplays = new Map<string, ProjectSerialDisplay | null>();
 	const stats: TableValueCacheStats = {
 		rawHits: 0,
 		rawMisses: 0,
@@ -97,7 +98,7 @@ export function createTableValueResolver(
 			}
 			stats.rawMisses++;
 			const value = key === PROJECT_SERIAL_TABLE_FIELD_KEY
-				? options.getProjectSerialDisplay?.(task.operonId, task)?.label ?? ''
+				? resolveProjectSerialDisplay(task)?.label ?? ''
 				: progressLookup.resolveRawValue(task, key) ?? getTableTaskRawValue(
 					task,
 					key,
@@ -135,7 +136,12 @@ export function createTableValueResolver(
 				return cached ?? null;
 			}
 			stats.sortMisses++;
-			const value = resolveCachedSortValue(resolver.getRawValue(task, key), kind, priorityRank);
+			const projectSerial = key === PROJECT_SERIAL_TABLE_FIELD_KEY
+				? resolveProjectSerialDisplay(task)
+				: null;
+			const value = projectSerial && Number.isFinite(projectSerial.number)
+				? projectSerial.number
+				: resolveCachedSortValue(resolver.getRawValue(task, key), kind, priorityRank);
 			sortValues.set(cacheKey, value);
 			return value;
 		},
@@ -147,7 +153,12 @@ export function createTableValueResolver(
 				return cached;
 			}
 			stats.groupMisses++;
-			const rawValue = resolver.getRawValue(task, groupBy).trim();
+			const projectSerial = groupBy === PROJECT_SERIAL_TABLE_FIELD_KEY
+				? resolveProjectSerialDisplay(task)
+				: null;
+			const rawValue = projectSerial
+				? projectSerial.scopePrefix.trim()
+				: resolver.getRawValue(task, groupBy).trim();
 			const isNoValue = rawValue.length === 0;
 			const valueKey = isNoValue
 				? TABLE_NO_GROUP_VALUE_KEY
@@ -159,7 +170,11 @@ export function createTableValueResolver(
 				isNoValue,
 				valueKey,
 				groupKey: `${groupBy}:${valueKey}`,
-				label: isNoValue ? '' : resolver.getDisplayValue(task, groupBy) || rawValue,
+				label: isNoValue
+					? ''
+					: projectSerial
+						? rawValue
+						: resolver.getDisplayValue(task, groupBy) || rawValue,
 			};
 			groupValues.set(cacheKey, groupValue);
 			return groupValue;
@@ -168,6 +183,15 @@ export function createTableValueResolver(
 			return { ...stats };
 		},
 	};
+
+	function resolveProjectSerialDisplay(task: IndexedTask): ProjectSerialDisplay | null {
+		const cached = projectSerialDisplays.get(task.operonId);
+		if (cached !== undefined) return cached;
+		const display = options.getProjectSerialDisplay?.(task.operonId, task) ?? null;
+		projectSerialDisplays.set(task.operonId, display);
+		return display;
+	}
+
 	return resolver;
 }
 

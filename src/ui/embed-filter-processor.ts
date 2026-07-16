@@ -14,7 +14,7 @@
 import { App, MarkdownPostProcessorContext, Notice, setIcon } from 'obsidian';
 import { OperonIndexer } from '../indexer/indexer';
 import type { IndexedTask } from '../types/fields';
-import type { ProjectSerialDisplay } from '../core/project-serials';
+import { createProjectSerialScopeFilterResolver, type ProjectSerialDisplay } from '../core/project-serials';
 import { cloneFilterSet, FilterSet, FilterSortSpec, OperonSettings } from '../types/settings';
 import { Pipeline, resolveWorkflowStatus } from '../types/pipeline';
 import { PriorityDefinition } from '../types/priority';
@@ -367,12 +367,20 @@ export function renderFilterSurface(
     const allTasks = deps.indexer.getAllTasks();
     const priorities = deps.getPriorities();
     const pipelines = deps.getPipelines();
+    const filterEvaluationOptions = {
+        projectSerialScopes: deps.getSettings().projectSerialScopes,
+        projectSerialScopeTasks: allTasks,
+    };
     const subtaskSortContext = prepareTaskSortContext(
         subtaskSorts ?? [{ field: 'priority', order: 'asc' }],
         {
             priorities,
             pipelines,
             isTaskPinned: callbacks.isTaskPinned,
+            projectSerialScopeResolver: createProjectSerialScopeFilterResolver(
+                embedSettings.projectSerialScopes,
+                allTasks,
+            ),
         },
     );
     const taskRowOptions = {
@@ -412,6 +420,7 @@ export function renderFilterSurface(
                     priorities,
                     deps.pinnedCache,
                     pipelines,
+                    filterEvaluationOptions,
                 );
                 const list = container.createDiv('operon-embed-list');
                 if (dynamicRootTask) {
@@ -435,7 +444,7 @@ export function renderFilterSurface(
                 return;
             }
 
-            const grouped = groupFilterTasks(filterSet, dynamicRootTasks, priorities, deps.pinnedCache, pipelines);
+            const grouped = groupFilterTasks(filterSet, dynamicRootTasks, priorities, deps.pinnedCache, pipelines, filterEvaluationOptions);
             const list = container.createDiv('operon-embed-list');
             if (dynamicRootTask) {
                 renderDynamicRootTaskRow(list, dynamicRootTask, callbacks, instance, taskRowOptions);
@@ -460,8 +469,8 @@ export function renderFilterSurface(
             return;
         }
 
-        const baseGrouped = evaluateFilterSetGrouped(filterSet, allTasks, priorities, deps.pinnedCache, pipelines);
-        const baseRootTasks = filterTasksOnly(filterSet, allTasks, priorities, deps.pinnedCache);
+        const baseGrouped = evaluateFilterSetGrouped(filterSet, allTasks, priorities, deps.pinnedCache, pipelines, filterEvaluationOptions);
+        const baseRootTasks = filterTasksOnly(filterSet, allTasks, priorities, deps.pinnedCache, filterEvaluationOptions);
         const treeScopeTasks = getEmbedTreeScope(instance, filterSet, baseRootTasks, deps, includeSubtasksInSearch, embedShowOnlyOpenSubtasks);
         const searchInput = renderHeader(container, filterSet, deps, treeScopeTasks.length, instance, options);
 
@@ -472,6 +481,7 @@ export function renderFilterSurface(
                 priorities,
                 deps.pinnedCache,
                 pipelines,
+                filterEvaluationOptions,
             );
             if (tasks.length === 0) {
                 container.createDiv({ cls: 'operon-embed-empty', text: t('filters', 'noMatches') });
@@ -512,7 +522,7 @@ export function renderFilterSurface(
         restoreEmbedSearchFocus(searchInput, restoreSearchFocus, searchSelectionStart, searchSelectionEnd);
     } else {
         // Flat
-        const baseTasks = evaluateFilterSet(filterSet, allTasks, priorities, deps.pinnedCache, pipelines);
+        const baseTasks = evaluateFilterSet(filterSet, allTasks, priorities, deps.pinnedCache, pipelines, filterEvaluationOptions);
         const searchActive = isFilterSearchActive(instance.searchQuery);
         const treeScopeTasks = getEmbedTreeScope(instance, filterSet, baseTasks, deps, includeSubtasksInSearch, embedShowOnlyOpenSubtasks);
         const tasks = searchActive
@@ -522,6 +532,7 @@ export function renderFilterSurface(
                 priorities,
                 deps.pinnedCache,
                 pipelines,
+                filterEvaluationOptions,
             )
             : baseTasks;
 
@@ -577,14 +588,14 @@ function renderGroupedFilterTaskRows(
     deps: EmbedFilterDeps,
 ): void {
     for (const group of grouped.groups) {
-        const label = group.key || t('filterSets', 'groupEmpty');
+        const label = group.label || t('filterSets', 'groupEmpty');
         renderGroupHeader(list, label, group.count, deps, false);
 
         if (group.subgroups?.length) {
             for (const subgroup of group.subgroups) {
                 renderGroupHeader(
                     list,
-                    subgroup.key || t('filterSets', 'groupEmpty'),
+                    subgroup.label || t('filterSets', 'groupEmpty'),
                     subgroup.count,
                     deps,
                     true,

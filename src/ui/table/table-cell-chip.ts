@@ -5,7 +5,11 @@ import type { OperonSettings } from '../../types/settings';
 import type { TableColumn } from '../../types/table';
 import { resolveTaskDateTone, resolveTaskDateToneColor, type TaskDateTone } from '../../core/task-date-tone';
 import { normalizeTaskIconValue } from '../../core/task-icon-value';
+import { t } from '../../core/i18n';
 import { setAccessibleLabelWithoutTooltip } from '../accessibility-label';
+import { parseExternalLinkValue, type ExternalLinkValue } from '../field-pickers/links-utils';
+import { bindOperonHoverTooltip } from '../operon-hover-tooltip';
+import { getTaskSourceOpenModifierLabel, isTaskSourceOpenModifierClick } from '../task-source-open-modifier';
 import { resolveTableColumnCellAccent } from './table-column-color';
 import { PROJECT_SERIAL_TABLE_FIELD_KEY, getTableTaskField } from './table-field-catalog';
 import { resolveTableValueCellIcon } from './table-icon-only-cell';
@@ -22,6 +26,7 @@ export interface TableCellChipRenderOptions {
 	accentValue?: string;
 	locationResolver?: TableLocationCellResolver | null;
 	onLocationPreview?: (trigger: HTMLElement, visual: TableLocationCellVisual) => void;
+	onExternalLinkModifierActivate?: (trigger: HTMLElement, link: ExternalLinkValue) => void;
 }
 
 export interface TableCellChipGroupRenderOptions extends TableCellChipRenderOptions {
@@ -59,6 +64,11 @@ export function renderTableCellChipContent(
 	options: TableCellChipRenderOptions = {},
 ): void {
 	applyTableCellChipAccent(chip, key, value, options);
+	const externalLink = resolveTableExternalLink(key, value, options);
+	if (externalLink) {
+		renderTableExternalLinkChip(chip, externalLink, options.onExternalLinkModifierActivate!);
+		return;
+	}
 	const displayValue = formatTableDetailedDatetimeValue(key, value);
 	const locationVisual = resolveTableLocationCellVisual(key, value, options);
 	if (locationVisual) {
@@ -93,6 +103,49 @@ export function renderTableCellChipContent(
 		return;
 	}
 	renderTableTaskIconChipContent(chip, value);
+}
+
+function resolveTableExternalLink(
+	key: string,
+	value: string,
+	options: TableCellChipRenderOptions,
+): ExternalLinkValue | null {
+	if (key !== 'links' || !options.onExternalLinkModifierActivate) return null;
+	return parseExternalLinkValue(options.accentValue ?? value);
+}
+
+function renderTableExternalLinkChip(
+	chip: HTMLElement,
+	link: ExternalLinkValue,
+	onActivate: (trigger: HTMLElement, link: ExternalLinkValue) => void,
+): void {
+	chip.addClass('operon-table-external-link-chip');
+	chip.setText(link.displayValue);
+	bindOperonHoverTooltip(chip, {
+		title: link.displayValue,
+		content: `${link.url}\n${t('table', 'externalLinkWebViewerHint', {
+			modifier: getTaskSourceOpenModifierLabel(),
+		})}`,
+		taskColor: null,
+		preferredHorizontal: 'center',
+	});
+
+	chip.addEventListener('pointerdown', event => {
+		if (event.button !== 0 || !isTaskSourceOpenModifierClick(event)) return;
+		event.preventDefault();
+		event.stopPropagation();
+	});
+	chip.addEventListener('click', event => {
+		if (event.button !== 0 || event.detail !== 1 || !isTaskSourceOpenModifierClick(event)) return;
+		event.preventDefault();
+		event.stopPropagation();
+		onActivate(chip, link);
+	});
+	chip.addEventListener('dblclick', event => {
+		if (event.button !== 0 || !isTaskSourceOpenModifierClick(event)) return;
+		event.preventDefault();
+		event.stopPropagation();
+	});
 }
 
 export function formatTableDetailedDatetimeValue(key: string, value: string): string {

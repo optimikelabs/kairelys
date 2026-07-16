@@ -167,6 +167,7 @@ function renderGroupingRow(
 	renderDirectionToggle(controls, {
 		direction: options.orderValue,
 		label: t('table', 'groupOrder'),
+		fieldKey: options.fieldValue,
 		disabled: options.disabled === true || !options.fieldValue,
 		focusKey: options.focusOrderKey,
 		onToggle: () => options.onOrderChange(toggleSortDirection(options.orderValue)),
@@ -259,10 +260,11 @@ function renderSortRow(
 			},
 	});
 
-	renderDirectionToggle(row, {
-		direction: rule.direction,
-		label: t('table', 'sortBy'),
-		focusKey: `sort-direction-${index}`,
+			renderDirectionToggle(row, {
+				direction: rule.direction,
+				label: t('table', 'sortBy'),
+				fieldKey: rule.key,
+				focusKey: `sort-direction-${index}`,
 		onToggle: () => {
 			const nextRules = preset.sortRules.map((sortRule, ruleIndex) => ruleIndex === index
 				? { ...sortRule, direction: toggleSortDirection(rule.direction) }
@@ -350,12 +352,13 @@ function renderDirectionToggle(
 options: {
 		direction: TableSortDirection;
 		label: string;
+		fieldKey: string | null;
 		disabled?: boolean;
 		focusKey: string;
 		onToggle: () => void;
 	},
 ): void {
-	const directionLabel = getTableSortDirectionLabel(options.direction);
+	const directionLabel = getTableSortDirectionLabel(options.direction, options.fieldKey);
 	const button = container.createEl('button', {
 		cls: 'operon-table-group-sort-icon-button operon-table-group-sort-direction-toggle',
 		attr: { type: 'button' },
@@ -401,6 +404,11 @@ function toggleSortDirection(direction: TableSortDirection): TableSortDirection 
 	return direction === 'asc' ? 'desc' : 'asc';
 }
 
-function getTableSortDirectionLabel(direction: TableSortDirection): string {
+function getTableSortDirectionLabel(direction: TableSortDirection, fieldKey: string | null): string {
+	if (fieldKey === 'status') {
+		return direction === 'desc'
+			? t('table', 'sortDirectionWorkflowReverse')
+			: t('table', 'sortDirectionWorkflow');
+	}
 	return direction === 'desc' ? t('table', 'sortDirectionZA') : t('table', 'sortDirectionAZ');
 }

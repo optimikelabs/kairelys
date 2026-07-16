@@ -25,6 +25,8 @@ export interface FileScanResult {
 	yamlTask: YamlTaskData | null;
 	/** File modification time for incremental detection */
 	mtime: number;
+	/** File size captured from the same source snapshot. */
+	sizeBytes: number;
 }
 
 export interface PlainCheckboxScanResult {
@@ -76,6 +78,7 @@ export async function scanFileWithMappings(
 		plainCheckboxProgress: bodyScan.plainCheckboxProgress,
 		yamlTask,
 		mtime: file.stat.mtime,
+		sizeBytes: file.stat.size,
 	};
 }
 

@@ -130,6 +130,7 @@ import { getOwnerDocument, getOwnerWindow } from '../../core/dom-compat';
 import type { ContextualMenuActionHandler } from '../../core/contextual-menu-engine';
 import { setAccessibleLabelWithoutTooltip } from '../accessibility-label';
 import { resolveSurfaceFloatingHostOptions, snapshotFloatingRectAnchor } from '../field-pickers/common';
+import { openWebViewerNewTab } from '../external-link-actions';
 import { bindOperonHoverTooltip, cleanupOperonHoverTooltips } from '../operon-hover-tooltip';
 import { FilterSetModal } from '../filter-set-modal';
 import { bindTableTaskContextualHoverMenu, renderTableTaskIconButton } from './table-task-icon-button';
@@ -305,7 +306,6 @@ export class OperonTableView extends FileView {
 		searchQuery: '',
 		scrollTop: 0,
 		scrollLeft: 0,
-		collapsedGroupKeys: [],
 	};
 	private renderFrame: number | null = null;
 	private visibleRowsFrame: number | null = null;
@@ -330,7 +330,6 @@ export class OperonTableView extends FileView {
 	private pendingMobileFullRender = false;
 	private mobileViewportCleanup: (() => void) | null = null;
 	private mobileScrollGestureUntil = 0;
-	private lastGroupStateKey: string | null = null;
 	private isSearchComposing = false;
 	private searchScope: TaskSearchBoxScopeState = cloneTableSearchBoxScopeState(TABLE_SEARCH_BOX_DEFAULT_SCOPE);
 	private parentSearchSelection: TableParentSearchSelection | null = null;
@@ -518,7 +517,6 @@ export class OperonTableView extends FileView {
 		this.bodyCanvasEl = null;
 		this.currentRenderState = null;
 		this.lastRenderedRangeKey = null;
-		this.lastGroupStateKey = null;
 		cleanupOperonHoverTooltips(this.contentEl);
 		this.contentEl.empty();
 	}
@@ -760,6 +758,7 @@ export class OperonTableView extends FileView {
 			tasks,
 			priorities: settings.priorities,
 			pinnedCache: this.getPinnedCache(),
+			projectSerialScopes: settings.projectSerialScopes,
 			settings,
 			searchQuery: searchContext.activeSearchQuery,
 			searchMatcher,
@@ -779,7 +778,6 @@ export class OperonTableView extends FileView {
 				summariesEvaluated: !shouldDeferSummaries,
 			};
 		}
-		this.resetCollapsedGroupsWhenGroupChanges(result.preset);
 		const rowHeight = resolveTableRowHeight(result.preset);
 		const columnGeometry = buildTableColumnGeometry(columns);
 		const tableWidthPx = columnGeometry.tableWidthPx;
@@ -788,10 +786,10 @@ export class OperonTableView extends FileView {
 		const items = buildTableRenderItems(
 			result.rows,
 			result.groups,
-			this.state.collapsedGroupKeys,
+			result.preset.collapsedGroupKeys,
 			hasSummaryRow,
 		);
-		const ordinalItems = this.state.collapsedGroupKeys.length === 0
+		const ordinalItems = result.preset.collapsedGroupKeys.length === 0
 			? items
 			: buildTableRenderItems(result.rows, result.groups, [], hasSummaryRow);
 		this.currentRenderState = {
@@ -1402,6 +1400,11 @@ export class OperonTableView extends FileView {
 			draft,
 			settings.keyMappings,
 			() => undefined,
+			undefined,
+			{
+				getSettings: () => this.getSettings(),
+				getProjectSerialScopeTasks: () => this.indexer.getAllTasks(),
+			},
 		);
 		editor.renderInlineConditionEditor(popover, {
 			onCancel: close,
@@ -1413,6 +1416,10 @@ export class OperonTableView extends FileView {
 					this.indexer.getAllTasks(),
 					this.getSettings().priorities,
 					this.getPinnedCache(),
+					{
+						projectSerialScopes: this.getSettings().projectSerialScopes,
+						projectSerialScopeTasks: this.indexer.getAllTasks(),
+					},
 				).length,
 				saveTooltip: sourceFilterSetId
 					? this.buildFilterUsageTooltip(sourceFilterSetId)
@@ -1669,7 +1676,7 @@ export class OperonTableView extends FileView {
 			renderState.preset.groupOrder,
 			renderState.preset.subgroupBy ?? '',
 			renderState.preset.subgroupOrder,
-			this.state.collapsedGroupKeys.join('\u0000'),
+			renderState.preset.collapsedGroupKeys.join('\u0000'),
 		].join(':');
 		if (rangeKey === this.lastRenderedRangeKey) return;
 		if (!force && this.shouldDeferMobileVisibleRowsRender()) {
@@ -2337,6 +2344,11 @@ export class OperonTableView extends FileView {
 			workflowStatusIdentityIndex: renderState.valueResolver.workflowStatusIdentityIndex,
 			locationResolver: renderState.locationResolver,
 			onLocationPreview: (trigger, visual) => this.openLocationMapPreview(trigger, task, visual, renderState),
+			onExternalLinkModifierActivate: (_trigger, link) => {
+				if (!openWebViewerNewTab(this.app, link.url)) {
+					new Notice(t('notifications', 'webViewerUnavailable'));
+				}
+			},
 		});
 	}
 
@@ -3013,6 +3025,7 @@ export class OperonTableView extends FileView {
 			tasks,
 			priorities: settings.priorities,
 			pinnedCache: this.getPinnedCache(),
+			projectSerialScopes: settings.projectSerialScopes,
 		});
 		const recentModifiedCutoff = getTaskSearchBoxRecentModifiedCutoff(settings);
 		const scopedTasks = filterScopedTasks.filter(task => matchesTaskSearchBoxScope(task, this.searchScope, { recentModifiedCutoff }));
@@ -3082,6 +3095,7 @@ export class OperonTableView extends FileView {
 			tasks: input.tasks,
 			priorities: input.settings.priorities,
 			pinnedCache: this.getPinnedCache(),
+			projectSerialScopes: input.settings.projectSerialScopes,
 			settings: input.settings,
 			precomputedScopedTasks: input.searchContext.scopedTasks,
 			precomputedScopeFilteredTasks: input.searchContext.scopeFilteredTasks,
@@ -3170,7 +3184,6 @@ export class OperonTableView extends FileView {
 			presetId,
 			scrollTop: 0,
 			scrollLeft: 0,
-			collapsedGroupKeys: [],
 		});
 		if (areTableLeafStatesEqual(this.state, nextState)) return;
 		this.state = nextState;
@@ -3413,20 +3426,6 @@ export class OperonTableView extends FileView {
 		}
 	}
 
-	private resetCollapsedGroupsWhenGroupChanges(preset: TablePreset): void {
-		const groupStateKey = `${preset.id}:${preset.groupBy ?? ''}:${preset.groupOrder}:${preset.subgroupBy ?? ''}:${preset.subgroupOrder}`;
-		if (this.lastGroupStateKey !== null
-			&& this.lastGroupStateKey !== groupStateKey
-			&& this.state.collapsedGroupKeys.length > 0) {
-			this.state = this.normalizeState({
-				...this.ensureState(),
-				collapsedGroupKeys: [],
-			});
-			this.scheduleLeafStatePersistence();
-		}
-		this.lastGroupStateKey = groupStateKey;
-	}
-
 	private buildHeaderPresetPatch(updatedPreset: TablePreset, scope: TableHeaderPresetPatchScope): TablePresetPatch {
 		if (scope === 'columns') {
 			return {
@@ -3463,44 +3462,44 @@ export class OperonTableView extends FileView {
 	private savePresetGroupSortDraft(updatedPreset: TablePreset, scope: TableGroupSortPresetPatchScope): void {
 		const currentPreset = this.getCurrentEditingPreset();
 		const groupingChanged = (updatedPreset.groupBy ?? null) !== (currentPreset.groupBy ?? null)
-			|| updatedPreset.groupOrder !== currentPreset.groupOrder
-			|| (updatedPreset.subgroupBy ?? null) !== (currentPreset.subgroupBy ?? null)
-			|| updatedPreset.subgroupOrder !== currentPreset.subgroupOrder;
+			|| (updatedPreset.subgroupBy ?? null) !== (currentPreset.subgroupBy ?? null);
 		if (scope === 'grouping' && groupingChanged) {
-			this.state = this.normalizeState({
-				...this.ensureState(),
-				scrollTop: 0,
-				scrollLeft: 0,
-				collapsedGroupKeys: [],
-			});
 			if (this.horizontalScrollerEl) {
 				this.horizontalScrollerEl.scrollLeft = 0;
 			}
 			if (this.bodyScrollerEl) {
 				this.bodyScrollerEl.scrollTop = 0;
 			}
-			this.scheduleLeafStatePersistence();
 		}
-		this.savePresetPatch(buildTableGroupSortPresetPatch(updatedPreset, scope), 'Operon: failed to save table group sort preset patch');
+		this.savePresetPatch(
+			buildTableGroupSortPresetPatch(updatedPreset, scope, { clearCollapsedGroupKeys: groupingChanged }),
+			'Operon: failed to save table group sort preset patch',
+		);
 	}
 
 	private toggleGroupCollapsed(groupKey: string): void {
 		this.closeActivePicker();
 		this.finishMobileInlineEdit(true);
-		const current = this.ensureState();
-		const collapsed = new Set(current.collapsedGroupKeys);
+		const currentPreset = this.getCurrentEditingPreset();
+		if (this.currentRenderState
+			&& (this.currentRenderState.preset.groupBy !== currentPreset.groupBy
+				|| this.currentRenderState.preset.subgroupBy !== currentPreset.subgroupBy)) {
+			this.markDirty();
+			return;
+		}
+		const collapsed = new Set(currentPreset.collapsedGroupKeys);
 		if (collapsed.has(groupKey)) {
 			collapsed.delete(groupKey);
 		} else {
 			collapsed.add(groupKey);
 		}
-		const nextCollapsedGroupKeys = Array.from(collapsed);
-		this.state = this.normalizeState({
-			...current,
+		const nextCollapsedGroupKeys = Array.from(collapsed).sort();
+		const nextPreset: TablePreset = {
+			...currentPreset,
 			collapsedGroupKeys: nextCollapsedGroupKeys,
-		});
+		};
 		if (this.currentRenderState) {
-			const hasSummaryRow = hasVisibleTableSummaryRule(this.currentRenderState.preset.summaries, this.currentRenderState.taskColumns);
+			const hasSummaryRow = hasVisibleTableSummaryRule(nextPreset.summaries, this.currentRenderState.taskColumns);
 			const items = buildTableRenderItems(
 				this.currentRenderState.rows,
 				this.currentRenderState.groups,
@@ -3512,6 +3511,7 @@ export class OperonTableView extends FileView {
 				: buildTableRenderItems(this.currentRenderState.rows, this.currentRenderState.groups, [], hasSummaryRow);
 			this.currentRenderState = {
 				...this.currentRenderState,
+				preset: nextPreset,
 				items,
 				taskOrdinals: buildTableTaskOrdinalMap(ordinalItems),
 			};
@@ -3522,11 +3522,14 @@ export class OperonTableView extends FileView {
 		);
 		this.lastRenderedRangeKey = null;
 		this.renderVisibleRows(true);
-		this.scheduleLeafStatePersistence();
+		this.savePresetPatch({
+			id: nextPreset.id,
+			collapsedGroupKeys: nextCollapsedGroupKeys,
+		}, 'Operon: failed to save table group collapse state');
 	}
 
 	private isGroupCollapsed(groupKey: string): boolean {
-		return this.state.collapsedGroupKeys.includes(groupKey);
+		return this.currentRenderState?.preset.collapsedGroupKeys.includes(groupKey) ?? false;
 	}
 
 	private restoreSearchFocus(): void {
@@ -3710,9 +3713,6 @@ export class OperonTableView extends FileView {
 			scrollLeft: typeof raw?.scrollLeft === 'number' && Number.isFinite(raw.scrollLeft)
 				? Math.max(0, raw.scrollLeft)
 				: 0,
-			collapsedGroupKeys: Array.isArray(raw?.collapsedGroupKeys)
-				? raw.collapsedGroupKeys.filter((key): key is string => typeof key === 'string')
-				: [],
 		};
 	}
 
@@ -3746,6 +3746,5 @@ function areTableLeafStatesEqual(left: TableLeafState, right: TableLeafState): b
 	return left.presetId === right.presetId
 		&& left.searchQuery === right.searchQuery
 		&& left.scrollTop === right.scrollTop
-		&& left.scrollLeft === right.scrollLeft
-		&& left.collapsedGroupKeys.join('\u0000') === right.collapsedGroupKeys.join('\u0000');
+		&& left.scrollLeft === right.scrollLeft;
 }

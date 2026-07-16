@@ -11,3 +11,7 @@ export function isTaskSourceOpenModifierClick(
 ): boolean {
 	return isMacOS ? event.metaKey : event.ctrlKey;
 }
+
+export function getTaskSourceOpenModifierLabel(isMacOS = Platform.isMacOS): string {
+	return isMacOS ? '⌘' : 'Ctrl';
+}

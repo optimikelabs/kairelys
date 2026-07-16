@@ -13,6 +13,36 @@ const RELEASE_NOTE_LIMIT = 5;
 
 export const OPERON_RELEASE_NOTES: OperonReleaseNote[] = [
 	{
+		version: '2.3.0',
+		date: '2026-07-16',
+		title: 'Faster Index, Smoother Operon',
+		showOnUpdate: true,
+		body: `
+This release rebuilds Operon's index system around a faster, optimized V8 structure, improving startup speed, reducing routine Sync writes, and providing safer index recovery by rebuilding from Markdown when needed.
+
+### New
+- Added **Index diagnostics** to the Command Palette, providing privacy-safe V8 health, validation, Markdown rebuild and repair, bounded cleanup, and legacy-cache retirement controls without exposing task content or source paths.
+- Added **Project Serial Group** to saved Filter conditions and Table grouping, subgrouping, and sorting. Searchable multi-select groups support dynamic prefixes such as \`Docs\`; tasks group under shared prefixes such as \`GIT\` or \`DOCS\`, while sorting preserves numeric serial order within each group.
+
+### Improved
+- Improved Operon's index system with verified V8 sharded snapshots for faster startup, lower routine Sync writes, and safe Markdown-based recovery.
+- Improved detailed **Operon Table links** so named Markdown links show their readable label, reveal their full URL and Cmd/Ctrl+Click shortcut on hover, and open in a new Obsidian Web Viewer tab without changing normal editing.
+- Improved **Table grouping and status sorting**: collapse state updates immediately and persists with shared presets across Table tabs, embeds, and synced \`.table\` files without changing on A–Z or Z–A sorts; status groups follow the configured workflow order for A–Z and reverse it for Z–A.
+- Improved Operon's bundled localization representation so all nine languages remain available offline while reducing the production plugin bundle by more than 500 KB.
+
+### Fixed
+- Fixed Kanban hover tooltips remaining visible after the board refreshed or its tab closed.
+
+### Updated Docs
+
+- [[DOCS-046 Plugin data and state files|Plugin data and state files]]
+- [[DOCS-112 Table cells display and behavior|Table cells: display and behavior]]
+- [[DOCS-107 Table grouping and sorting|Table grouping and sorting]]
+- [[DOCS-097 Project serials|Project serials]]
+- [[DOCS-073 Filter conditions and operators|Filter conditions and operators]]
+`.trim(),
+	},
+	{
 		version: '2.2.1',
 		date: '2026-07-14',
 		title: 'Smaller Bundle, Same Operon',

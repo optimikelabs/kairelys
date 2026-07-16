@@ -122,6 +122,7 @@ export interface TablePreset {
 	groupOrder: TableSortDirection;
 	subgroupBy: string | null;
 	subgroupOrder: TableSortDirection;
+	collapsedGroupKeys: string[];
 	summaries: TableSummaryRule[];
 	display: TableDisplayOptions;
 	search: TablePresetSearchState;
@@ -137,6 +138,7 @@ export interface TablePresetPatch {
 	groupOrder?: TableSortDirection;
 	subgroupBy?: string | null;
 	subgroupOrder?: TableSortDirection;
+	collapsedGroupKeys?: string[];
 	summaries?: TableSummaryRule[];
 	display?: TableDisplayOptions;
 	search?: TablePresetSearchState;
@@ -147,7 +149,6 @@ export interface TableLeafState {
 	searchQuery: string;
 	scrollTop: number;
 	scrollLeft: number;
-	collapsedGroupKeys: string[];
 }
 
 export interface TablePresetNormalizationOptions {
@@ -289,6 +290,7 @@ export function createDefaultTablePreset(): TablePreset {
 		groupOrder: 'asc',
 		subgroupBy: null,
 		subgroupOrder: 'asc',
+		collapsedGroupKeys: [],
 		summaries: [],
 		display: {
 			showSource: true,
@@ -322,6 +324,7 @@ export function cloneTablePreset(preset: TablePreset): TablePreset {
 		...preset,
 		columns: preset.columns.map(column => ({ ...column })),
 		sortRules: preset.sortRules.map(rule => ({ ...rule })),
+		collapsedGroupKeys: [...preset.collapsedGroupKeys],
 		summaries: preset.summaries.map(summary => ({ ...summary })),
 		display: { ...preset.display },
 		search: cloneTablePresetSearchState(preset.search),
@@ -383,10 +386,21 @@ export function normalizeTablePreset(
 		groupOrder: groupBy ? normalizeTableSortDirection(src.groupOrder) : 'asc',
 		subgroupBy,
 		subgroupOrder: subgroupBy ? normalizeTableSortDirection(src.subgroupOrder) : 'asc',
+		collapsedGroupKeys: normalizeTableCollapsedGroupKeys(src.collapsedGroupKeys),
 		summaries: normalizeTableSummaries(src.summaries),
 		display: normalizeTableDisplayOptions(src.display),
 		search: normalizeTablePresetSearchState(src.search),
 	};
+}
+
+export function normalizeTableCollapsedGroupKeys(value: unknown): string[] {
+	if (!Array.isArray(value)) return [];
+	return Array.from(new Set(
+		value
+			.filter((key): key is string => typeof key === 'string')
+			.map(key => key.trim())
+			.filter(Boolean),
+	)).sort();
 }
 
 export function normalizeTablePresets(

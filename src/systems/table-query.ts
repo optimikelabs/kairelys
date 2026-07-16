@@ -2,9 +2,14 @@ import { filterTasksForCalendar } from './calendar-filter-materialization';
 import type { PinnedCache } from '../storage/pinned-cache';
 import type { IndexedTask } from '../types/fields';
 import type { TablePreset, TableSortDirection, TableSortRule, TableSummaryRule } from '../types/table';
-import type { FilterSet, OperonSettings } from '../types/settings';
+import type { FilterSet, OperonSettings, ProjectSerialScope } from '../types/settings';
 import { parseListValue } from '../core/parser';
 import { buildPriorityRankMap } from '../core/priority-rank';
+import {
+	buildWorkflowStatusOrderIndex,
+	compareWorkflowStatusValues,
+	type WorkflowStatusOrderIndex,
+} from '../core/workflow-status-order';
 import {
 	getTableTaskField,
 	normalizeTableTaskFieldKey,
@@ -100,6 +105,7 @@ export function queryTableRows(options: {
 	tasks: IndexedTask[];
 	priorities: { label: string; color?: string }[];
 	pinnedCache?: PinnedCache | null;
+	projectSerialScopes?: readonly ProjectSerialScope[];
 	settings?: TableQuerySettings;
 	searchQuery?: string | null;
 	searchMatcher?: (task: IndexedTask, normalizedQuery: string) => boolean;
@@ -116,7 +122,10 @@ export function queryTableRows(options: {
 	const { preset, filterSet, tasks, priorities, pinnedCache } = options;
 	const scopedTasks = options.precomputedScopedTasks
 		? [...options.precomputedScopedTasks]
-		: filterTasksForCalendar(filterSet, tasks, priorities, pinnedCache ?? null);
+		: filterTasksForCalendar(filterSet, tasks, priorities, pinnedCache ?? null, {
+			projectSerialScopes: options.projectSerialScopes,
+			projectSerialScopeTasks: tasks,
+		});
 	const scopedAt = enginePerfNow();
 	const allowedTaskIds = options.taskIdFilter ? new Set(options.taskIdFilter) : null;
 	const scopeFilteredTasks = options.precomputedScopeFilteredTasks
@@ -134,6 +143,7 @@ export function queryTableRows(options: {
 	const searchedAt = enginePerfNow();
 	const valueResolver = createTableValueResolver(tasks, options.settings, options.valueResolverOptions);
 	const priorityRank = buildPriorityRankMap(priorities);
+	const workflowStatusOrder = buildWorkflowStatusOrderIndex(options.settings?.pipelines ?? []);
 	const rows = options.precomputedRows
 		? [...options.precomputedRows]
 		: sortTableRows(
@@ -141,6 +151,7 @@ export function queryTableRows(options: {
 			preset.sortRules,
 			valueResolver,
 			priorityRank,
+			workflowStatusOrder,
 			options.settings,
 		);
 	const sortedAt = enginePerfNow();
@@ -168,6 +179,7 @@ export function queryTableRows(options: {
 			},
 			valueResolver,
 			priorityRank,
+			workflowStatusOrder,
 			options.settings,
 		)
 		: [];
@@ -268,6 +280,7 @@ function buildTableGroups(
 	},
 	valueResolver: TableValueResolver,
 	priorityRank: ReadonlyMap<string, number>,
+	workflowStatusOrder: WorkflowStatusOrderIndex,
 	settings: TableQuerySettings | undefined,
 ): TableQueryGroup[] {
 	const groupsByValue = new Map<string, TableQueryGroup>();
@@ -328,14 +341,14 @@ function buildTableGroups(
 		}
 	}
 	const groups = Array.from(groupsByValue.values()).sort((left, right) =>
-		compareTableGroups(left, right, groupOrder)
+		compareTableGroups(left, right, groupOrder, workflowStatusOrder)
 	);
 	if (subgroupBy) {
 		for (const group of groups) {
 			const subgroups = subgroupsByGroupValue.get(group.key);
 			if (!subgroups) continue;
 			group.subgroups = Array.from(subgroups.values()).sort((left, right) =>
-				compareTableGroups(left, right, subgroupOrder)
+				compareTableGroups(left, right, subgroupOrder, workflowStatusOrder)
 			);
 		}
 	}
@@ -413,10 +426,17 @@ function compareTableGroups(
 	left: TableQueryBucket,
 	right: TableQueryBucket,
 	direction: TableSortDirection,
+	workflowStatusOrder: WorkflowStatusOrderIndex,
 ): number {
 	if (left.isNoValue || right.isNoValue) {
 		if (left.isNoValue && right.isNoValue) return 0;
 		return left.isNoValue ? 1 : -1;
+	}
+	if (left.fieldKey === 'status' && right.fieldKey === 'status') {
+		return compareWorkflowStatusValues(left.value, right.value, workflowStatusOrder, {
+			direction,
+			empty: 'last',
+		});
 	}
 	const leftValue = left.sortValue ?? left.label;
 	const rightValue = right.sortValue ?? right.label;
@@ -435,6 +455,7 @@ function sortTableRows(
 	sortRules: readonly TableSortRule[],
 	valueResolver: TableValueResolver,
 	priorityRank: ReadonlyMap<string, number>,
+	workflowStatusOrder: WorkflowStatusOrderIndex,
 	settings: TableQuerySettings | undefined,
 ): IndexedTask[] {
 	const rows = [...tasks];
@@ -447,6 +468,7 @@ function sortTableRows(
 				rule,
 				priorityRank,
 				valueResolver,
+				workflowStatusOrder,
 				settings,
 			);
 			if (comparison !== 0) return comparison;
@@ -461,8 +483,17 @@ function compareTableSortRule(
 	rule: TableSortRule,
 	priorityRank: ReadonlyMap<string, number>,
 	valueResolver: TableValueResolver,
+	workflowStatusOrder: WorkflowStatusOrderIndex,
 	settings: TableQuerySettings | undefined,
 ): number {
+	if (rule.key === 'status') {
+		return compareWorkflowStatusValues(
+			valueResolver.getRawValue(left, 'status'),
+			valueResolver.getRawValue(right, 'status'),
+			workflowStatusOrder,
+			{ direction: rule.direction, empty: rule.empty },
+		);
+	}
 	const sortKind = getTableSortValueKind(rule.key, settings);
 	const leftValue = valueResolver.getSortValue(left, rule.key, sortKind, priorityRank);
 	const rightValue = valueResolver.getSortValue(right, rule.key, sortKind, priorityRank);

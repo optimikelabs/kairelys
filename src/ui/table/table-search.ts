@@ -218,6 +218,7 @@ export function buildTableNoSearchResultCacheKey(
 			groupOrder: preset.groupOrder,
 			subgroupBy: preset.subgroupBy,
 			subgroupOrder: preset.subgroupOrder,
+			collapsedGroupKeys: preset.collapsedGroupKeys,
 		})}`,
 		`summaries=${JSON.stringify(preset.summaries)}`,
 		`display=${JSON.stringify(preset.display)}`,

@@ -12,18 +12,7 @@
  * - Fallback to English if locale not found
  */
 
-import en from '../../i18n/locales/en.json';
-import tr from '../../i18n/locales/tr.json';
-import de from '../../i18n/locales/de.json';
-import fr from '../../i18n/locales/fr.json';
-import es from '../../i18n/locales/es.json';
-import zhCN from '../../i18n/locales/zh-CN.json';
-import zhTW from '../../i18n/locales/zh-TW.json';
-import ja from '../../i18n/locales/ja.json';
-import ru from '../../i18n/locales/ru.json';
-
-/** All available locale data, keyed by language code */
-const LOCALES: Record<string, LocaleData> = { en, tr, de, fr, es, 'zh-CN': zhCN, 'zh-TW': zhTW, ja, ru };
+import denseLocales from '../generated/dense-locales.json';
 
 /** Supported language codes */
 export type LangCode = 'en' | 'tr' | 'de' | 'fr' | 'es' | 'zh-CN' | 'zh-TW' | 'ja' | 'ru';
@@ -72,9 +61,22 @@ export interface LocaleData {
 	table: Record<string, string>;
 }
 
+interface DenseLocalePack {
+	schemaVersion: number;
+	languageOrder: LangCode[];
+	keyCount: number;
+	keyIndex: Partial<Record<keyof LocaleData, Record<string, number>>>;
+	locales: Record<LangCode, string[]>;
+}
+
+const DENSE_LOCALES = denseLocales as unknown as DenseLocalePack;
+const LANGUAGE_ORDER: readonly LangCode[] = DENSE_LOCALES.languageOrder;
+const LOCALE_KEY_INDEX = DENSE_LOCALES.keyIndex;
+const LOCALES = DENSE_LOCALES.locales;
+
 /** Active language state */
 let currentLang: LangCode = 'en';
-let currentLocale: LocaleData = en;
+let currentLocale: readonly string[] = LOCALES.en;
 
 /**
  * Initialize i18n.
@@ -98,7 +100,7 @@ export function initI18n(obsidianLocale?: string, languageOverride?: string): vo
 		currentLocale = LOCALES[lang];
 	} else {
 		currentLang = 'en';
-		currentLocale = en;
+		currentLocale = LOCALES.en;
 	}
 }
 
@@ -117,13 +119,12 @@ export function t(
 	vars?: Record<string, string>,
 ): string {
 	// Try current locale first
-	const cat = currentLocale[category] as Record<string, string> | undefined;
-	let str = cat?.[key];
+	const index = LOCALE_KEY_INDEX[category]?.[key];
+	let str = index === undefined ? undefined : currentLocale[index];
 
 	// Fallback to English
 	if (!str && currentLang !== 'en') {
-		const enCat = (en as LocaleData)[category] as Record<string, string> | undefined;
-		str = enCat?.[key];
+		str = index === undefined ? undefined : LOCALES.en[index];
 	}
 
 	// Final fallback: return the key
@@ -141,8 +142,10 @@ export function t(
 
 /** Get all available translations for a key across bundled locale files. */
 export function getTranslations(category: keyof LocaleData, key: string): string[] {
-	const values = Object.values(LOCALES)
-		.map(locale => locale[category]?.[key])
+	const index = LOCALE_KEY_INDEX[category]?.[key];
+	if (index === undefined) return [];
+	const values = LANGUAGE_ORDER
+		.map(language => LOCALES[language][index])
 		.filter((value): value is string => typeof value === 'string' && value.length > 0);
 	return [...new Set(values)];
 }

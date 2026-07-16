@@ -5,7 +5,7 @@ import { IndexedTask } from '../types/fields';
 import { composeStatusValue, Pipeline, StatusDefinition } from '../types/pipeline';
 import { PinnedCache } from '../storage/pinned-cache';
 import { KanbanPreset, KanbanSortField, KanbanSortRule, KanbanSwimlaneBy } from '../types/kanban';
-import { FilterSet, KeyMapping } from '../types/settings';
+import { FilterSet, KeyMapping, ProjectSerialScope } from '../types/settings';
 import { t } from '../core/i18n';
 import { buildPriorityRankMap, normalizePriorityValue } from '../core/priority-rank';
 import { getManagedCustomFieldOptionMapping, normalizeManagedFieldValue } from '../core/managed-task-fields';
@@ -64,13 +64,17 @@ export function queryKanbanBoard(options: {
 	pinnedCache?: PinnedCache | null;
 	manualOrder?: Record<string, string[]>;
 	keyMappings?: readonly KeyMapping[];
+	projectSerialScopes?: readonly ProjectSerialScope[];
 }): KanbanBoardData {
 	const { preset, pipeline, filterSet, priorities, pinnedCache } = options;
 	const keyMappings = options.keyMappings ?? [];
 	const normalizedSearchQuery = (options.searchQuery ?? '').trim().toLocaleLowerCase();
 	const allowedTaskIds = options.taskIdFilter ? new Set(options.taskIdFilter) : null;
 	const searchMatcher = normalizedSearchQuery ? buildTaskSearchMatcher(options.tasks, keyMappings) : null;
-	const scopedTasks = filterTasksForCalendar(filterSet, options.tasks, priorities, pinnedCache ?? null);
+	const scopedTasks = filterTasksForCalendar(filterSet, options.tasks, priorities, pinnedCache ?? null, {
+		projectSerialScopes: options.projectSerialScopes,
+		projectSerialScopeTasks: options.tasks,
+	});
 	const identityIndex = buildWorkflowStatusIdentityIndex(
 		options.pipelines ?? (pipeline ? [pipeline] : []),
 	);

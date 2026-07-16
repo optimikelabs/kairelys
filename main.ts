@@ -31,6 +31,17 @@ import {
 	serializeOperonTableFile,
 } from './src/storage/table-file';
 import { OperonIndexer, type IndexedTaskDelta } from './src/indexer/indexer';
+import {
+	IndexV8DiagnosticsModal,
+	type IndexV8DiagnosticsActionResult,
+	type IndexV8DiagnosticsSummary,
+} from './src/ui/index-v8-diagnostics-modal';
+import { IndexV8Store } from './src/indexer/persistence/index-v8-store';
+import { IndexV8PersistenceCoordinator } from './src/indexer/persistence/index-v8-shadow-writer';
+import {
+	startIndexV8CleanupMaintenance,
+	type IndexV8MaintenanceHandle,
+} from './src/indexer/persistence/index-v8-maintenance-scheduler';
 import type { ProjectSerialDisplay } from './src/core/project-serials';
 import { scanFileWithMappings } from './src/indexer/file-scanner';
 import { TaskWriter } from './src/core/task-writer';
@@ -756,6 +767,8 @@ export default class OperonPlugin extends Plugin {
 	settings!: OperonSettings;
 	private keyMappingSignature = '';
 	private workflowStatusSemanticsSignature = '';
+	private indexV8ManifestFingerprint: string | null = null;
+	private indexV8ManifestCheckActive = false;
 	private settingsReindexTimer: WindowTimeoutHandle | null = null;
 	private pendingSettingsReindexReasons = new Set<SettingsReindexReason>();
 	private settingsReindexRetryAttempted = false;
@@ -797,6 +810,7 @@ export default class OperonPlugin extends Plugin {
 	private livePreviewAuthoringCursorRestoreLease: LivePreviewAuthoringCursorRestoreLease | null = null;
 	private livePreviewAuthoringCursorRestoreClearTimer: WindowTimeoutHandle | null = null;
 	private indexSideEffectTimer: WindowTimeoutHandle | null = null;
+	private indexV8CleanupMaintenance: IndexV8MaintenanceHandle | null = null;
 	private indexSideEffectRunning = false;
 	private indexSideEffectFollowupRequested = false;
 	private projectSerialIndexReconcileRunning = false;
@@ -1842,9 +1856,6 @@ export default class OperonPlugin extends Plugin {
 			scrollLeft: typeof state?.scrollLeft === 'number' && Number.isFinite(state.scrollLeft)
 				? Math.max(0, state.scrollLeft)
 				: 0,
-			collapsedGroupKeys: Array.isArray(state?.collapsedGroupKeys)
-				? state.collapsedGroupKeys.filter((key): key is string => typeof key === 'string')
-				: [],
 		};
 
 		await leaf.setViewState({
@@ -2494,7 +2505,9 @@ export default class OperonPlugin extends Plugin {
 		}
 
 		// Initialize indexer, task writer, and core systems
-		this.indexer = new OperonIndexer(this.app, this.storage);
+		const indexV8Store = new IndexV8Store(this.app.vault.adapter, this.storage.indexV8Paths);
+		const indexV8PersistenceCoordinator = new IndexV8PersistenceCoordinator(indexV8Store);
+		this.indexer = new OperonIndexer(this.app, this.storage, indexV8PersistenceCoordinator, indexV8Store);
 		setExistingIdsProvider(() => this.indexer.getAllOperonIds());
 		this.writer = new TaskWriter(this.app, this.indexer, this.settings.keyMappings, {
 			onBeforeWriteFile: filePath => this.markInternalTaskWrite(filePath),
@@ -2570,8 +2583,12 @@ export default class OperonPlugin extends Plugin {
 		await this.formatConverter.ensureFileTasksFolder();
 
 		// Load cached index first for fast startup (Architecture doc Section 4.5)
+		await this.primeIndexV8ManifestFingerprint();
 		const cacheLoad = await this.indexer.loadCachedIndex();
 		const hasCached = cacheLoad.status === 'loaded';
+		const loadedFromV8 = cacheLoad.status === 'loaded' && cacheLoad.source === 'v8';
+		const requiresFullReindex = cacheLoad.status === 'loaded' && cacheLoad.requiresFullReindex;
+		this.initializeIndexV8ManifestMonitor();
 
 		// Refresh sidebar views whenever the index is updated
 		// Suppressed during startup — onLayoutReady handles the authoritative render
@@ -2722,7 +2739,7 @@ export default class OperonPlugin extends Plugin {
 			// - No cache: full reindex immediately (nothing usable yet)
 			// - Cache exists: diff reindex (catches agent-written tasks while app was closed),
 			//   then optionally follow with a full reindex after 15s for completeness
-			if (!hasCached) {
+			if (!hasCached || requiresFullReindex) {
 				await this.indexer.fullReindex();
 				if (cacheLoad.status === 'incompatible') {
 					await this.runTaskStatsBackfill({ force: true, source: 'workflow-semantics' });
@@ -2730,7 +2747,12 @@ export default class OperonPlugin extends Plugin {
 					await this.runStartupTaskStatsBackfill();
 				}
 			} else {
-				await this.indexer.diffReindex();
+				if (loadedFromV8) {
+					await this.indexer.reconcileV8StartupSources();
+				} else {
+					await this.indexer.adoptV8ShadowProvenance();
+					await this.indexer.diffReindex();
+				}
 				if (this.settings.fullReindexOnStartup) {
 					setWindowTimeout(() => {
 						runAsyncAction('startup full reindex failed', async () => {
@@ -2742,6 +2764,9 @@ export default class OperonPlugin extends Plugin {
 					await this.runStartupTaskStatsBackfill();
 				}
 			}
+			this.indexer.recoverStartupV8IfNeeded(cacheLoad.status === 'loaded' || cacheLoad.status === 'missing'
+				? cacheLoad.fallbackReason
+				: undefined);
 
 				try {
 					const renameRecovery = await this.workflowFieldRenameCoordinator.resume();
@@ -2760,6 +2785,14 @@ export default class OperonPlugin extends Plugin {
 					// Mark startup complete — one authoritative render + resumeFromIndex
 				this.startupReady = true;
 				await this.timeTracker.resumeFromIndex({ migrateLegacy: true });
+				this.indexV8CleanupMaintenance?.cancel();
+				this.indexV8CleanupMaintenance = startIndexV8CleanupMaintenance({
+					run: () => this.indexer.runIndexV8CleanupMaintenance(),
+					isActive: () => this.startupReady,
+					setTimeout: (callback, delayMs) => setWindowTimeout(callback, delayMs),
+					clearTimeout: handle => clearWindowTimeout(handle),
+					onError: error => console.error('Operon: V8 index cleanup failed', error),
+				});
 				this.refreshViews();
 				this.scheduleWorkspacePropertiesCollapseForAllViews();
 				this.syncDuplicateConflictUi(true);
@@ -2774,6 +2807,49 @@ export default class OperonPlugin extends Plugin {
 			});
 			});
 		}
+
+	private initializeIndexV8ManifestMonitor(): void {
+		const win = getActiveWindow();
+		const doc = getActiveDocument();
+		const checkVisible = (): void => {
+			if (doc.hidden) return;
+			void this.checkIndexV8ManifestStat();
+		};
+		this.registerInterval(win.setInterval(checkVisible, 30_000));
+		this.registerDomEvent(win, 'focus', checkVisible);
+		this.registerDomEvent(doc, 'visibilitychange', checkVisible);
+		checkVisible();
+	}
+
+	private async primeIndexV8ManifestFingerprint(): Promise<void> {
+		try {
+			const stat = await this.app.vault.adapter.stat(this.storage.indexV8Paths.manifestPath);
+			this.indexV8ManifestFingerprint = stat && stat.type === 'file' ? `${stat.mtime}:${stat.size}` : 'missing';
+		} catch {
+			this.indexV8ManifestFingerprint = null;
+		}
+	}
+
+	private async checkIndexV8ManifestStat(): Promise<void> {
+		if (this.indexV8ManifestCheckActive) return;
+		this.indexV8ManifestCheckActive = true;
+		try {
+			const stat = await this.app.vault.adapter.stat(this.storage.indexV8Paths.manifestPath);
+			const fingerprint = stat && stat.type === 'file' ? `${stat.mtime}:${stat.size}` : 'missing';
+			if (this.indexV8ManifestFingerprint === null) {
+				this.indexV8ManifestFingerprint = fingerprint;
+				await this.indexer.observeIndexV8ManifestChange();
+				return;
+			}
+			if (fingerprint === this.indexV8ManifestFingerprint) return;
+			this.indexV8ManifestFingerprint = fingerprint;
+			await this.indexer.observeIndexV8ManifestChange();
+		} catch {
+			console.debug('Operon: V8 manifest monitor probe deferred');
+		} finally {
+			this.indexV8ManifestCheckActive = false;
+		}
+	}
 
 	onunload(): void {
 		runAsyncAction('plugin unload failed', () => this.unloadPlugin());
@@ -2818,7 +2894,7 @@ export default class OperonPlugin extends Plugin {
 				this.livePreviewAuthoringCursorRestoreClearTimer = null;
 			}
 			this.livePreviewAuthoringCursorRestoreLease = null;
-			if (this.indexSideEffectTimer) {
+		if (this.indexSideEffectTimer) {
 				clearWindowTimeout(this.indexSideEffectTimer);
 				this.indexSideEffectTimer = null;
 			}
@@ -2857,7 +2933,10 @@ export default class OperonPlugin extends Plugin {
 		} finally {
 			this.tablePresetRegistry?.dispose();
 		}
-		await this.indexer.flushPendingPersist();
+		this.indexV8CleanupMaintenance?.cancel();
+		await this.indexV8CleanupMaintenance?.drain();
+		this.indexV8CleanupMaintenance = null;
+		await this.indexer.prepareForUnload();
 		await this.storage.flushPendingWrites();
 		this.indexer.destroy();
 		this.storage.destroy();
@@ -4713,7 +4792,9 @@ export default class OperonPlugin extends Plugin {
 		if ('filterSetId' in patch) domains.add('filter');
 		if ('columns' in patch) domains.add('columns');
 		if ('sortRules' in patch) domains.add('sorting');
-		if ('groupBy' in patch || 'groupOrder' in patch || 'subgroupBy' in patch || 'subgroupOrder' in patch) domains.add('grouping');
+		if ('groupBy' in patch || 'groupOrder' in patch || 'subgroupBy' in patch || 'subgroupOrder' in patch || 'collapsedGroupKeys' in patch) {
+			domains.add('grouping');
+		}
 		if ('summaries' in patch) domains.add('summaries');
 		if ('search' in patch) domains.add('search');
 		if ('display' in patch) domains.add('display');
@@ -15343,6 +15424,7 @@ export default class OperonPlugin extends Plugin {
 	}
 
 	private scheduleSettingsReindex(reason: SettingsReindexReason): void {
+		this.indexer.invalidateV8Coherence();
 		this.pendingSettingsReindexReasons.add(reason);
 		this.settingsReindexRetryAttempted = false;
 		this.armSettingsReindexTimer();
@@ -15426,6 +15508,119 @@ export default class OperonPlugin extends Plugin {
 			this.refreshViews();
 		}
 		return result.completed;
+	}
+
+	private openIndexV8Diagnostics(): void {
+		new IndexV8DiagnosticsModal(this.app, {
+			readSummary: async () => this.buildIndexV8DiagnosticsSummary(),
+			validate: async () => {
+				const result = await this.indexer.validateIndexV8Now();
+				return { status: result.status === 'loaded' ? 'unchanged' : 'failed' };
+			},
+			rebuild: async () => {
+				await this.indexer.fullReindex();
+				const validation = await this.indexer.validateIndexV8Now();
+				const diagnostics = await this.indexer.getIndexV8Diagnostics();
+				return {
+					status: validation.status === 'loaded'
+						&& diagnostics.health === 'healthy'
+						&& diagnostics.runtimePhase === 'idle'
+						&& diagnostics.verifiedThisSession
+						? 'applied'
+						: 'failed',
+				};
+			},
+			repair: async () => {
+				const result = await this.indexer.repairIndexV8FromMarkdown();
+				return {
+					status: result.status,
+					affectedFiles: result.shardsWritten,
+					affectedBytes: result.bytesWritten,
+				};
+			},
+			cleanup: async () => {
+				const result = await this.indexer.runIndexV8CleanupNow();
+				return {
+					status: this.toIndexV8DiagnosticsResultStatus(result.status),
+					affectedFiles: result.deletedCount,
+					affectedBytes: result.deletedBytes,
+				};
+			},
+			retire: async () => {
+				const result = await this.indexer.retireLegacyIndexV7();
+				return {
+					status: this.toIndexV8DiagnosticsResultStatus(result.status),
+					affectedFiles: result.status === 'applied' ? 1 : 0,
+					affectedBytes: result.deletedBytes,
+				};
+			},
+		}).open();
+	}
+
+	private async buildIndexV8DiagnosticsSummary(): Promise<IndexV8DiagnosticsSummary> {
+		const snapshot = await this.indexer.getIndexV8Diagnostics();
+		const codeSet = new Set<IndexV8DiagnosticsSummary['codes'][number]>();
+		if (snapshot.manifestStatus === 'missing') codeSet.add('manifest-missing');
+		else if (snapshot.manifestStatus === 'incomplete') codeSet.add('manifest-incomplete');
+		else if (snapshot.manifestStatus === 'invalid') codeSet.add('manifest-invalid');
+		else if (snapshot.manifestStatus === 'unsupported') codeSet.add('manifest-unsupported');
+		else if (snapshot.manifestStatus === 'io-error') codeSet.add('io-error');
+		if (snapshot.recoveryMarkerPresent) codeSet.add('recovery-marker');
+		if (snapshot.codes.includes('CLEANUP_SUPPRESSED')) codeSet.add('cleanup-suppressed');
+		if (snapshot.codes.includes('RETIREMENT_BLOCKED')) codeSet.add('retirement-blocked');
+		return {
+			phase: snapshot.runtimePhase,
+			health: snapshot.health,
+			codes: [...codeSet],
+			manifestStatus: snapshot.manifestStatus === 'loaded' ? 'verified' : snapshot.manifestStatus,
+			taskCount: snapshot.taskCount,
+			sourceCount: snapshot.sourceCount,
+			activeShardCount: snapshot.activeShardCount,
+			orphanShardCount: snapshot.maintenanceCounts['orphan-shard'] ?? 0,
+			protectedShardCount: snapshot.protectedShardCount,
+			ownedTempCount: snapshot.maintenanceCounts['owned-temp'] ?? 0,
+			activeBytes: snapshot.activeBytes,
+			maxShardBytes: snapshot.maxShardBytes,
+			averageShardBytes: snapshot.averageShardBytes,
+			cleanupCandidateCount: snapshot.cleanupCandidateCount,
+			cleanupCandidateBytes: snapshot.cleanupCandidateBytes,
+			dirtySourceCount: snapshot.dirtySourceCount,
+			recoveryMarkerPresent: snapshot.recoveryMarkerPresent,
+			legacy: {
+				present: snapshot.legacyV7.present,
+				bytes: snapshot.legacyV7.bytes,
+				retirementEligible: snapshot.legacyV7.retirementEligible,
+			},
+			lastInspectedAt: Date.now(),
+			actions: {
+				refresh: { enabled: true },
+				validate: { enabled: snapshot.manifestStatus === 'loaded', ...(snapshot.manifestStatus !== 'loaded' ? { disabledReason: 'unavailable' as const } : {}) },
+				rebuild: { enabled: snapshot.runtimePhase === 'idle', ...(snapshot.runtimePhase !== 'idle' ? { disabledReason: 'busy' as const } : {}) },
+				repair: {
+					enabled: snapshot.health === 'invalid' || snapshot.health === 'unsupported' || snapshot.health === 'recovery-required',
+					...(!(snapshot.health === 'invalid' || snapshot.health === 'unsupported' || snapshot.health === 'recovery-required')
+						? { disabledReason: 'not-needed' as const }
+						: {}),
+				},
+				cleanup: {
+					enabled: snapshot.cleanupCandidateCount > 0,
+					...(snapshot.cleanupCandidateCount === 0 ? { disabledReason: 'not-needed' as const } : {}),
+				},
+				retire: {
+					enabled: snapshot.legacyV7.retirementEligible,
+					...(!snapshot.legacyV7.retirementEligible ? { disabledReason: 'unsafe' as const } : {}),
+				},
+			},
+		};
+	}
+
+	private toIndexV8DiagnosticsResultStatus(
+		status: string,
+	): IndexV8DiagnosticsActionResult['status'] {
+		if (status === 'applied' || status === 'unchanged' || status === 'suppressed' || status === 'partial') {
+			return status;
+		}
+		return status === 'stale' ? 'suppressed' : 'failed';
 	}
 
 	private registerCommands(): void {
@@ -15689,6 +15884,14 @@ export default class OperonPlugin extends Plugin {
 					await this.indexer.fullReindex();
 					new Notice(t('notifications', 'indexRebuilt', { count: String(this.indexer.taskCount) }));
 				});
+			},
+		});
+
+		this.addCommand({
+			id: 'open-index-diagnostics',
+			name: t('indexStats', 'diagnosticsTitle'),
+			callback: () => {
+				this.openIndexV8Diagnostics();
 			},
 		});
 

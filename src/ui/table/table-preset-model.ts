@@ -4,6 +4,7 @@ import {
 	createDefaultTableColumn,
 	createDefaultTablePreset,
 	createTablePresetId,
+	normalizeTableCollapsedGroupKeys,
 	normalizeTableColumnColorMode,
 	normalizeTableColumnDisplayMode,
 	normalizeTableDurationDisplayMode,
@@ -79,6 +80,8 @@ export function resolveTableEditingPreset(
 
 export function applyTablePresetPatch(preset: TablePreset, patch: TablePresetPatch): TablePreset {
 	const draft = cloneTablePreset(preset);
+	const previousGroupBy = draft.groupBy;
+	const previousSubgroupBy = draft.subgroupBy;
 	if (hasTablePresetPatchKey(patch, 'name') && patch.name !== undefined) {
 		draft.name = patch.name;
 	}
@@ -104,6 +107,9 @@ export function applyTablePresetPatch(preset: TablePreset, patch: TablePresetPat
 	if (hasTablePresetPatchKey(patch, 'subgroupOrder') && patch.subgroupOrder !== undefined) {
 		draft.subgroupOrder = draft.subgroupBy ? normalizeTablePresetSortDirection(patch.subgroupOrder) : 'asc';
 	}
+	if (hasTablePresetPatchKey(patch, 'collapsedGroupKeys')) {
+		draft.collapsedGroupKeys = normalizeTableCollapsedGroupKeys(patch.collapsedGroupKeys);
+	}
 	if (!draft.groupBy) {
 		draft.groupOrder = 'asc';
 		draft.subgroupBy = null;
@@ -111,6 +117,9 @@ export function applyTablePresetPatch(preset: TablePreset, patch: TablePresetPat
 	} else if (draft.subgroupBy === draft.groupBy) {
 		draft.subgroupBy = null;
 		draft.subgroupOrder = 'asc';
+	}
+	if (draft.groupBy !== previousGroupBy || draft.subgroupBy !== previousSubgroupBy) {
+		draft.collapsedGroupKeys = [];
 	}
 	if (patch.summaries) {
 		draft.summaries = patch.summaries.map(summary => ({ ...summary }));
@@ -127,6 +136,7 @@ export function applyTablePresetPatch(preset: TablePreset, patch: TablePresetPat
 export function buildTableGroupSortPresetPatch(
 	updatedPreset: TablePreset,
 	scope: TableGroupSortPresetPatchScope,
+	options: { clearCollapsedGroupKeys?: boolean } = {},
 ): TablePresetPatch {
 	if (scope === 'grouping') {
 		return {
@@ -135,6 +145,7 @@ export function buildTableGroupSortPresetPatch(
 			groupOrder: updatedPreset.groupOrder,
 			subgroupBy: updatedPreset.subgroupBy,
 			subgroupOrder: updatedPreset.subgroupOrder,
+			...(options.clearCollapsedGroupKeys ? { collapsedGroupKeys: [] } : {}),
 		};
 	}
 	return {

@@ -20,6 +20,7 @@ export interface EnginePerfTraceMetadata {
 export interface IndexPerfContext {
 	source: string;
 	trace?: EnginePerfTraceMetadata | null;
+	snapshotBuildMs?: number;
 }
 
 export interface WriteJsonMetrics {
@@ -64,7 +65,6 @@ export function formatEnginePerfTraceMetadata(trace: EnginePerfTraceMetadata | n
 		`traceId=${trace.traceId}`,
 		`taskId=${trace.taskId}`,
 		`format=${trace.format}`,
-		`filePath=${trace.filePath}`,
 		`changedKeys=${trace.changedKeys.length > 0 ? trace.changedKeys.join(',') : 'none'}`,
 		`reason=${trace.reason}`,
 	];

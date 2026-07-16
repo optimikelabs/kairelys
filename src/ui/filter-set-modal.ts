@@ -19,7 +19,7 @@ import { PinnedCache } from '../storage/pinned-cache';
 import { buildFilterTaskRowElement, FilterTaskRowCallbacks, shouldAutoExpandFilterTaskSubtasks } from './filter-task-row';
 import { t } from '../core/i18n';
 import { OperonIndexer } from '../indexer/indexer';
-import type { ProjectSerialDisplay } from '../core/project-serials';
+import { createProjectSerialScopeFilterResolver, PROJECT_SERIAL_SCOPE_FILTER_FIELD, type ProjectSerialDisplay } from '../core/project-serials';
 import { PriorityDefinition } from '../types/priority';
 import { Pipeline } from '../types/pipeline';
 import type { ContextualMenuActionHandler } from '../core/contextual-menu-engine';
@@ -44,13 +44,14 @@ import { showOperonDayPickerPopover } from './field-pickers/day-picker-popover';
 import { showDatetimePicker } from './field-pickers/datetime-picker';
 import { closeFloatingPanelsForRoot, isFloatingPanelTargetForRoot } from './field-pickers/common';
 import { showFilterConditionPicker } from './field-pickers/filter-condition-picker';
+import { showSearchableMultiOptionPicker, type SearchableMultiOption } from './field-pickers/list-picker';
 import { showSearchableFieldPicker, type SearchableFieldPickerOption } from './field-pickers/searchable-field-picker';
 import { getManagedCustomFieldOptions } from '../core/managed-task-fields';
 import { CANONICAL_KEY_MAP } from '../types/keys';
 import { isPresetFavorite } from '../core/preset-favorites';
 import { createPresetFavoriteButton } from './preset-favorite-button';
 import { runSettingsAsync } from './settings/async-settings-action';
-import { openSettingsOptionPickerModal } from './settings/settings-option-picker-modal';
+import { openSettingsMultiOptionPickerModal, openSettingsOptionPickerModal } from './settings/settings-option-picker-modal';
 
 function generateConditionId(): string {
 	return 'cond_' + Math.random().toString(36).slice(2, 10);
@@ -205,6 +206,8 @@ function getFilterFieldTypeIcon(type: FilterFieldType): string {
 			return 'git-branch';
 		case 'folders':
 			return 'folder';
+		case 'projectSerialScope':
+			return 'git-branch';
 		case 'list':
 			return 'list';
 		case 'text':
@@ -243,6 +246,7 @@ export interface FilterSetModalOptions {
 	showCountBadge?: boolean;
 	quickActions?: FilterSetModalQuickActions;
 	getSettings?: () => OperonSettings;
+	getProjectSerialScopeTasks?: () => readonly import('../types/fields').IndexedTask[];
 	onToggleFavorite?: (filterSetId: string) => Promise<void>;
 	pickerPresentation?: 'floating' | 'modal';
 }
@@ -641,6 +645,7 @@ export class FilterSetModal extends Modal {
 			buildFilterFieldPickerOption('tags', t('filterSets', 'fieldTags'), 'tags', 'workflow', 'hash'),
 			buildFilterFieldPickerOption('description', t('filterSets', 'fieldDescription'), 'text', 'task', 'list-todo'),
 			buildFilterFieldPickerOption('pinned', t('filterSets', 'fieldPinned'), 'pinned', 'workflow', 'pin'),
+			buildFilterFieldPickerOption(PROJECT_SERIAL_SCOPE_FILTER_FIELD, t('filterSets', 'fieldProjectSerialGroup'), 'projectSerialScope', 'special', 'git-branch'),
 		];
 		if (includeConditionOnly || includeHappensOn) {
 			pseudoFields.push(buildFilterFieldPickerOption('happensOn', t('filterSets', 'fieldHappensOn'), 'date', 'scheduling', 'calendar'));
@@ -668,6 +673,24 @@ export class FilterSetModal extends Modal {
 		));
 
 		return [...pseudoFields, ...builtInMappings, ...customMappings].sort(compareFilterFieldPickerOptions);
+	}
+
+	private getProjectSerialScopeOptions(): SearchableMultiOption[] {
+		const settings = this.evalDeps?.getSettings() ?? this.options.getSettings?.() ?? null;
+		if (!settings) return [];
+		const scopeTasks = this.evalDeps?.indexer.getAllTasks() ?? this.options.getProjectSerialScopeTasks?.() ?? [];
+		const tasksById = new Map(scopeTasks.map(task => [task.operonId, task]));
+		return settings.projectSerialScopes
+			.map(scope => {
+				const root = tasksById.get(scope.parentOperonId);
+				const rootLabel = root?.description.trim() || scope.parentOperonId;
+				return {
+					value: scope.id,
+					label: `${scope.prefix} — ${rootLabel}`,
+					searchText: `${scope.prefix} ${rootLabel} ${scope.parentOperonId}`,
+				};
+			})
+			.sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: 'base' }));
 	}
 
 	private measureSelectContentWidth(select: HTMLSelectElement): number {
@@ -1223,6 +1246,7 @@ export class FilterSetModal extends Modal {
 						cond.fieldType = option.type;
 						cond.operator = '';
 						cond.value = undefined;
+						cond.values = undefined;
 						updateFieldButton();
 						rebuildOpSel();
 						this.syncMirroredFilterFields();
@@ -1239,6 +1263,7 @@ export class FilterSetModal extends Modal {
 					cond.fieldType = option.type;
 					cond.operator = '';
 					cond.value = undefined;
+					cond.values = undefined;
 					updateFieldButton();
 					rebuildOpSel();
 					this.syncMirroredFilterFields();
@@ -1258,6 +1283,7 @@ export class FilterSetModal extends Modal {
 		const opSel = this.createModalSelect(row, [], cond.operator, (value) => {
 			cond.operator = value;
 			cond.value = undefined;
+			cond.values = undefined;
 			updateValueInput();
 			this.syncMirroredFilterFields();
 			syncCompactSelectWidths();
@@ -1270,6 +1296,58 @@ export class FilterSetModal extends Modal {
 
 		const buildValueInput = () => {
 			valueWrapper.empty();
+			const isProjectSerialScope = cond.fieldType === 'projectSerialScope';
+			const usesProjectSerialScopePicker = isProjectSerialScope && (cond.operator === 'isAnyOf' || cond.operator === 'isNoneOf');
+			if (usesProjectSerialScopePicker) {
+				const scopeOptions = this.getProjectSerialScopeOptions();
+				const selectionButton = valueWrapper.createEl('button', {
+					cls: 'operon-filter-control operon-filter-project-serial-scope-picker',
+					type: 'button',
+				});
+				const renderSelectionLabel = () => {
+					const selected = cond.values ?? [];
+					selectionButton.setText(selected.length === 0
+						? t('filterSets', 'projectSerialGroupPickerPlaceholder')
+						: selected.map(value => scopeOptions.find(option => option.value === value)?.label ?? value).join(', '));
+				};
+				renderSelectionLabel();
+				const openScopePicker = () => {
+					const pickerOptions = {
+						title: t('filterSets', 'projectSerialGroupPickerTitle'),
+						value: cond.values ?? [],
+						options: scopeOptions,
+						placeholder: t('filterSets', 'projectSerialGroupPickerPlaceholder'),
+						allowCustom: false,
+						queryActionLabel: (query: string) => t('filterSets', 'projectSerialGroupAllStartingWith', { prefix: query }),
+						onQueryAction: (query: string) => {
+							cond.operator = 'startsWith';
+							cond.value = query;
+							cond.values = undefined;
+							this.syncMirroredFilterFields();
+							this.renderCurrentSurface();
+						},
+						onSave: (values: string[]) => {
+							cond.values = values.length > 0 ? values : undefined;
+							cond.value = undefined;
+							renderSelectionLabel();
+							this.syncMirroredFilterFields();
+						},
+					};
+					if (this.options.pickerPresentation === 'modal') {
+						openSettingsMultiOptionPickerModal(this.app, pickerOptions);
+						return;
+					}
+					showSearchableMultiOptionPicker(selectionButton, {
+						...pickerOptions,
+					});
+				};
+				if (this.options.pickerPresentation === 'modal') {
+					bindSettingsModalPickerTrigger(selectionButton, openScopePicker);
+				} else {
+					selectionButton.addEventListener('click', openScopePicker);
+				}
+				return;
+			}
 
 			// Determine input type: numeric date operators override date→number
 			const isNumericDateOp = NUMERIC_INPUT_DATE_OPERATORS.has(cond.operator);
@@ -1296,6 +1374,8 @@ export class FilterSetModal extends Modal {
 			} else if (cond.fieldType === 'folders') {
 				inp.placeholder = t('filterSets', 'foldersPlaceholder');
 				this.attachFolderSuggest(inp, cond);
+			} else if (isProjectSerialScope) {
+				inp.placeholder = t('filterSets', 'projectSerialGroupPrefixPlaceholder');
 			}
 
 			// Helpful placeholder for numeric date operators
@@ -1633,6 +1713,10 @@ export class FilterSetModal extends Modal {
 							deps.getPriorities(),
 							deps.pinnedCache,
 							deps.getPipelines(),
+							{
+								projectSerialScopes: deps.getSettings().projectSerialScopes,
+								projectSerialScopeTasks: deps.indexer.getAllTasks(),
+							},
 						).length
 						: 0;
 				badge.empty();
@@ -1902,12 +1986,16 @@ class FilterPreviewModal extends Modal {
 		if (!showSubtasks) {
 			this.expandedTaskIds.clear();
 		}
+		const filterEvaluationOptions = {
+			projectSerialScopes: settings.projectSerialScopes,
+			projectSerialScopeTasks: allTasks,
+		};
 		const grouped = this.filterSet.groupBy
-			? evaluateFilterSetGrouped(this.filterSet, allTasks, priorities, this.deps.pinnedCache, pipelines)
+			? evaluateFilterSetGrouped(this.filterSet, allTasks, priorities, this.deps.pinnedCache, pipelines, filterEvaluationOptions)
 			: null;
 		const tasks = grouped
 			? null
-			: evaluateFilterSet(this.filterSet, allTasks, priorities, this.deps.pinnedCache, pipelines);
+			: evaluateFilterSet(this.filterSet, allTasks, priorities, this.deps.pinnedCache, pipelines, filterEvaluationOptions);
 		const callbacks: FilterTaskRowCallbacks = {
 			app: this.app,
 			getPipelines: this.deps.getPipelines,
@@ -1965,6 +2053,10 @@ class FilterPreviewModal extends Modal {
 					priorities,
 					pipelines,
 					isTaskPinned: callbacks.isTaskPinned,
+					projectSerialScopeResolver: createProjectSerialScopeFilterResolver(
+						settings.projectSerialScopes,
+						allTasks,
+					),
 				},
 			),
 			workflowStatusIdentityIndex: buildWorkflowStatusIdentityIndex(pipelines),
@@ -1980,14 +2072,14 @@ class FilterPreviewModal extends Modal {
 		if (grouped) {
 			for (const group of grouped.groups) {
 				const gh = list.createDiv('operon-group-header');
-				gh.createSpan({ cls: 'operon-group-header-label', text: group.key || t('filterSets', 'groupEmpty') });
+				gh.createSpan({ cls: 'operon-group-header-label', text: group.label || t('filterSets', 'groupEmpty') });
 				gh.createSpan({ cls: 'operon-group-header-count', text: String(group.count) });
 				if (group.subgroups?.length) {
 					for (const subgroup of group.subgroups) {
 						const subgroupHeader = list.createDiv('operon-group-header operon-subgroup-header');
 						subgroupHeader.createSpan({
 							cls: 'operon-group-header-label',
-							text: subgroup.key || t('filterSets', 'groupEmpty'),
+							text: subgroup.label || t('filterSets', 'groupEmpty'),
 						});
 							subgroupHeader.createSpan({ cls: 'operon-group-header-count', text: String(subgroup.count) });
 							for (const task of subgroup.tasks) {

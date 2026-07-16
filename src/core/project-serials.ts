@@ -24,6 +24,19 @@ export interface ProjectSerialDisplay {
 	operonId: string;
 }
 
+export const PROJECT_SERIAL_SCOPE_FILTER_FIELD = 'projectSerialScope';
+
+export interface ProjectSerialScopeFilterValue {
+	scopeId: string;
+	prefix: string;
+	label: string;
+}
+
+export interface ProjectSerialScopeFilterResolver {
+	resolve(task: IndexedTask): ProjectSerialScopeFilterValue | null;
+	getLabel(scopeId: string): string | null;
+}
+
 export interface ProjectSerialScopeSummary {
 	scopeId: string;
 	activeTaskCount: number;
@@ -351,6 +364,45 @@ export function resolveStoredProjectSerialDisplay(options: {
 		number,
 		label: formatProjectSerialLabel(scope.prefix, number, maxAssignedNumber),
 		operonId,
+	};
+}
+
+/**
+ * Builds a filter-facing view of Project Serial scope membership without
+ * consulting serial-number state. Scope membership is determined solely by
+ * the task hierarchy, exactly like reconciliation.
+ */
+export function createProjectSerialScopeFilterResolver(
+	scopes: readonly ProjectSerialScope[],
+	tasks: readonly IndexedTask[],
+): ProjectSerialScopeFilterResolver {
+	const normalizedScopes = normalizeProjectSerialScopes(scopes);
+	const scopeByParentId = new Map(normalizedScopes.map(scope => [scope.parentOperonId, scope]));
+	const taskById = new Map(tasks.map(task => [task.operonId, task]));
+	const labelsByScopeId = new Map(normalizedScopes.map(scope => {
+		const root = taskById.get(scope.parentOperonId);
+		const rootLabel = root?.description.trim() || scope.parentOperonId;
+		return [scope.id, `${scope.prefix} — ${rootLabel}`] as const;
+	}));
+	const valuesByTaskId = new Map<string, ProjectSerialScopeFilterValue | null>();
+
+	const resolve = (task: IndexedTask): ProjectSerialScopeFilterValue | null => {
+		if (valuesByTaskId.has(task.operonId)) return valuesByTaskId.get(task.operonId) ?? null;
+		const scope = resolveNearestProjectSerialScope(task, scopeByParentId, taskById);
+		const value = scope
+			? {
+				scopeId: scope.id,
+				prefix: scope.prefix,
+				label: labelsByScopeId.get(scope.id) ?? scope.prefix,
+			}
+			: null;
+		valuesByTaskId.set(task.operonId, value);
+		return value;
+	};
+
+	return {
+		resolve,
+		getLabel: scopeId => labelsByScopeId.get(scopeId) ?? null,
 	};
 }
 

@@ -220,7 +220,6 @@ interface EmbedTableInstance {
 	isSearchComposing: boolean;
 	scrollTop: number;
 	scrollLeft: number;
-	collapsedGroupKeys: Set<string>;
 	visibleRowsFrame: number | null;
 	resizeObserverCleanup: (() => void) | null;
 	toolbarLayoutCleanup: (() => void) | null;
@@ -553,7 +552,6 @@ function createEmbedTableInstance(
 		isSearchComposing: false,
 		scrollTop: 0,
 		scrollLeft: 0,
-		collapsedGroupKeys: new Set<string>(),
 		visibleRowsFrame: null,
 		resizeObserverCleanup: null,
 		toolbarLayoutCleanup: null,
@@ -738,6 +736,7 @@ function renderEmbedTable(instance: EmbedTableInstance, deps: EmbedTableDeps): v
 		tasks: allTasks,
 		priorities: settings.priorities,
 		pinnedCache: deps.getPinnedCache(),
+		projectSerialScopes: settings.projectSerialScopes,
 		settings,
 		searchQuery: searchContext.activeSearchQuery,
 		searchMatcher,
@@ -761,7 +760,7 @@ function renderEmbedTable(instance: EmbedTableInstance, deps: EmbedTableDeps): v
 	const columnGeometry = buildTableColumnGeometry(columns);
 	const tableWidthPx = columnGeometry.tableWidthPx;
 	const scrollbarGutterPx = measureTableScrollbarGutterPx(instance.el.ownerDocument);
-	const collapsedGroupKeys = Array.from(instance.collapsedGroupKeys);
+	const collapsedGroupKeys = result.preset.collapsedGroupKeys;
 	const items = buildTableRenderItems(
 		result.rows,
 		result.groups,
@@ -886,7 +885,7 @@ function buildEmbedTableRenderSignature(
 		instance.searchQuery.trim().toLocaleLowerCase(),
 		JSON.stringify(instance.searchScope),
 		instance.parentSearchSelection ? `${instance.parentSearchSelection.mode}:${instance.parentSearchSelection.parentId}` : '',
-		Array.from(instance.collapsedGroupKeys).sort().join('\u0000'),
+		preset.collapsedGroupKeys.join('\u0000'),
 		JSON.stringify(preset),
 		columnGeometry.signature,
 		columns.map(column => `${column.key}:${column.widthPx ?? ''}:${column.hidden === true ? 'hidden' : 'visible'}:${column.pinned === true ? 'pinned' : 'unpinned'}`).join(','),
@@ -922,7 +921,7 @@ function buildEmbedTableQuerySignature(
 		instance.searchQuery.trim().toLocaleLowerCase(),
 		JSON.stringify(instance.searchScope),
 		instance.parentSearchSelection ? `${instance.parentSearchSelection.mode}:${instance.parentSearchSelection.parentId}` : '',
-		Array.from(instance.collapsedGroupKeys).sort().join('\u0000'),
+		preset.collapsedGroupKeys.join('\u0000'),
 		JSON.stringify(preset),
 		locationIndexSignature,
 		deps.getProjectSerialSignature?.() ?? '',
@@ -1387,6 +1386,11 @@ function openEmbedTableFilterPopover(
 		draft,
 		settings.keyMappings,
 		() => undefined,
+		undefined,
+		{
+			getSettings: deps.getSettings,
+			getProjectSerialScopeTasks: () => deps.indexer.getAllTasks(),
+		},
 	);
 	editor.renderInlineConditionEditor(popover, {
 		onCancel: close,
@@ -1398,6 +1402,10 @@ function openEmbedTableFilterPopover(
 			deps.indexer.getAllTasks(),
 			deps.getSettings().priorities,
 			deps.getPinnedCache(),
+			{
+				projectSerialScopes: deps.getSettings().projectSerialScopes,
+				projectSerialScopeTasks: deps.indexer.getAllTasks(),
+			},
 		).length,
 		saveTooltip: sourceFilterSetId
 			? buildEmbedTableFilterUsageTooltip(sourceFilterSetId, deps)
@@ -1777,7 +1785,6 @@ function applyEmbedTablePresetSwitch(instance: EmbedTableInstance, nextPreset: T
 	instance.pendingPresetSearchSignature = null;
 	instance.scrollTop = 0;
 	instance.scrollLeft = 0;
-	instance.collapsedGroupKeys.clear();
 	instance.lastRenderedRangeKey = null;
 	resetEmbedTableSearchPerformanceState(instance);
 	resetEmbedTableRenderState(instance);
@@ -1817,13 +1824,15 @@ function saveEmbedTableGroupSortPresetPatch(
 	updatedPreset: TablePreset,
 	scope: TableGroupSortPresetPatchScope,
 ): void {
-	if (scope === 'grouping' && updatedPreset.id === instance.presetId) {
-		instance.collapsedGroupKeys.clear();
-		instance.lastRenderedRangeKey = null;
-	}
+	const currentPreset = instance.currentRenderState?.preset ?? resolveEmbedTablePreset(deps, instance.presetId);
+	const groupingChanged = scope === 'grouping'
+		&& !!currentPreset
+		&& ((updatedPreset.groupBy ?? null) !== (currentPreset.groupBy ?? null)
+			|| (updatedPreset.subgroupBy ?? null) !== (currentPreset.subgroupBy ?? null));
+	if (scope === 'grouping' && updatedPreset.id === instance.presetId) instance.lastRenderedRangeKey = null;
 	saveEmbedTablePresetPatch(
 		deps,
-		buildTableGroupSortPresetPatch(updatedPreset, scope),
+		buildTableGroupSortPresetPatch(updatedPreset, scope, { clearCollapsedGroupKeys: groupingChanged }),
 		'Operon: failed to save embedded table group sort preset patch',
 	);
 }
@@ -1882,7 +1891,7 @@ function renderEmbedTableVisibleRows(instance: EmbedTableInstance, deps: EmbedTa
 		renderState.preset.groupOrder,
 		renderState.preset.subgroupBy ?? '',
 		renderState.preset.subgroupOrder,
-		Array.from(instance.collapsedGroupKeys).join('\u0000'),
+		renderState.preset.collapsedGroupKeys.join('\u0000'),
 	].join(':');
 	if (rangeKey === instance.lastRenderedRangeKey) return;
 	if (!force && shouldDeferEmbedMobileVisibleRows(instance)) {
@@ -1948,7 +1957,7 @@ function renderEmbedTableGroupRow(
 	row.style.setProperty('--operon-table-group-leading-offset', `${groupLeadingOffset}px`);
 	row.style.setProperty('--operon-table-group-depth', String(depth));
 	row.style.setProperty('--operon-table-group-indent', `${depth * 18}px`);
-	const collapsed = instance.collapsedGroupKeys.has(groupKey);
+	const collapsed = renderState.preset.collapsedGroupKeys.includes(groupKey);
 	const groupLabel = resolveTableGroupDisplayLabel(group);
 	const parentLabel = parentGroup ? resolveTableGroupDisplayLabel(parentGroup) : null;
 	const accessibleGroupLabel = parentLabel ? `${parentLabel} > ${groupLabel}` : groupLabel;
@@ -1973,14 +1982,58 @@ function renderEmbedTableGroupRow(
 	}
 	button.addEventListener('click', event => {
 		event.preventDefault();
-		if (instance.collapsedGroupKeys.has(groupKey)) {
-			instance.collapsedGroupKeys.delete(groupKey);
-		} else {
-			instance.collapsedGroupKeys.add(groupKey);
+		const currentPreset = resolveEmbedTablePreset(deps, instance.presetId) ?? instance.currentRenderState?.preset;
+		if (!currentPreset) return;
+		if (instance.currentRenderState
+			&& (instance.currentRenderState.preset.groupBy !== currentPreset.groupBy
+				|| instance.currentRenderState.preset.subgroupBy !== currentPreset.subgroupBy)) {
+			renderEmbedTable(instance, deps);
+			return;
 		}
-		instance.lastQuerySignature = null;
-		instance.lastRenderSignature = null;
-		renderEmbedTable(instance, deps);
+		const collapsedGroupKeys = new Set(currentPreset.collapsedGroupKeys);
+		if (collapsedGroupKeys.has(groupKey)) {
+			collapsedGroupKeys.delete(groupKey);
+		} else {
+			collapsedGroupKeys.add(groupKey);
+		}
+		const nextCollapsedGroupKeys = Array.from(collapsedGroupKeys).sort();
+		const nextPreset: TablePreset = {
+			...currentPreset,
+			collapsedGroupKeys: nextCollapsedGroupKeys,
+		};
+		if (instance.currentRenderState?.preset.id === nextPreset.id) {
+			const hasSummaryRow = hasVisibleTableSummaryRule(nextPreset.summaries, instance.currentRenderState.taskColumns);
+			const items = buildTableRenderItems(
+				instance.currentRenderState.rows,
+				instance.currentRenderState.groups,
+				nextCollapsedGroupKeys,
+				hasSummaryRow,
+			);
+			const ordinalItems = nextCollapsedGroupKeys.length === 0
+				? items
+				: buildTableRenderItems(
+					instance.currentRenderState.rows,
+					instance.currentRenderState.groups,
+					[],
+					hasSummaryRow,
+				);
+			instance.currentRenderState = {
+				...instance.currentRenderState,
+				preset: nextPreset,
+				items,
+				taskOrdinals: buildTableTaskOrdinalMap(ordinalItems),
+			};
+		}
+		instance.el.querySelector<HTMLElement>('.operon-table-shell')?.setAttribute(
+			'aria-rowcount',
+			String((instance.currentRenderState?.items.length ?? 0) + 1),
+		);
+		instance.lastRenderedRangeKey = null;
+		renderEmbedTableVisibleRows(instance, deps, true);
+		saveEmbedTablePresetPatch(deps, {
+			id: nextPreset.id,
+			collapsedGroupKeys: nextCollapsedGroupKeys,
+		}, 'Operon: failed to save embedded table group collapse state');
 	});
 }
 
@@ -2038,6 +2091,7 @@ function resolveEmbedTableSearchContext(
 		tasks,
 		priorities: settings.priorities,
 		pinnedCache: deps.getPinnedCache(),
+		projectSerialScopes: settings.projectSerialScopes,
 	});
 	const recentModifiedCutoff = getTaskSearchBoxRecentModifiedCutoff(settings);
 	const scopedTasks = filterScopedTasks.filter(task => matchesTaskSearchBoxScope(task, instance.searchScope, { recentModifiedCutoff }));
@@ -2113,6 +2167,7 @@ function resolveEmbedTableSortedSearchBaseRows(
 		tasks: input.tasks,
 		priorities: input.settings.priorities,
 		pinnedCache: deps.getPinnedCache(),
+		projectSerialScopes: input.settings.projectSerialScopes,
 		settings: input.settings,
 		precomputedScopedTasks: input.searchContext.scopedTasks,
 		precomputedScopeFilteredTasks: input.searchContext.scopeFilteredTasks,

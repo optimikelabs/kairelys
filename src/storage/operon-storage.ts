@@ -6,7 +6,6 @@
 
 import { App } from 'obsidian';
 import { OperonSettings, DEFAULT_SETTINGS, migrateSettings } from '../types/settings';
-import { IndexData } from '../types/fields';
 import { WriteQueue } from './write-queue';
 import { PinnedCache } from './pinned-cache';
 import { RepeatSeriesStore } from './repeat-series-store';
@@ -28,7 +27,10 @@ import { ActiveTrackerStore } from './active-tracker-store';
 import { ProjectSerialStore } from './project-serial-store';
 import { FieldRenameJournalStore } from './field-rename-journal-store';
 import { TablePresetFileMigrationJournalStore } from './table-preset-file-migration-journal-store';
-import { enginePerfNow, WriteJsonMetrics } from '../core/engine-perf';
+import {
+	enginePerfNow,
+	WriteJsonMetrics,
+} from '../core/engine-perf';
 import { writeTextSafely, type RecoveredStoreWriteOptions } from './storage-file-ops';
 import {
 	buildOperonDataPackageFromSettings,
@@ -60,6 +62,10 @@ import {
 } from '../core/preset-favorites';
 import { isSpecialDynamicFilterSetId } from '../core/dynamic-file-task-filter';
 import { cloneTablePreset, type TablePreset, type TablePresetStoreSettings } from '../types/table';
+
+export type IndexV8RecoveryMarkerStatus = 'missing' | 'required' | 'invalid' | 'io-error';
+
+const MAX_INDEX_V8_RECOVERY_MARKER_BYTES = 4 * 1024;
 
 export interface OperonStorageOptions extends Partial<OperonPluginDataAccess> {
 	pluginId?: string;
@@ -991,20 +997,43 @@ export class OperonStorage {
 		this.taskAutomationPolicyStore.loadFromPackage(dataPackage.automation.taskAutomationPolicy);
 	}
 
-	// --- Index ---
-
-	/**
-	 * Load active task index from plugin runtime storage.
-	 */
-	async loadIndex(): Promise<IndexData | null> {
-		return this.readJson<IndexData>(this.storagePaths.runtime.indexPath);
+	async inspectIndexV8RecoveryRequired(): Promise<IndexV8RecoveryMarkerStatus> {
+		const path = this.storagePaths.runtime.indexV8RecoveryRequiredPath;
+		try {
+			const stat = await this.app.vault.adapter.stat(path);
+			if (!stat) return 'missing';
+			if (stat.type !== 'file' || stat.size > MAX_INDEX_V8_RECOVERY_MARKER_BYTES) return 'invalid';
+			const payload = await this.app.vault.adapter.read(path);
+			if (this.getJsonByteLength(payload) > MAX_INDEX_V8_RECOVERY_MARKER_BYTES) return 'invalid';
+			let parsed: unknown;
+			try {
+				parsed = JSON.parse(payload) as unknown;
+			} catch {
+				return 'invalid';
+			}
+			const marker = parsed as { version?: unknown; required?: unknown } | null;
+			return marker?.version === 1 && marker.required === true ? 'required' : 'invalid';
+		} catch {
+			return 'io-error';
+		}
 	}
 
-	/**
-	 * Save active task index to plugin runtime storage (atomic write).
-	 */
-	async saveIndex(data: IndexData): Promise<WriteJsonMetrics> {
-		return await this.writeJson(this.storagePaths.runtime.indexPath, data);
+	async hasIndexV8RecoveryRequired(): Promise<boolean> {
+		return await this.inspectIndexV8RecoveryRequired() !== 'missing';
+	}
+
+	async markIndexV8RecoveryRequired(): Promise<void> {
+		await this.writeJson(this.storagePaths.runtime.indexV8RecoveryRequiredPath, {
+			version: 1,
+			required: true,
+		});
+	}
+
+	async clearIndexV8RecoveryRequired(): Promise<void> {
+		const path = this.storagePaths.runtime.indexV8RecoveryRequiredPath;
+		await this.writeQueue.enqueue(path, async () => {
+			if (await this.app.vault.adapter.exists(path)) await this.app.vault.adapter.remove(path);
+		});
 	}
 
 	// --- Generic JSON I/O ---
@@ -1068,6 +1097,7 @@ export class OperonStorage {
 	get dataFolder(): string { return this.storagePaths.pluginDir; }
 	get settingsPath(): string { return this.storagePaths.dataPackagePath; }
 	get indexPath(): string { return this.storagePaths.runtime.indexPath; }
+	get indexV8Paths(): OperonStoragePaths['runtime']['indexV8'] { return { ...this.storagePaths.runtime.indexV8 }; }
 	get pinned(): PinnedCache { return this.pinnedCache; }
 	get activeTrackers(): ActiveTrackerStore { return this.activeTrackerStore; }
 	get repeatSeries(): RepeatSeriesStore { return this.repeatSeriesStore; }
