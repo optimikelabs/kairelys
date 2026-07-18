@@ -11,7 +11,7 @@ tags:
   - filterview
   - plan
   - search
-Updated: 2026-07-13T23:55:05
+Updated: 2026-07-18T15:13:08
 ---
 
 # Filter View
@@ -38,6 +38,8 @@ A filter prevents one large task index from turning into noise. It is the differ
 Add conditions one at a time and watch the list narrow as each applies. When the result is useful, save it so you can return without rebuilding. Saved filters live with Operon's data in the plugin folder and become reusable views. Name each one for its purpose, such as "This week" or "High priority open." For a step-by-step first filter, see [[DOCS-010 Build your first filtered view|Build your first filtered view]].
 
 A saved filter can be marked a **favorite** with the star on its card, in **Settings → Operon → Views → Filters** or in the filter's own editor, the same favorite star used on Table, Calendar, and Kanban presets. For a saved filter it is an organizing marker for the ones you rely on; the Filter View's picker still lists every saved filter, favorite or not.
+
+A condition is not limited to Operon's own fields, either. Any unmanaged frontmatter property on a file task can become a condition too, discovered automatically and typed without any setup. See [[DOCS-115 File task property columns|File task property columns]] and [[DOCS-073 Filter conditions and operators|Filter conditions and operators]].
 
 ## Useful filters to keep
 
@@ -85,3 +87,4 @@ Operon settings for this live in **Settings → Operon → Views → Filters**, 
 - [[DOCS-105 Table overview|Table overview]]
 - [[DOCS-026 Dynamic file task filter|Dynamic file task filter]]
 - [[DOCS-059 Dynamic Subtasks Filter|Dynamic Subtasks Filter]]
+- [[DOCS-115 File task property columns|File task property columns]]

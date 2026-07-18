@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packageId": "operon-docs",
-  "generatedAt": "2026-07-16T18:18:22.436Z",
+  "generatedAt": "2026-07-18T13:39:26.179Z",
   "source": {
     "branch": "main",
     "docsBasePath": "docs/operon-docs",
@@ -10,8 +10,8 @@
   "files": [
     {
       "path": "DOCS-001 Operon Docs MOC.md",
-      "sha256": "c27f5529aa7042e5d0cef33bec8a5be57a0feafab5c85c16dcb7909ad4a0e6bf",
-      "bytes": 8687
+      "sha256": "356f7cc4cfcaf3c93aff79f29b00c18c3c8b06d12eaa2a1a45538eccf5b36304",
+      "bytes": 8756
     },
     {
       "path": "DOCS-002 How to use these docs.md",
@@ -40,8 +40,8 @@
     },
     {
       "path": "DOCS-007 Install and enable Operon.md",
-      "sha256": "f7f22aa066d4e32427879a8c85cc1f26ade6385733b2b600e6ff8deaaa53ff75",
-      "bytes": 3556
+      "sha256": "f234e00099ff3afe9d436dd9b3660534f146b7f74032fbe1ee2a8164fe99fff8",
+      "bytes": 4201
     },
     {
       "path": "DOCS-008 Essential settings to configure first.md",
@@ -95,13 +95,13 @@
     },
     {
       "path": "DOCS-018 Task properties.md",
-      "sha256": "ce39fc6040857ae47a4df8f0346683f0af19eef18d4fdb62f2a54a05fffa5ceb",
-      "bytes": 4367
+      "sha256": "fb2131851fc14112bfc78492ca78f6c0c92f3c1090f63d6f10f5e292cedf4afa",
+      "bytes": 4886
     },
     {
       "path": "DOCS-019 Converting inline and file tasks.md",
-      "sha256": "9eb96bf4d346b914f4cd09954ec1bf5c252d21d30f0e10bca0325f9983cc9741",
-      "bytes": 3396
+      "sha256": "81690b5229d7b709ac847f05f4d26205f534275e9c1ab45d8e549e8c19267d75",
+      "bytes": 5148
     },
     {
       "path": "DOCS-020 Task Creator.md",
@@ -110,8 +110,8 @@
     },
     {
       "path": "DOCS-021 Task Editor.md",
-      "sha256": "5141301f08f399e1e984884de18f41d94cd1d43040b8e863c6e143d455d1d8e4",
-      "bytes": 3648
+      "sha256": "e60a2e4622d4647aea93fac483467c9cc0ce5d213bfdc27a82461f130bf84dbc",
+      "bytes": 4178
     },
     {
       "path": "DOCS-022 Command palette reference.md",
@@ -125,13 +125,13 @@
     },
     {
       "path": "DOCS-024 Task templates.md",
-      "sha256": "abf1707923880851fcc7c1fc7200b29189c2854b1d619879c2c1b42aefa4075b",
-      "bytes": 5973
+      "sha256": "fcf52b214d4a459708318591fb61d5eb0af27d4dce2ed8dbcea28f16cd30bb5d",
+      "bytes": 6905
     },
     {
       "path": "DOCS-025 Filter View.md",
-      "sha256": "3490328cba720f89d54f47625c61c6e1b9a1559f49005885dacb037e375bcf4c",
-      "bytes": 5831
+      "sha256": "5480c4a65a41b8aa664a5fc67f428aeefb5290e1fda7093c5fa7fa6ee7728c7c",
+      "bytes": 6245
     },
     {
       "path": "DOCS-026 Dynamic file task filter.md",
@@ -205,8 +205,8 @@
     },
     {
       "path": "DOCS-040 Custom keys.md",
-      "sha256": "58f68cd9ef68ecf30343a104cbe22f83ce52a514e001e77a88a4c32399d6cba3",
-      "bytes": 5863
+      "sha256": "7b722430485b1992b0a7ae06724567577c7289af95acb1740046c4585ecfe225",
+      "bytes": 7278
     },
     {
       "path": "DOCS-041 Task chips display and behavior.md",
@@ -370,8 +370,8 @@
     },
     {
       "path": "DOCS-073 Filter conditions and operators.md",
-      "sha256": "9e20a5d95e350e9bbeabb82ffec0d5992571cd4dd1d2f55bd8c18e4f7c34ad2c",
-      "bytes": 6077
+      "sha256": "73b32bace109322be90684a1de03e38a2756660f9e244cd4dcaf80d7c522a62e",
+      "bytes": 7492
     },
     {
       "path": "DOCS-074 Kanban swimlanes.md",
@@ -440,8 +440,8 @@
     },
     {
       "path": "DOCS-087 Edit or convert to file task.md",
-      "sha256": "532a0e354c1466a6596316379449e4eda560be71742966304c63638f1fbe3003",
-      "bytes": 1444
+      "sha256": "b576b56b942e28308e237e0a4b9a69cd61350137dfb79980a9dfa3dc9a169f28",
+      "bytes": 1902
     },
     {
       "path": "DOCS-088 Convert file task to inline task.md",
@@ -535,18 +535,18 @@
     },
     {
       "path": "DOCS-106 Table columns.md",
-      "sha256": "24a84df8a9680d437d2f1c851370602924a7df04494202d55cf4fc36e7c8e7d4",
-      "bytes": 11481
+      "sha256": "bf46def8f1d77e23bf7f4fd85b7b9fc8710040451fbce4f118251d4be18b7331",
+      "bytes": 13277
     },
     {
       "path": "DOCS-107 Table grouping and sorting.md",
-      "sha256": "1592cc1ef4e76bda484859d3df9e2e94926cd1c648cef405021e11d30c0090cf",
-      "bytes": 8568
+      "sha256": "98e5ecd2f4b0057a82d70d141bf88676dd3066d3ee90552740138173cf6bb476",
+      "bytes": 9231
     },
     {
       "path": "DOCS-108 Table summaries.md",
-      "sha256": "b1d8fc92928d2f03b731abe890f2bf9e3e76857634dc4a9828b81d72bba2a2b7",
-      "bytes": 6168
+      "sha256": "84bb6a2f7653428d2f14f90043255e9b91e69037155cf1d02fcb45be7fc8ae58",
+      "bytes": 6507
     },
     {
       "path": "DOCS-109 Table presets.md",
@@ -577,6 +577,11 @@
       "path": "DOCS-114 Table files.md",
       "sha256": "b42338dc07cbfe531b759798c62bde4e503002fbcfb6a4bf3d1643a285d73eb7",
       "bytes": 13148
+    },
+    {
+      "path": "DOCS-115 File task property columns.md",
+      "sha256": "932e92f2811f0486075acfa111c2dd985abe4b4ad98ba981d1204dbc4ea2c1a7",
+      "bytes": 12120
     }
   ]
 }

@@ -12,7 +12,7 @@ tags:
   - filetask
   - templates
   - capture
-Updated: 2026-07-10T20:31:43
+Updated: 2026-07-18T15:13:08
 ---
 
 # Task templates
@@ -27,15 +27,15 @@ A file task often follows a shape: a weekly review has the same sections, a rele
 
 Templates apply to **file tasks**, the ones that have a note body. When you create or convert a file task, Operon can build it from a template: the template's body and frontmatter become the starting point, and Operon fills in the task fields it manages, like the `operonId`.
 
-There is always a built-in option, the **Minimal File Template for Operon Tasks**, so the picker is never empty. Your own templates sit alongside it.
+There is always at least one built-in option, so the picker is never empty. Operon offers one **minimal template per configured pipeline**, named for that pipeline, so the picker shows one per [[DOCS-037 Pipelines and statuses|pipeline]] you have set up, for example one for `Project` and a separate one for `Personal`. Each minimal option seeds the new file task at that pipeline's own first status, adds the `operonId`, and the created and modified timestamps, so choosing the right pipeline's minimal template also puts the task in that pipeline from the start. Your own templates from the template folder sit alongside these.
 
 ## Set up a template folder
 
 In settings, choose a **template folder**. The top-level Markdown files in that folder become the choices in the template picker. A few rules worth knowing:
 
 - Only **top-level** files in the folder are listed, not files in subfolders.
-- If you leave the folder empty or unset, the picker shows just the built-in minimal template.
-- When a conversion needs a template without asking, Operon uses the **first file alphabetically** as the default. Name your everyday template so it sorts first if you want it chosen automatically.
+- If you leave the folder empty or unset, the picker shows only the built-in per-pipeline minimal templates.
+- When a conversion needs a template without asking, Operon uses the **first file alphabetically** in your template folder as the default, if you have any. Name your everyday template so it sorts first if you want it chosen automatically. If your template folder has no files at all, Operon falls back to your **first configured pipeline's** minimal template instead, in the order your pipelines are arranged in settings, not alphabetically.
 
 ## Pick a Task Creator default template
 
@@ -89,9 +89,9 @@ Your actual status, priority, and dates come from the task being created and you
 
 **Do templates work for inline tasks?** No. Templates are for file tasks, which have a body to fill. Inline tasks are a single line.
 
-**What if I do not set a template folder?** You still get the built-in Minimal File Template for Operon Tasks. Templates are optional.
+**What if I do not set a template folder?** You still get a built-in minimal template for each configured pipeline, seeded at that pipeline's own first status. Folder templates are optional.
 
-**Which template is used when Operon does not ask?** For conversion flows, the first file alphabetically in your template folder. For Task Creator, set **Default file task template** if you want a specific template preselected.
+**Which template is used when Operon does not ask?** For conversion flows, the first file alphabetically in your template folder if you have one, otherwise your first configured pipeline's minimal template. For Task Creator, set **Default file task template** if you want a specific template preselected.
 
 ## Settings
 
@@ -101,3 +101,4 @@ Operon settings for this live in **Settings → Operon → Tasks → File Tasks*
 
 - [[DOCS-001 Operon Docs MOC|Operon Docs MOC]]
 - [[DOCS-020 Task Creator|Task Creator]]
+- [[DOCS-037 Pipelines and statuses|Pipelines and statuses]]

@@ -11,7 +11,7 @@ tags:
   - settings
   - customfields
   - configure
-Updated: 2026-06-25T16:47:21
+Updated: 2026-07-18T15:07:38
 ---
 
 # Custom keys
@@ -82,9 +82,15 @@ You can rename a custom field's visible property name at any time, with the same
 
 Deleting a custom field removes only its mapping from Operon settings. The values already written in your files stay exactly where they are. Those properties simply become unmanaged until you recreate the same canonical key, so deleting is reversible in the sense that no data is destroyed.
 
+An unmanaged property is not necessarily invisible to Operon, though. On a file task, it can still surface on its own as a [[DOCS-115 File task property columns|file task property column]] in Table and filters, just without the Task Editor, Task Creator, chip, and swimlane surfaces a Custom Key gets. See "Not a Custom Key" below.
+
+## Not a Custom Key: file task property columns
+
+A Custom Key is not the only way an unmanaged frontmatter property becomes usable. On file tasks, Operon also discovers unmanaged properties automatically and offers them as typed Table columns and filter conditions, with none of the setup a Custom Key needs, a name, a type, an icon, or a surface choice. The tradeoff is reach: a Custom Key behaves like a built-in field everywhere, while a discovered property only reaches Table and filters. Reach for a Custom Key when a field deserves the Task Editor, Task Creator, chips, and swimlanes too; leave it as a discovered property when Table and filters are all you need right now. See [[DOCS-115 File task property columns|File task property columns]] for the full comparison.
+
 ## FAQ
 
-**Is a custom key different from just adding a YAML property?** Yes. A custom key is a real canonical field with a type and surfaces, so Operon validates, displays, and filters it like a built-in field rather than ignoring it.
+**Is a custom key different from just adding a YAML property?** Yes, in reach. A custom key is a real canonical field with a type and surfaces, so it works in the Task Editor, Task Creator, chips, and swimlanes, the same as a built-in field. An unmanaged property on a file task is not ignored, though: it can still surface on its own in Table and filters as a [[DOCS-115 File task property columns|file task property column]], just without those other surfaces.
 
 **Can I use a custom key on inline tasks too?** Yes. It works as `{{key:: value}}` inline and as frontmatter in file tasks, the same as any field.
 
@@ -97,3 +103,4 @@ Operon settings for this live in **Settings → Operon → Core → Custom Keys*
 ## Related
 
 - [[DOCS-001 Operon Docs MOC|Operon Docs MOC]]
+- [[DOCS-115 File task property columns|File task property columns]]

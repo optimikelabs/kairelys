@@ -11,7 +11,7 @@ tags:
   - table
   - columns
   - configure
-Updated: 2026-07-13T23:28:24
+Updated: 2026-07-18T15:07:38
 ---
 
 # Table columns
@@ -28,12 +28,17 @@ Almost any field a task carries can become a column:
 
 - **Task fields**: the description (shown as **Task**), status, priority, the dates (due, scheduled, start, and the completion and cancellation dates), estimate, duration and its rolled-up totals, assignees, contexts, parent, blocking and blocked-by links, location, recurrence, tags, and note.
 - **Your custom keys**: any [[DOCS-040 Custom keys|custom key]] appears as a field you can add as a column, so a table can carry exactly the properties your workflow uses.
+- **File task properties**: frontmatter properties Operon does not manage, found automatically on the file tasks in the preset's current scope, typed and offered as columns with no setup at all. See [[DOCS-115 File task property columns|File task property columns]].
 - **Source and file fields**: read-only columns that describe where the task lives, such as **Source**, source path, source line, and the file name, basename, path, and folder.
 - **Identity**: the task's [[DOCS-015 Task identity and operonId|operonId]], as a read-only column, and its [[DOCS-097 Project serials|Project Serial]] where a scope is set up, also read-only.
 
 You add a column from a header's menu with **Add column to left...** or **Add column to right...**, or from the preset's **Columns** section. See [[DOCS-109 Table presets|Table presets]].
 
 **Pipeline is the one exception.** It never appears in the column picker, because it is not a column at all, only a field you can group, subgroup, or sort by. See [[DOCS-107 Table grouping and sorting|Table grouping and sorting]].
+
+## File task properties, without setting anything up
+
+The column picker groups discovered frontmatter properties under **File task properties**, separate from your custom keys. You never define these: write a property in a file task's frontmatter, and if that task is in the preset's current scope, the property appears here already typed as Text, Number, Date, Date & time, List, or Checkbox, read from Obsidian's own Properties view or inferred from your data. Editing one opens the same picker its type would use for a custom key, and a Checkbox column gets its own toggle chip right in the cell. This is deliberately lighter than a Custom Key: no name, type, icon, or surface choice to make first. See [[DOCS-115 File task property columns|File task property columns]] for the full picture, including why it differs from Custom Keys and Key mappings, and exactly where it does and does not reach.
 
 ## Shape a column from its header
 
@@ -103,6 +108,7 @@ Icon-bearing task-field columns can be collapsed with **Show compact cell**, whi
 Most columns are editable: click a cell to change that field on the spot, as covered in [[DOCS-105 Table overview|Table overview]]. Some columns are read-only by nature and only display their value:
 
 - **Editable task fields** include status, priority, description, note, due, scheduled, start, completion and cancellation dates, repeat end, estimate, recurrence, parent and dependency links, tags, contexts, assignees, location, the task icon field, task color, and supported custom date, datetime, number, text, and list fields.
+- **File task property columns** are editable the same way, using the same pickers, but only while their value actually matches the column's type; a value that does not drops to read-only until you fix it in Obsidian's Properties view. See [[DOCS-115 File task property columns|File task property columns]].
 - **Source and file columns**, which describe where the task is stored rather than a property you set.
 - **Identity, checkbox, progress, and helper columns**, such as operonId, Project Serial, checkbox, subtask progress, line number, task icon helper, and task type helper columns, are read-only or have their own dedicated action instead of opening a normal field picker.
 
@@ -140,6 +146,8 @@ These are global toggles rather than per-preset columns, so they appear the same
 
 **Do column changes affect other tables?** No. Columns, widths, order, and color are stored in the preset, so each table keeps its own layout.
 
+**Why did a frontmatter property show up as a column on its own?** It is an unmanaged file task property, discovered automatically from the tasks in the preset's current scope. See [[DOCS-115 File task property columns|File task property columns]].
+
 **What is the difference between the task icon and task type columns?** The task icon helper cycles status and opens the context menu; the task type helper shows whether the task is inline or file, opens the Task Editor, and Cmd/Ctrl-clicks through to the source. The task icon field can also be added as a normal preset column when you want that value in the table layout.
 
 ## Settings
@@ -155,4 +163,5 @@ The three helper columns are toggled in **Settings → Operon → Views → Tabl
 - [[DOCS-108 Table summaries|Table summaries]]
 - [[DOCS-109 Table presets|Table presets]]
 - [[DOCS-040 Custom keys|Custom keys]]
+- [[DOCS-115 File task property columns|File task property columns]]
 - [[DOCS-097 Project serials|Project serials]]

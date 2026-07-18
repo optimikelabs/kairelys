@@ -10,7 +10,7 @@ tags:
   - operon
   - table
   - configure
-Updated: 2026-07-07T21:03:09
+Updated: 2026-07-18T15:07:38
 ---
 
 # Table summaries
@@ -36,7 +36,7 @@ When the table is [[DOCS-107 Table grouping and sorting|grouped]], each summary 
 
 ## Which summaries a column offers
 
-The available functions depend on the column's field type:
+The available functions depend on the column's field type, and this applies just as much to a [[DOCS-115 File task property columns|file task property column]] as to a built-in field: a discovered property typed as Number gets Sum and Average, one typed as Date gets Earliest and Latest, and so on, exactly like the table below.
 
 | Column type | Summaries it offers |
 |---|---|
@@ -102,3 +102,4 @@ Summaries are set from a column header or from the **Summaries** section of the 
 - [[DOCS-106 Table columns|Table columns]]
 - [[DOCS-109 Table presets|Table presets]]
 - [[DOCS-111 Export a table|Export a table]]
+- [[DOCS-115 File task property columns|File task property columns]]

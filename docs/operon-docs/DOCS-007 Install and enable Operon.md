@@ -10,7 +10,7 @@ tags:
   - install
   - configure
   - howto
-Updated: 2026-06-25T16:47:21
+Updated: 2026-07-18T15:13:08
 ---
 
 # Install and enable Operon
@@ -41,6 +41,10 @@ After enabling Operon, open the command palette and search for `Operon`. You sho
 
 For a gentle first action, create one small inline task. A real workflow can wait. The first goal is just to confirm Operon can write and find a single task in your vault.
 
+## Staying up to date
+
+Operon can check GitHub for a newer compatible release once each time it starts, and shows a notice pointing you to Community Plugins when one is available. This is on by default; turn it off in **Settings → Operon → Core → General** if you would rather update on your own schedule. The check itself never installs anything, it only tells you an update exists.
+
 ## Compatibility
 
 Operon does not require another community plugin. Some workflows lean on Obsidian core features: Daily Notes can support date-based capture, and Page Preview improves hover previews when task titles or wikilinks are shown.
@@ -56,6 +60,8 @@ The main compatibility risk is another task plugin that also rewrites checkbox l
 **Does Operon work on mobile?** Yes. It is not desktop-only. Some workflows are easier on desktop, but mobile is supported.
 
 **Do I need another plugin?** No. Operon stands on its own. It can optionally use Obsidian core features like Daily Notes and Page Preview, and the community **Maps** plugin, which adds a visual map preview to location chips.
+
+**Does Operon update itself?** No. It can check GitHub on startup and notify you when a newer compatible release is out, but you still update it yourself through Community Plugins. See **Settings → Operon → Core → General** to turn the check off.
 
 ## Next step
 

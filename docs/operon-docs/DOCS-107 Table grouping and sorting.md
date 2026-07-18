@@ -10,7 +10,7 @@ tags:
   - operon
   - table
   - configure
-Updated: 2026-07-16T20:08:49
+Updated: 2026-07-18T15:07:38
 ---
 
 # Table grouping and sorting
@@ -41,6 +41,10 @@ Grouping is a lens, not a filter: every matching task is still represented, just
 ## Project Serial: grouped by prefix, sorted by number
 
 When you group by the **Project Serial** column, Operon does not give each individual serial its own section. It buckets tasks by their [[DOCS-097 Project serials|serial group]], the shared prefix, so every `DOCS-` task sits under one **DOCS** heading and every `GIT-` task under a **GIT** heading, while tasks with no serial collect under **No value**. Sorting by Project Serial, whether as the group order or a **Sort by** rule, follows the numeric serial within each group, so `DOCS-7` comes before `DOCS-10` rather than the plain text order that would put `10` before `7`. Group by Project Serial and add it as a sort rule and each project's tasks gather under their prefix, listed in true serial order. This works the same when Project Serial is a subgroup.
+
+## File task properties: grouped and sorted like any other field
+
+A [[DOCS-115 File task property columns|file task property column]] works as a group, subgroup, or sort field the same as a built-in one, once it is in the table. A discovered `Client` property groups tasks into a section per client; a discovered `Priority score` number sorts them like any numeric field. Because these fields only exist within the preset's current scope, changing the scope can change which discovered properties are available to group or sort by, the same way it changes which ones are available as columns.
 
 ## Subgroups: a second level
 
@@ -101,3 +105,4 @@ Grouping and sorting are set from the toolbar's **Group & Sort** control and sav
 - [[DOCS-037 Pipelines and statuses|Pipelines and statuses]]
 - [[DOCS-097 Project serials|Project serials]]
 - [[DOCS-114 Table files|Table files]]
+- [[DOCS-115 File task property columns|File task property columns]]

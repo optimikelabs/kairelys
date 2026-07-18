@@ -10,7 +10,7 @@ tags:
   - operon
   - taskmodel
   - taskproperties
-Updated: 2026-06-25T16:47:21
+Updated: 2026-07-18T15:07:38
 ---
 
 # Task properties
@@ -32,6 +32,8 @@ Properties come from two places:
 
 - **System properties** are built in. They cover the whole task model: identity, status, priority, dates, scheduling, parent and dependency links, recurrence, time tracking, and the automatic rollup counts. You use and rename them, but you do not create or delete them.
 - **Custom properties** are ones you define when the built-in set is not enough. A custom property is a real canonical key with its own type and behavior, not just a loose YAML field. See [[DOCS-040 Custom keys|Custom keys]].
+
+A third case sits outside this model entirely: a frontmatter property on a file task that is neither of the above, no canonical key, no sync policy. Operon still discovers it and offers it as a typed Table column or filter condition, but only there; it has none of the four traits above, and none of the Task Editor, Task Creator, chip, or swimlane reach a real property gets. See [[DOCS-115 File task property columns|File task property columns]].
 
 ## Set fields versus managed fields
 
@@ -70,3 +72,4 @@ Operon settings for this live in two places under **Settings → Operon → Core
 ## Related
 
 - [[DOCS-001 Operon Docs MOC|Operon Docs MOC]]
+- [[DOCS-115 File task property columns|File task property columns]]

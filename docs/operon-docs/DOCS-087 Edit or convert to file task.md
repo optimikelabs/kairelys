@@ -12,7 +12,7 @@ tags:
   - filetask
   - edit
   - convert
-Updated: 2026-06-25T16:47:21
+Updated: 2026-07-18T15:13:08
 ---
 
 # Edit or convert to file task
@@ -31,8 +31,11 @@ Updated: 2026-06-25T16:47:21
 
 Use it to edit a file task you are reading without hunting for the command, or to promote a note you have been writing into a real task once it has become one. Converting keeps the note's body; it adds the task fields and an `operonId`. See [[DOCS-019 Converting inline and file tasks|Converting inline and file tasks]].
 
+This command only ever acts on the note you already have open, and it confirms before converting a normal note. To convert a note you have not opened, right-click it and choose **Convert to Operon File Task…** instead, which skips the confirmation and goes straight to the template picker. See [[DOCS-019 Converting inline and file tasks|Converting inline and file tasks]].
+
 ## Related
 
 - [[DOCS-001 Operon Docs MOC|Operon Docs MOC]]
 - [[DOCS-088 Convert file task to inline task|Convert file task to inline task]]
 - [[DOCS-013 File tasks|File tasks]]
+- [[DOCS-019 Converting inline and file tasks|Converting inline and file tasks]]

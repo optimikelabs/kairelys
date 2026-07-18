@@ -6,7 +6,7 @@ tags:
   - operon
   - start
   - navigation
-Updated: 2026-07-13T23:17:23
+Updated: 2026-07-18T15:07:38
 ---
 
 # Operon Docs
@@ -143,6 +143,7 @@ Follow these in order. They are enough to go from "what is this?" to doing real 
 - [[DOCS-038 Task priorities|Task priorities]]
 - [[DOCS-039 Key mappings|Key mappings]]
 - [[DOCS-040 Custom keys|Custom keys]]
+- [[DOCS-115 File task property columns|File task property columns]]
 - [[DOCS-041 Task chips display and behavior|Task chips: display and behavior]]
 - [[DOCS-103 Task Wikilink Overlay|Task Wikilink Overlay]]
 - [[DOCS-042 Contextual menu actions|Contextual menu actions]]

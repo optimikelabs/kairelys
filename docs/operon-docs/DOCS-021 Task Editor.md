@@ -11,7 +11,7 @@ tags:
   - taskeditor
   - edit
   - pickers
-Updated: 2026-06-25T16:47:21
+Updated: 2026-07-18T15:13:08
 ---
 
 # Task Editor
@@ -52,6 +52,10 @@ For a file task, the editor can also show the Markdown body alongside the fields
 
 ![MEDIA-DOCS-021-3 - Task Editor file task layout](https://raw.githubusercontent.com/hasanyilmaz/operon/main/docs/media/MEDIA-DOCS-021-3.png)
 
+## Saving is automatic
+
+The Task Editor autosaves your changes two seconds after your last edit, so you do not press a save button while working through a task's fields. Closing the editor, with its close control, a keyboard shortcut, or the backdrop, saves any pending change immediately rather than waiting out that two seconds. This timing is fixed and not a setting.
+
 ## Why edit here instead of in Markdown
 
 You can always edit the raw `{{key:: value}}` text, and Operon will read it. But the Task Editor is safer: it writes fields in the right format, keeps `operonId` intact, and updates rollups and links for you. Hand-editing is best for quick text tweaks; the editor is best for anything structural. See [[DOCS-015 Task identity and operonId|Task identity and operonId]].
@@ -61,6 +65,8 @@ You can always edit the raw `{{key:: value}}` text, and Operon will read it. But
 **Is the editor different for inline and file tasks?** The fields are the same. File tasks additionally show the note body; inline tasks can jump to their source line.
 
 **Will editing here change my Markdown?** Yes. The Task Editor writes back to the task's Markdown, inline line or file frontmatter, so your notes stay the source of truth.
+
+**Do I need to save before closing the Task Editor?** No. It autosaves two seconds after your last edit, and closing it saves any pending change right away.
 
 ## Settings
 

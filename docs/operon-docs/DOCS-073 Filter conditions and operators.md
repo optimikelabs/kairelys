@@ -11,7 +11,7 @@ tags:
   - filterview
   - search
   - conditions
-Updated: 2026-07-16T19:53:04
+Updated: 2026-07-18T15:13:08
 ---
 
 # Filter conditions and operators
@@ -80,6 +80,14 @@ The `count` operators test how many entries the list has, which is useful for "h
 
 For a task's open or closed state: `is open`, `is done`, `is cancelled`.
 
+## File task property operators
+
+A [[DOCS-115 File task property columns|file task property]] gets its operators from the same type-based lists above, with two differences that matter because a discovered property is not a field every task structurally has:
+
+- **Checkbox is a real boolean here, not a task's open/closed state.** A file task property typed Checkbox uses `is true`, `is false`, `has any value`, `has no value`, `property is present`, `property is missing`, not the `is open` / `is done` / `is cancelled` set built-in Checkbox fields use.
+- **Date, Date & time, List, and Tags gain `property is present` and `property is missing`.** A built-in date or list field does not need these, every task has that slot, but a discovered property may not exist on a given note's frontmatter at all, so these two operators let a condition tell "missing" apart from "present but empty."
+- **Text and Number** use exactly the same operator lists as their built-in counterparts, since those already include `property is present` and `property is missing`.
+
 ## Structural conditions
 
 A few conditions test a task's place in the system rather than a single field value:
@@ -99,9 +107,12 @@ These let a filter say "anything under this project," "only pinned work," or "on
 
 **Why did the value box disappear?** The operator you chose needs no value, like "is today" or "has any value."
 
+**Why does a Checkbox condition on a frontmatter property say "is true" instead of "is open"?** It is a [[DOCS-115 File task property columns|file task property]], a real boolean, not the task's own open or closed state, so it gets `is true` / `is false` plus presence operators instead.
+
 ## Related
 
 - [[DOCS-001 Operon Docs MOC|Operon Docs MOC]]
 - [[DOCS-026 Dynamic file task filter|Dynamic file task filter]]
 - [[DOCS-059 Dynamic Subtasks Filter|Dynamic Subtasks Filter]]
 - [[DOCS-097 Project serials|Project serials]]
+- [[DOCS-115 File task property columns|File task property columns]]
