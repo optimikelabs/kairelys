@@ -45,7 +45,14 @@ import {
 import type { ProjectSerialDisplay } from './src/core/project-serials';
 import { scanFileWithMappings } from './src/indexer/file-scanner';
 import { TaskWriter } from './src/core/task-writer';
-import type { RawYamlPropertyExpectation, RawYamlPropertyMutation, RawYamlPropertyWriteOutcome } from './src/core/raw-yaml-property';
+import {
+	isSupportedRawYamlPropertyValue,
+	isWritableRawYamlPropertyName,
+	readRawYamlPropertyExpectation,
+	type RawYamlPropertyExpectation,
+	type RawYamlPropertyMutation,
+	type RawYamlPropertyWriteOutcome,
+} from './src/core/raw-yaml-property';
 import { registerObsidianIconFallbacks } from './src/core/obsidian-icon-fallbacks';
 import { invalidateLocationPlaceIndex } from './src/core/location-source-resolver';
 import { DependencyManager } from './src/systems/dependency-manager';
@@ -91,9 +98,19 @@ import {
 	buildSubtaskTaskCreatorDraft,
 	buildTaskCreatorSubmitFieldSeed,
 	cloneTaskCreatorDraft,
+	createEmptyTaskCreatorDraft,
 	isTaskCreatorFieldExplicitlyCleared,
 	type TaskCreatorCreateType,
 } from './src/ui/task-creator-modal';
+import {
+	OPERON_PUBLIC_API_VERSION,
+	type OperonPublicApiV1,
+	type OperonPublicConvertTaskInput,
+	type OperonPublicCreateTaskInput,
+	type OperonPublicMutationResult,
+	type OperonPublicTransitionTaskInput,
+	type OperonPublicUpdateTaskInput,
+} from './src/api/public-api';
 import {
 	applyTaskCreatorParentSeedToDraft,
 	buildCalendarTaskCreatorDraft,
@@ -794,6 +811,7 @@ interface TablePresetSettingsSnapshot {
 }
 
 export default class OperonPlugin extends Plugin {
+	api!: OperonPublicApiV1;
 	storage!: OperonStorage;
 	indexer!: OperonIndexer;
 	writer!: TaskWriter;
@@ -2097,6 +2115,309 @@ export default class OperonPlugin extends Plugin {
 		runAsyncAction('plugin load failed', () => this.loadPlugin());
 	}
 
+	private publicMutationResult(
+		ok: boolean,
+		operonId: string | null,
+		code: OperonPublicMutationResult['code'],
+		message?: string,
+	): OperonPublicMutationResult {
+		return { ok, operonId, code, ...(message ? { message } : {}) };
+	}
+
+	private buildPublicApi(): OperonPublicApiV1 {
+		return {
+			version: OPERON_PUBLIC_API_VERSION,
+			capabilities: () => ({
+				ready: this.startupReady,
+				create: this.startupReady,
+				update: this.startupReady,
+				transition: this.startupReady,
+				convert: this.startupReady,
+			}),
+			createTask: input => this.publicCreateTask(input),
+			updateTask: (operonId, input) => this.publicUpdateTask(operonId, input),
+			transitionTask: (operonId, input) => this.publicTransitionTask(operonId, input),
+			convertTask: (operonId, input) => this.publicConvertTask(operonId, input),
+		};
+	}
+
+	private ensurePublicApiReady(): OperonPublicMutationResult | null {
+		return this.startupReady
+			? null
+			: this.publicMutationResult(false, null, 'not-ready', 'Operon startup is not complete.');
+	}
+
+	private async publicCreateTask(input: OperonPublicCreateTaskInput): Promise<OperonPublicMutationResult> {
+		const notReady = this.ensurePublicApiReady();
+		if (notReady) return notReady;
+		const description = this.normalizeTaskCreatorText(input.description);
+		if (!description) return this.publicMutationResult(false, null, 'invalid-input', 'Description is required.');
+		const unsupportedFields = Object.keys(input.fields ?? {}).filter(key => (
+			key !== 'status' && key !== 'operonId' && getManagedTaskFieldType(key, this.settings.keyMappings) === null
+		));
+		if (unsupportedFields.length > 0) {
+			return this.publicMutationResult(
+				false,
+				null,
+				'invalid-input',
+				`Unmanaged fields must be supplied through properties: ${unsupportedFields.join(', ')}`,
+			);
+		}
+		if (input.source === 'inline' && input.properties && Object.keys(input.properties).length > 0) {
+			return this.publicMutationResult(false, null, 'invalid-input', 'Unmanaged properties are supported only for file tasks.');
+		}
+
+		const draft = createEmptyTaskCreatorDraft();
+		draft.description = description;
+		draft.tags = Array.from(new Set((input.tags ?? [])
+			.map(tag => tag.replace(/^#/, '').trim())
+			.filter(Boolean)));
+		draft.fieldValues = Object.fromEntries(
+			Object.entries(input.fields ?? {})
+				.filter(([key]) => key !== 'operonId')
+				.map(([key, value]) => [key, String(value)]),
+		);
+		draft.explicitFieldKeys = Array.from(new Set([
+			...Object.keys(draft.fieldValues),
+			...(input.tags ? ['tags'] : []),
+		]));
+
+		try {
+			if (input.source === 'inline') {
+				const created = await this.createInlineTaskFromCreatorDraftResult(draft, {
+					targetDateKey: input.targetDateKey,
+				});
+				if (!created) return this.publicMutationResult(false, null, 'rejected', 'Operon rejected inline task creation.');
+				const requestedStatus = input.fields?.status;
+				if (requestedStatus) {
+					const transitioned = await this.publicTransitionTask(created.operonId, { status: requestedStatus });
+					if (!transitioned.ok) return transitioned;
+				}
+				return this.publicMutationResult(true, created.operonId, 'applied');
+			}
+
+			const templateOptions = this.getFileTaskTemplateOptions();
+			const templateId = input.fileTemplateId
+				|| this.getAvailableTaskCreatorDefaultFileTemplateId()
+				|| templateOptions[0]?.id
+				|| '';
+			if (!templateId) {
+				return this.publicMutationResult(false, null, 'invalid-input', 'No file task template is available.');
+			}
+			draft.fileTemplateId = templateId;
+			let createdOperonId: string | null = null;
+			const created = await this.createFileTaskFromCreatorDraft(draft, {
+				reopenCreator: () => {},
+				onCreated: result => {
+					createdOperonId = (result.fieldValues['operonId'] ?? '').trim() || null;
+				},
+			});
+			if (!created || !createdOperonId) {
+				return this.publicMutationResult(false, createdOperonId, 'rejected', 'Operon rejected file task creation.');
+			}
+			if (input.properties && Object.keys(input.properties).length > 0) {
+				for (const [propertyName, value] of Object.entries(input.properties)) {
+					const updated = await this.publicUpdateTask(createdOperonId, { properties: { [propertyName]: value } });
+					if (!updated.ok) return updated;
+				}
+			}
+			const requestedStatus = input.fields?.status;
+			if (requestedStatus) {
+				const transitioned = await this.publicTransitionTask(createdOperonId, { status: requestedStatus });
+				if (!transitioned.ok) return transitioned;
+			}
+			return this.publicMutationResult(true, createdOperonId, 'applied');
+		} catch (error) {
+			return this.publicMutationResult(false, null, 'failed', error instanceof Error ? error.message : String(error));
+		}
+	}
+
+	private async publicUpdateTask(
+		operonId: string,
+		input: OperonPublicUpdateTaskInput,
+	): Promise<OperonPublicMutationResult> {
+		const notReady = this.ensurePublicApiReady();
+		if (notReady) return { ...notReady, operonId };
+		const task = this.indexer.getTask(operonId);
+		if (!task) return this.publicMutationResult(false, operonId, 'not-found');
+		const mutationGroups = [
+			input.description !== undefined,
+			input.fields !== undefined || input.tags !== undefined,
+			input.properties !== undefined,
+		].filter(Boolean).length;
+		if (mutationGroups !== 1) {
+			return this.publicMutationResult(
+				false,
+				operonId,
+				'invalid-input',
+				'Provide exactly one mutation group: description, managed fields/tags, or one unmanaged file property.',
+			);
+		}
+		if (input.properties && Object.keys(input.properties).length !== 1) {
+			return this.publicMutationResult(false, operonId, 'invalid-input', 'Update exactly one unmanaged file property per operation.');
+		}
+
+		const unsupportedFields: string[] = [];
+		const fields = Object.fromEntries(
+			Object.entries(input.fields ?? {})
+				.filter(([key]) => key !== 'operonId' && key !== 'status' && key !== '_checkbox')
+				.filter(([key]) => {
+					const supported = getManagedTaskFieldType(key, this.settings.keyMappings) !== null;
+					if (!supported) unsupportedFields.push(key);
+					return supported;
+				})
+				.map(([key, value]) => [key, String(value)]),
+		);
+		if (unsupportedFields.length > 0) {
+			return this.publicMutationResult(
+				false,
+				operonId,
+				'invalid-input',
+				`Unmanaged fields must be supplied through properties: ${unsupportedFields.join(', ')}`,
+			);
+		}
+		const payload: Record<string, string> = { ...fields };
+		if (input.tags !== undefined) {
+			payload['_tags'] = Array.from(new Set(input.tags
+				.map(tag => tag.replace(/^#/, '').trim())
+				.filter(Boolean))).join(';');
+		}
+		if (Object.keys(payload).length === 0 && input.description === undefined && input.properties === undefined) {
+			return this.publicMutationResult(false, operonId, 'invalid-input', 'No supported field was provided.');
+		}
+		try {
+			if (input.description !== undefined) {
+				const description = input.description.trim();
+				if (!description) return this.publicMutationResult(false, operonId, 'invalid-input', 'Description is required.');
+				const descriptionTask = this.indexer.getTask(operonId);
+				if (!descriptionTask || !await this.updateTableTaskDescriptionAndRefresh(descriptionTask, description)) {
+					return this.publicMutationResult(false, operonId, 'rejected', 'Operon rejected the description update.');
+				}
+			}
+			if (Object.keys(payload).length > 0 && !await this.updateTaskFieldsAndRefresh(operonId, payload, {
+				changedKeys: Object.keys(payload),
+			})) {
+				return this.publicMutationResult(false, operonId, 'rejected');
+			}
+			if (input.properties !== undefined) {
+				const propertyTask = this.indexer.getTask(operonId);
+				if (!propertyTask || propertyTask.primary.format !== 'yaml') {
+					return this.publicMutationResult(false, operonId, 'invalid-input', 'Unmanaged properties are supported only for file tasks.');
+				}
+				for (const [propertyName, value] of Object.entries(input.properties)) {
+					if (!isWritableRawYamlPropertyName(propertyName, this.settings.keyMappings) || !isSupportedRawYamlPropertyValue(value)) {
+						return this.publicMutationResult(false, operonId, 'invalid-input', `Unsupported unmanaged property: ${propertyName}`);
+					}
+					const latest = this.indexer.getTask(operonId);
+					if (!latest || latest.primary.format !== 'yaml') return this.publicMutationResult(false, operonId, 'not-found');
+					const file = this.app.vault.getAbstractFileByPath(latest.primary.filePath);
+					if (!(file instanceof TFile)) return this.publicMutationResult(false, operonId, 'not-found');
+					const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {};
+					const expected = readRawYamlPropertyExpectation(frontmatter, propertyName);
+					if (!expected) return this.publicMutationResult(false, operonId, 'rejected', `Current property value is unsupported: ${propertyName}`);
+					const outcome = await this.updateTableFilePropertyAndRefresh(operonId, {
+						propertyName,
+						expected,
+						mutation: { kind: 'set', value },
+					});
+					if (outcome !== 'updated' && outcome !== 'already-updated') {
+						return this.publicMutationResult(false, operonId, 'rejected', `Property update ${propertyName} returned ${outcome}.`);
+					}
+				}
+			}
+			return this.publicMutationResult(true, operonId, 'applied');
+		} catch (error) {
+			return this.publicMutationResult(false, operonId, 'failed', error instanceof Error ? error.message : String(error));
+		}
+	}
+
+	private async publicTransitionTask(
+		operonId: string,
+		input: OperonPublicTransitionTaskInput,
+	): Promise<OperonPublicMutationResult> {
+		const notReady = this.ensurePublicApiReady();
+		if (notReady) return { ...notReady, operonId };
+		const task = this.indexer.getTask(operonId);
+		if (!task) return this.publicMutationResult(false, operonId, 'not-found');
+		const workflow = resolveWorkflowStatus(this.settings.pipelines, input.status);
+		if (!workflow) {
+			return this.publicMutationResult(false, operonId, 'invalid-input', `Unknown workflow status: ${input.status}`);
+		}
+		try {
+			const payload = this.buildStatusCycleFieldPayload(task, workflow, localNow(), localToday());
+			const applied = await this.updateTaskFieldsAndRefresh(operonId, payload, {
+				changedKeys: Object.keys(payload),
+				refreshReason: 'status-cycle',
+			});
+			return applied
+				? this.publicMutationResult(true, operonId, 'applied')
+				: this.publicMutationResult(false, operonId, 'rejected');
+		} catch (error) {
+			return this.publicMutationResult(false, operonId, 'failed', error instanceof Error ? error.message : String(error));
+		}
+	}
+
+	private async publicConvertTask(
+		operonId: string,
+		input: OperonPublicConvertTaskInput,
+	): Promise<OperonPublicMutationResult> {
+		const notReady = this.ensurePublicApiReady();
+		if (notReady) return { ...notReady, operonId };
+		const task = this.indexer.getTask(operonId);
+		if (!task) return this.publicMutationResult(false, operonId, 'not-found');
+		const currentSource = task.primary.format === 'yaml' ? 'file' : 'inline';
+		if (currentSource === input.target) return this.publicMutationResult(true, operonId, 'applied');
+
+		try {
+			if (input.target === 'file') {
+				const sourceFile = this.app.vault.getAbstractFileByPath(task.primary.filePath);
+				if (!(sourceFile instanceof TFile)) return this.publicMutationResult(false, operonId, 'not-found');
+				const parsed = await this.loadEditableParsedTask(task);
+				const options = this.getFileTaskTemplateOptions();
+				const template = findFileTaskTemplateOptionById(
+					options,
+					input.fileTemplateId || this.getAvailableTaskCreatorDefaultFileTemplateId() || options[0]?.id || '',
+				);
+				if (!template) return this.publicMutationResult(false, operonId, 'invalid-input', 'No file task template is available.');
+				await this.finishInlineTaskToFileTaskConversion(sourceFile, parsed, template);
+				const converted = this.indexer.getTask(operonId);
+				return converted?.primary.format === 'yaml'
+					? this.publicMutationResult(true, operonId, 'applied')
+					: this.publicMutationResult(false, operonId, 'rejected');
+			}
+
+			const targetPath = input.targetPath?.trim();
+			if (!targetPath) {
+				return this.publicMutationResult(false, operonId, 'invalid-input', 'targetPath is required for file-to-inline conversion.');
+			}
+			const targetFile = this.app.vault.getAbstractFileByPath(targetPath);
+			if (!(targetFile instanceof TFile) || targetFile.path === task.primary.filePath) {
+				return this.publicMutationResult(false, operonId, 'invalid-input', 'targetPath must identify a different Markdown file.');
+			}
+			const inlineTaskLine = this.formatConverter.yamlToInline(operonId);
+			if (!inlineTaskLine?.trim()) return this.publicMutationResult(false, operonId, 'rejected');
+			const inserted = await this.insertInlineTaskLineIntoFile(targetFile, inlineTaskLine);
+			if (!inserted) return this.publicMutationResult(false, operonId, 'rejected');
+			const transitioned = await this.withFileTaskToInlineTransitionSafePass(
+				operonId,
+				task.primary.filePath,
+				targetFile.path,
+				inserted.lineNumber,
+				async () => {
+					await this.indexer.reindexFilePath(targetFile.path);
+					return await this.deleteYamlTaskByPath(task.primary.filePath) ? inserted : null;
+				},
+			);
+			if (!transitioned) return this.publicMutationResult(false, operonId, 'rejected');
+			this.refreshViews();
+			return this.indexer.getTask(operonId)?.primary.format === 'inline'
+				? this.publicMutationResult(true, operonId, 'applied')
+				: this.publicMutationResult(false, operonId, 'rejected');
+		} catch (error) {
+			return this.publicMutationResult(false, operonId, 'failed', error instanceof Error ? error.message : String(error));
+		}
+	}
+
 	private async initializeTablePresetRegistry(): Promise<void> {
 		await this.executeTablePresetFileMigration({ notify: true, refreshRegistry: false });
 		this.tablePresetRegistry = new TablePresetRegistry<TFile>({
@@ -2762,6 +3083,7 @@ export default class OperonPlugin extends Plugin {
 			operonId => this.suppressRawTaskCreationNotice(operonId),
 		);
 		this.formatConverter = new FormatConverter(this.app, this.indexer, this.settings);
+		this.api = this.buildPublicApi();
 		this.fileTaskArchiver = new FileTaskArchiver(this.app, this.indexer, () => this.settings, {
 			isTaskActive: operonId => this.timeTracker.isTimerRunning(operonId),
 		});
