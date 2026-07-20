@@ -11,7 +11,7 @@ tags:
   - reminders
   - automation
   - reference
-Updated: 2026-07-20T19:11:13
+Updated: 2026-07-20T21:04:57
 ---
 
 # Reminder rules
@@ -123,25 +123,25 @@ This is also why the picker refuses a new reminder that lands on a moment the ta
 
 ## Reminder rules in real tasks
 
-Inline tasks store several rules in one `{{reminderRules:: ...}}` field, separated by `; `. File tasks store the same rules as a YAML list under the visible `ReminderRules` property. The following examples are complete enough to paste into a real workflow; their `operonId` placeholders generate fresh task identities instead of encouraging duplicate static ids. See [[DOCS-061 operonId template variables|operonId template variables]].
+Inline tasks store several rules in one `{{reminderRules:: ...}}` field, separated by `; `, and fixed reminders the same way in `{{reminderDatetimes:: ...}}`. File tasks store both as YAML lists, under the visible `ReminderRules` and `ReminderDatetimes` properties. The examples below mix both kinds on the same task, since a task is free to carry either or both. They are complete enough to paste into a real workflow; their `operonId` placeholders generate fresh task identities instead of encouraging duplicate static ids. See [[DOCS-061 operonId template variables|operonId template variables]].
 
 ### Inline task examples
 
-This workshop has a real start and end time. The first rule fires at 09:00, thirty minutes before the workshop begins. The second fires at 11:20, ten minutes before its planned end:
+This workshop has a real start and end time. Two reminders are rules: the first fires at 09:00, thirty minutes before the workshop begins, the second at 11:20, ten minutes before its planned end. One more is fixed: the evening before, at 18:00, to finish prepping slides, a moment that has nothing to do with any of the task's own dates:
 
 ```md
-- [ ] Lead the quarterly planning workshop #work {{operonId:: {{operonId}}}} {{status:: Project.Planned}} {{priority:: A}} {{dateScheduled:: 2026-07-23}} {{datetimeStart:: 2026-07-23T09:30:00}} {{datetimeEnd:: 2026-07-23T11:30:00}} {{reminderRules:: datetimeStart.30m; datetimeEnd.10m}} {{contexts:: [[Office]]}}
+- [ ] Lead the quarterly planning workshop #work {{operonId:: {{operonId}}}} {{status:: Project.Planned}} {{priority:: A}} {{dateScheduled:: 2026-07-23}} {{datetimeStart:: 2026-07-23T09:30:00}} {{datetimeEnd:: 2026-07-23T11:30:00}} {{reminderDatetimes:: 2026-07-22T18:00:00}} {{reminderRules:: datetimeStart.30m; datetimeEnd.10m}} {{contexts:: [[Office]]}}
 ```
 
-This deadline uses a date-only field. Because `dateDue` resolves at midnight, its reminders fire at 00:00 on July 24 and July 30, one week and one day before the July 31 deadline:
+This deadline uses a date-only field. Two reminders are rules: because `dateDue` resolves at midnight, they fire at 00:00 on July 24 and July 30, one week and one day before the July 31 deadline. Two more are fixed: a call with the accountant on the 24th at 10:00, and a final receipts review on the 29th at 09:00, neither of which needs to move if the due date ever does:
 
 ```md
-- [ ] Submit the monthly VAT return #finance {{operonId:: {{operonId}}}} {{status:: Project.InProgress}} {{priority:: A}} {{dateStarted:: 2026-07-20}} {{dateDue:: 2026-07-31}} {{reminderRules:: dateDue.1w; dateDue.1d}} {{contexts:: [[Finance]]}}
+- [ ] Submit the monthly VAT return #finance {{operonId:: {{operonId}}}} {{status:: Project.InProgress}} {{priority:: A}} {{dateStarted:: 2026-07-20}} {{dateDue:: 2026-07-31}} {{reminderDatetimes:: 2026-07-24T10:00:00; 2026-07-29T09:00:00}} {{reminderRules:: dateDue.1w; dateDue.1d}} {{contexts:: [[Finance]]}}
 ```
 
 ### File task YAML examples
 
-This File Task represents a client presentation with two reminders around its timed block. `ReminderRules` is a YAML sequence, not a semicolon-separated scalar:
+This File Task represents a client presentation with two reminders around its timed block, plus one fixed reminder to send the calendar invite three days ahead. `ReminderDatetimes` and `ReminderRules` are each a YAML sequence, not a semicolon-separated scalar:
 
 ```yaml
 ---
@@ -151,6 +151,8 @@ Priority: A
 dateScheduled: 2026-07-28
 datetimeStart: 2026-07-28T14:00:00
 datetimeEnd: 2026-07-28T15:30:00
+ReminderDatetimes:
+  - 2026-07-25T09:00:00
 ReminderRules:
   - datetimeStart.1h
   - datetimeEnd.15m
@@ -163,7 +165,7 @@ datetimeModified: {{datetime}}
 ---
 ```
 
-This recurring File Task schedules a weekly review every Monday. Its rules carry forward with each new occurrence: one reminder at Sunday midnight and another at Sunday 22:00, both resolved from the next Monday's date-only `dateScheduled` value:
+This recurring File Task schedules a weekly review every Monday. Its rules carry forward with each new occurrence: one reminder at Sunday midnight and another at Sunday 22:00, both resolved from the next Monday's date-only `dateScheduled` value. Its two fixed reminders do not carry forward the same way: they are pinned to this specific Sunday, the 26th, at 17:00 and 21:00, and belong only to this occurrence. See [[DOCS-058 Operon inheritance rules|Operon inheritance rules]].
 
 ```yaml
 ---
@@ -172,6 +174,9 @@ Status: Project.Planned
 Priority: B
 dateScheduled: 2026-07-27
 repeat: mode=schedule|freq=week|interval=1|days=mo
+ReminderDatetimes:
+  - 2026-07-26T17:00:00
+  - 2026-07-26T21:00:00
 ReminderRules:
   - dateScheduled.1d
   - dateScheduled.2h
@@ -201,6 +206,14 @@ See [[DOCS-012 Inline task syntax|Inline task syntax]] for the complete inline a
 | `datetimeStart.0m` | Exactly when it starts |
 | `datetimeEnd.15m` | A quarter of an hour before it should be finished |
 | `datetimeStart.1d12h` | A day and a half before it starts |
+
+## Tips
+
+> [!tip] A rule works in a template before any date exists
+> A rule does not need its reference date to be filled in yet. Put `dateDue.1d` in a task template and it sits there unresolved, doing nothing, until whoever builds a task from that template gives it a due date. The moment that date lands, the rule resolves and starts counting down, with nothing else to set up. This is the same unresolved state described above, just reached from the other direction: instead of a date being cleared, it has not been added yet.
+
+> [!tip] Set a rule once on a recurring task, and every future occurrence keeps it
+> Because rules carry forward to each new occurrence and re-resolve against its own dates, you only add `datetimeStart.15m` once. Every occurrence after that, for as long as the task keeps recurring, gets reminded the same way on its own dates, with nothing to re-add and nothing to remember. See [[DOCS-033 Recurring tasks|Recurring tasks]] and [[DOCS-058 Operon inheritance rules|Operon inheritance rules]].
 
 ## FAQ
 

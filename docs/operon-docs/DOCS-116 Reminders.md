@@ -11,7 +11,7 @@ tags:
   - reminders
   - scheduling
   - configure
-Updated: 2026-07-20T15:56:48
+Updated: 2026-07-20T21:04:57
 ---
 
 # Reminders
@@ -25,7 +25,7 @@ Reminders live in two fields, and the difference between them is the whole idea:
 
 A task can use either, or both at once. This page is what they are and how they behave. For the exact grammar of a rule, its offsets and reference times, see [[DOCS-117 Reminder rules|Reminder rules]].
 
-> **MEDIA-DOCS-116-1:** A task in the Task Editor with both a fixed reminder and a rule-based reminder shown as chips.
+> **MEDIA-DOCS-116-1:** Tasks with both a fixed reminder and a rule-based reminder shown as chips.
 
 ![MEDIA-DOCS-116-1 - Reminder chips in the Task Editor](https://raw.githubusercontent.com/hasanyilmaz/operon/main/docs/media/MEDIA-DOCS-116-1.png)
 
@@ -106,7 +106,7 @@ A reminder belongs to an **open** task. Once a task is finished or cancelled, it
 
 Reopening a task does not replay what you missed. If a reminder's moment passed while the task sat completed, reopening does not fire it retroactively. Reminders still ahead of you schedule as normal.
 
-Recurring tasks preserve the same distinction. **ReminderRules carry forward** to the next occurrence and resolve again from its new dates when the referenced date is available, so a rule such as 15 minutes before Start time keeps working on every run that has a Start time. **ReminderDatetimes do not carry forward** because each one names a fixed moment that belongs only to the occurrence where you created it. See [[DOCS-033 Recurring tasks|Recurring tasks]] and [[DOCS-058 Operon inheritance rules|Operon inheritance rules]].
+Recurring tasks preserve the same distinction, and it matters more here than anywhere else. **ReminderRules carry forward**: each time a recurring task completes and Operon builds the next occurrence, the same rule comes along and resolves again against that occurrence's own dates. Set a rule such as 15 minutes before Start time once, and every future occurrence that has a Start time gets reminded the same way, run after run, with nothing to re-add and nothing to remember. **ReminderDatetimes do not carry forward**: each one names a fixed moment that belonged only to the occurrence where you created it, so the next occurrence starts with none, and you add a new one by hand if that run needs it. See [[DOCS-033 Recurring tasks|Recurring tasks]] and [[DOCS-058 Operon inheritance rules|Operon inheritance rules]].
 
 ## How you are notified
 
@@ -155,7 +155,7 @@ Both use your real notification and sound settings, and neither creates or opens
 ## Tips
 
 > [!tip] Use a rule when the reminder is about the deadline, not about the clock
-> "Remind me the day before it is due" survives every reschedule; "remind me at 9am on the 14th" does not. If you find yourself moving a reminder every time you move a date, that reminder wanted to be a rule.
+> A rule such as **1d before Due date** survives every reschedule, because it is re-resolved against wherever the due date ends up. A fixed reminder at a specific date and time does not; it stays put even after the due date moves. If you find yourself moving a reminder every time you move a date, that reminder wanted to be a rule.
 
 ## FAQ
 

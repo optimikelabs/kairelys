@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "packageId": "operon-docs",
-  "generatedAt": "2026-07-20T18:25:54.471Z",
+  "generatedAt": "2026-07-20T19:09:09.308Z",
   "source": {
     "branch": "main",
     "docsBasePath": "docs/operon-docs",
@@ -585,13 +585,13 @@
     },
     {
       "path": "DOCS-116 Reminders.md",
-      "sha256": "2d902d8e8ee1a53f68e27f216bbd80f5f4d1112fa41181f96138a2f67738f0dc",
-      "bytes": 14139
+      "sha256": "9692fecb8a716c754d0549f075026f312e0e25606e7661779b5507204b6e827b",
+      "bytes": 14533
     },
     {
       "path": "DOCS-117 Reminder rules.md",
-      "sha256": "0dbfde6f7001b4ac7db683711581db1a827d054e5431d423a7419b175059ee71",
-      "bytes": 12107
+      "sha256": "6f45db533b61fc4aeec257671f5eb7e8672867676b40ce8960c048062acb8ab2",
+      "bytes": 14198
     }
   ]
 }
