@@ -11837,6 +11837,10 @@ export default class OperonPlugin extends Plugin {
 		fieldPresence: Set<string>,
 	): boolean {
 		if (option.kind !== 'builtin-pipeline-minimal') return true;
+		if ((fieldValues['status'] ?? '').trim()) {
+			fieldPresence.add('status');
+			return true;
+		}
 		const status = resolvePipelineMinimalFileTaskTemplateStatus(option, this.settings.pipelines);
 		if (!status) {
 			new Notice(t('notifications', 'pipelineMinimalFileTaskTemplateUnavailable'));
