@@ -104,11 +104,22 @@ import {
 } from './src/ui/task-creator-modal';
 import {
 	OPERON_PUBLIC_API_VERSION,
+	isOperonPublicAdoptInlineTaskInput,
+	isOperonPublicConvertTaskInput,
+	isOperonPublicCreateTaskInput,
+	isOperonPublicFilterQueryInput,
+	isOperonPublicRelocateTaskInput,
+	isOperonPublicTransitionTaskInput,
+	isOperonPublicUpdateTaskInput,
+	isPublicManagedFieldWritable,
 	type OperonPublicApiV1,
 	type OperonPublicAdoptInlineTaskInput,
 	type OperonPublicConvertTaskInput,
 	type OperonPublicCreateTaskInput,
+	type OperonPublicFilterQueryInput,
+	type OperonPublicFilterQueryResult,
 	type OperonPublicMutationResult,
+	type OperonPublicRelocateTaskInput,
 	type OperonPublicTransitionTaskInput,
 	type OperonPublicUpdateTaskInput,
 } from './src/api/public-api';
@@ -306,6 +317,7 @@ import {
 	normalizeDynamicFileTaskFilterSet,
 	normalizeDynamicSubtasksFilterSet,
 } from './src/core/dynamic-file-task-filter';
+import { evaluateFilterSet } from './src/core/filter-evaluator';
 import { getReleaseNotesForUpdate } from './src/core/release-notes';
 import {
 	getAvailableOperonReleaseVersion,
@@ -2137,12 +2149,16 @@ export default class OperonPlugin extends Plugin {
 				update: this.startupReady,
 				transition: this.startupReady,
 				convert: this.startupReady,
+				filterQuery: this.startupReady,
+				relocate: this.startupReady,
 			}),
 			adoptInlineTask: input => this.publicAdoptInlineTask(input),
 			createTask: input => this.publicCreateTask(input),
 			updateTask: (operonId, input) => this.publicUpdateTask(operonId, input),
 			transitionTask: (operonId, input) => this.publicTransitionTask(operonId, input),
 			convertTask: (operonId, input) => this.publicConvertTask(operonId, input),
+			queryFilterSet: input => this.publicQueryFilterSet(input),
+			relocateTask: (operonId, input) => this.publicRelocateTask(operonId, input),
 		};
 	}
 
@@ -2157,6 +2173,9 @@ export default class OperonPlugin extends Plugin {
 	): Promise<OperonPublicMutationResult> {
 		const notReady = this.ensurePublicApiReady();
 		if (notReady) return notReady;
+		if (!isOperonPublicAdoptInlineTaskInput(input)) {
+			return this.publicMutationResult(false, null, 'invalid-input', 'Invalid adoption payload.');
+		}
 		const targetPath = normalizePath(input.targetPath?.trim() ?? '');
 		if (!targetPath || !Number.isInteger(input.line) || input.line < 1) {
 			return this.publicMutationResult(false, null, 'invalid-input', 'targetPath and a positive one-based line are required.');
@@ -2282,6 +2301,20 @@ export default class OperonPlugin extends Plugin {
 			if (!adopted || adopted.primary.filePath !== targetPath || adopted.primary.lineNumber !== lineNumber) {
 				return this.publicMutationResult(false, adoptionState.operonId, 'failed', 'The adopted task could not be proven in the final index.');
 			}
+			const adoptedDraft = createEmptyTaskCreatorDraft();
+			adoptedDraft.description = adopted.description;
+			adoptedDraft.tags = [...adopted.tags];
+			adoptedDraft.fieldValues = { ...adopted.fieldValues };
+			adoptedDraft.explicitFieldKeys = Array.from(new Set([
+				...Object.keys(adoptedDraft.fieldValues),
+				...(adopted.tags.length > 0 ? ['tags'] : []),
+			]));
+			await this.finalizeTaskCreatorCreatedTask(
+				adoptionState.operonId,
+				adoptedDraft,
+				adopted.fieldValues['parentTask'],
+			);
+			this.refreshViews();
 			return this.publicMutationResult(true, adoptionState.operonId, 'applied');
 		} catch (error) {
 			return this.publicMutationResult(false, adoptionState.operonId, 'failed', error instanceof Error ? error.message : String(error));
@@ -2291,10 +2324,13 @@ export default class OperonPlugin extends Plugin {
 	private async publicCreateTask(input: OperonPublicCreateTaskInput): Promise<OperonPublicMutationResult> {
 		const notReady = this.ensurePublicApiReady();
 		if (notReady) return notReady;
+		if (!isOperonPublicCreateTaskInput(input)) {
+			return this.publicMutationResult(false, null, 'invalid-input', 'Invalid task creation payload.');
+		}
 		const description = this.normalizeTaskCreatorText(input.description);
 		if (!description) return this.publicMutationResult(false, null, 'invalid-input', 'Description is required.');
 		const unsupportedFields = Object.keys(input.fields ?? {}).filter(key => (
-			key !== 'status' && key !== 'operonId' && getManagedTaskFieldType(key, this.settings.keyMappings) === null
+			key !== 'status' && !isPublicManagedFieldWritable(key, this.settings.keyMappings)
 		));
 		if (unsupportedFields.length > 0) {
 			return this.publicMutationResult(
@@ -2316,6 +2352,15 @@ export default class OperonPlugin extends Plugin {
 		if (input.statusId?.trim() && input.fields?.status?.trim()) {
 			return this.publicMutationResult(false, null, 'invalid-input', 'Provide at most one of fields.status or statusId.');
 		}
+		const requestedStatusId = input.statusId?.trim() ?? '';
+		const requestedStatusValue = input.fields?.status?.trim()
+			|| (requestedStatusId ? this.resolvePublicStatusValueById(requestedStatusId) : '');
+		if (requestedStatusId && !requestedStatusValue) {
+			return this.publicMutationResult(false, null, 'invalid-input', `Unknown workflow status id: ${requestedStatusId}`);
+		}
+		if (requestedStatusValue && !resolveWorkflowStatus(this.settings.pipelines, requestedStatusValue)) {
+			return this.publicMutationResult(false, null, 'invalid-input', `Unknown workflow status: ${requestedStatusValue}`);
+		}
 
 		const draft = createEmptyTaskCreatorDraft();
 		draft.description = description;
@@ -2324,9 +2369,9 @@ export default class OperonPlugin extends Plugin {
 			.filter(Boolean)));
 		draft.fieldValues = Object.fromEntries(
 			Object.entries(input.fields ?? {})
-				.filter(([key]) => key !== 'operonId')
 				.map(([key, value]) => [key, String(value)]),
 		);
+		if (requestedStatusValue) draft.fieldValues['status'] = requestedStatusValue;
 		draft.explicitFieldKeys = Array.from(new Set([
 			...Object.keys(draft.fieldValues),
 			...(input.tags ? ['tags'] : []),
@@ -2341,14 +2386,6 @@ export default class OperonPlugin extends Plugin {
 					parentAwarePlacement: input.targetPath?.trim() ? false : undefined,
 				});
 				if (!created) return this.publicMutationResult(false, null, 'rejected', 'Operon rejected inline task creation.');
-				const requestedStatus = input.fields?.status;
-				const requestedStatusId = input.statusId?.trim();
-				if (requestedStatus || requestedStatusId) {
-					const transitioned = await this.publicTransitionTask(created.operonId, requestedStatusId
-						? { statusId: requestedStatusId }
-						: { status: requestedStatus });
-					if (!transitioned.ok) return transitioned;
-				}
 				return this.publicMutationResult(true, created.operonId, 'applied');
 			}
 
@@ -2362,11 +2399,14 @@ export default class OperonPlugin extends Plugin {
 			}
 			draft.fileTemplateId = templateId;
 			let createdOperonId: string | null = null;
+			let createdFilePath: string | null = null;
 			const created = await this.createFileTaskFromCreatorDraft(draft, {
 				reopenCreator: () => {},
 				targetFolderOverride: input.targetFolder?.trim() || null,
+				rollbackOnFinalizeFailure: true,
 				onCreated: result => {
 					createdOperonId = (result.fieldValues['operonId'] ?? '').trim() || null;
+					createdFilePath = result.file.path;
 				},
 			});
 			if (!created || !createdOperonId) {
@@ -2375,16 +2415,15 @@ export default class OperonPlugin extends Plugin {
 			if (input.properties && Object.keys(input.properties).length > 0) {
 				for (const [propertyName, value] of Object.entries(input.properties)) {
 					const updated = await this.publicUpdateTask(createdOperonId, { properties: { [propertyName]: value } });
-					if (!updated.ok) return updated;
+					if (!updated.ok) {
+						const rolledBack = createdFilePath
+							? await this.deleteYamlTaskByPath(createdFilePath).catch(() => false)
+							: false;
+						return this.publicMutationResult(false, createdOperonId, 'failed', rolledBack
+							? `File task creation was rolled back: ${updated.message ?? updated.code}`
+							: `File task creation failed and rollback could not be proven: ${updated.message ?? updated.code}`);
+					}
 				}
-			}
-			const requestedStatus = input.fields?.status;
-			const requestedStatusId = input.statusId?.trim();
-			if (requestedStatus || requestedStatusId) {
-				const transitioned = await this.publicTransitionTask(createdOperonId, requestedStatusId
-					? { statusId: requestedStatusId }
-					: { status: requestedStatus });
-				if (!transitioned.ok) return transitioned;
 			}
 			return this.publicMutationResult(true, createdOperonId, 'applied');
 		} catch (error) {
@@ -2398,6 +2437,9 @@ export default class OperonPlugin extends Plugin {
 	): Promise<OperonPublicMutationResult> {
 		const notReady = this.ensurePublicApiReady();
 		if (notReady) return { ...notReady, operonId };
+		if (typeof operonId !== 'string' || !operonId.trim() || !isOperonPublicUpdateTaskInput(input)) {
+			return this.publicMutationResult(false, typeof operonId === 'string' ? operonId : null, 'invalid-input', 'Invalid task update payload.');
+		}
 		const task = this.indexer.getTask(operonId);
 		if (!task) return this.publicMutationResult(false, operonId, 'not-found');
 		const mutationGroups = [
@@ -2420,9 +2462,8 @@ export default class OperonPlugin extends Plugin {
 		const unsupportedFields: string[] = [];
 		const fields = Object.fromEntries(
 			Object.entries(input.fields ?? {})
-				.filter(([key]) => key !== 'operonId' && key !== 'status' && key !== '_checkbox')
 				.filter(([key]) => {
-					const supported = getManagedTaskFieldType(key, this.settings.keyMappings) !== null;
+					const supported = isPublicManagedFieldWritable(key, this.settings.keyMappings);
 					if (!supported) unsupportedFields.push(key);
 					return supported;
 				})
@@ -2497,6 +2538,9 @@ export default class OperonPlugin extends Plugin {
 	): Promise<OperonPublicMutationResult> {
 		const notReady = this.ensurePublicApiReady();
 		if (notReady) return { ...notReady, operonId };
+		if (typeof operonId !== 'string' || !operonId.trim() || !isOperonPublicTransitionTaskInput(input)) {
+			return this.publicMutationResult(false, typeof operonId === 'string' ? operonId : null, 'invalid-input', 'Invalid task transition payload.');
+		}
 		const task = this.indexer.getTask(operonId);
 		if (!task) return this.publicMutationResult(false, operonId, 'not-found');
 		const requestedStatus = input.status?.trim() ?? '';
@@ -2546,6 +2590,9 @@ export default class OperonPlugin extends Plugin {
 	): Promise<OperonPublicMutationResult> {
 		const notReady = this.ensurePublicApiReady();
 		if (notReady) return { ...notReady, operonId };
+		if (typeof operonId !== 'string' || !operonId.trim() || !isOperonPublicConvertTaskInput(input)) {
+			return this.publicMutationResult(false, typeof operonId === 'string' ? operonId : null, 'invalid-input', 'Invalid task conversion payload.');
+		}
 		const task = this.indexer.getTask(operonId);
 		if (!task) return this.publicMutationResult(false, operonId, 'not-found');
 		const currentSource = task.primary.format === 'yaml' ? 'file' : 'inline';
@@ -2586,23 +2633,189 @@ export default class OperonPlugin extends Plugin {
 			if (!inlineTaskLine?.trim()) return this.publicMutationResult(false, operonId, 'rejected');
 			const inserted = await this.insertInlineTaskLineIntoFile(targetFile, inlineTaskLine);
 			if (!inserted) return this.publicMutationResult(false, operonId, 'rejected');
-			const transitioned = await this.withFileTaskToInlineTransitionSafePass(
-				operonId,
-				task.primary.filePath,
-				targetFile.path,
-				inserted.lineNumber,
-				async () => {
-					await this.indexer.reindexFilePath(targetFile.path);
-					return await this.deleteYamlTaskByPath(task.primary.filePath) ? inserted : null;
-				},
-			);
-			if (!transitioned) return this.publicMutationResult(false, operonId, 'rejected');
+			const rollbackInsertedInline = async (): Promise<boolean> => {
+				const rolledBack = await this.deleteInlineTaskById(targetFile.path, operonId, inserted.lineNumber)
+					.catch(() => false);
+				await this.indexer.reindexFilePath(targetFile.path).catch(() => undefined);
+				return rolledBack;
+			};
+			let transitioned: { lineNumber: number } | null = null;
+			try {
+				transitioned = await this.withFileTaskToInlineTransitionSafePass(
+					operonId,
+					task.primary.filePath,
+					targetFile.path,
+					inserted.lineNumber,
+					async () => {
+						await this.indexer.reindexFilePath(targetFile.path);
+						return await this.deleteYamlTaskByPath(task.primary.filePath) ? inserted : null;
+					},
+				);
+			} catch (error) {
+				const rolledBack = await rollbackInsertedInline();
+				return this.publicMutationResult(false, operonId, 'failed', rolledBack
+					? `File-to-inline conversion was rolled back: ${error instanceof Error ? error.message : String(error)}`
+					: 'File-to-inline conversion failed and duplicate rollback could not be proven.');
+			}
+			if (!transitioned) {
+				const rolledBack = await rollbackInsertedInline();
+				return this.publicMutationResult(false, operonId, rolledBack ? 'rejected' : 'failed', rolledBack
+					? 'Operon rejected file-to-inline conversion; the inserted inline copy was removed.'
+					: 'Operon rejected file-to-inline conversion and duplicate rollback could not be proven.');
+			}
 			this.refreshViews();
 			return this.indexer.getTask(operonId)?.primary.format === 'inline'
 				? this.publicMutationResult(true, operonId, 'applied')
 				: this.publicMutationResult(false, operonId, 'rejected');
 		} catch (error) {
 			return this.publicMutationResult(false, operonId, 'failed', error instanceof Error ? error.message : String(error));
+		}
+	}
+
+
+	private async publicQueryFilterSet(
+		input: OperonPublicFilterQueryInput,
+	): Promise<OperonPublicFilterQueryResult> {
+		if (!this.startupReady) {
+			return { ok: false, code: 'not-ready', operonIds: [], message: 'Operon startup is not complete.' };
+		}
+		if (!isOperonPublicFilterQueryInput(input) || !input.filterSetId.trim()) {
+			return { ok: false, code: 'invalid-input', operonIds: [], message: 'A non-empty filterSetId is required.' };
+		}
+		const filterSet = getNormalFilterSets(this.settings.filterSets)
+			.find(candidate => candidate.id === input.filterSetId.trim());
+		if (!filterSet) {
+			return { ok: false, code: 'not-found', operonIds: [], message: `Saved filter not found: ${input.filterSetId.trim()}` };
+		}
+		const rawScopePath = input.scopePath?.trim() ?? '';
+		if (rawScopePath.split(/[\\/]+/u).some(segment => segment === '.' || segment === '..')) {
+			return { ok: false, code: 'invalid-input', operonIds: [], message: 'scopePath cannot contain relative path segments.' };
+		}
+		const scopePath = rawScopePath ? normalizePath(rawScopePath).replace(/^\/+|\/+$/gu, '') : '';
+		try {
+			const tasks = this.indexer.getAllTasks().filter(task => (
+				!scopePath
+				|| task.primary.filePath === scopePath
+				|| task.primary.filePath.startsWith(`${scopePath}/`)
+			));
+			const matched = evaluateFilterSet(
+				filterSet,
+				tasks,
+				this.settings.priorities,
+				this.pinnedCache,
+				this.settings.pipelines,
+			);
+			return {
+				ok: true,
+				code: 'ok',
+				operonIds: Array.from(new Set(matched.map(task => task.operonId))),
+			};
+		} catch (error) {
+			return {
+				ok: false,
+				code: 'failed',
+				operonIds: [],
+				message: error instanceof Error ? error.message : String(error),
+			};
+		}
+	}
+
+	private async publicRelocateTask(
+		operonId: string,
+		input: OperonPublicRelocateTaskInput,
+	): Promise<OperonPublicMutationResult> {
+		const notReady = this.ensurePublicApiReady();
+		if (notReady) return { ...notReady, operonId };
+		if (typeof operonId !== 'string' || !operonId.trim() || !isOperonPublicRelocateTaskInput(input)) {
+			return this.publicMutationResult(false, typeof operonId === 'string' ? operonId : null, 'invalid-input', 'Invalid task relocation payload.');
+		}
+		const task = this.indexer.getTask(operonId);
+		if (!task) return this.publicMutationResult(false, operonId, 'not-found');
+		if (task.primary.format !== 'inline') {
+			return this.publicMutationResult(false, operonId, 'invalid-input', 'V1 relocation supports inline tasks only.');
+		}
+		const targetPathRaw = input.targetPath.trim();
+		if (!targetPathRaw || targetPathRaw.split(/[\\/]+/u).some(segment => segment === '.' || segment === '..')) {
+			return this.publicMutationResult(false, operonId, 'invalid-input', 'targetPath must be a canonical Markdown path.');
+		}
+		const targetPath = normalizePath(targetPathRaw);
+		if (targetPath === task.primary.filePath) {
+			return this.publicMutationResult(true, operonId, 'applied');
+		}
+		const sourceFile = this.app.vault.getAbstractFileByPath(task.primary.filePath);
+		const targetFile = this.app.vault.getAbstractFileByPath(targetPath);
+		if (!(sourceFile instanceof TFile) || !(targetFile instanceof TFile) || targetFile.extension.toLocaleLowerCase() !== 'md') {
+			return this.publicMutationResult(false, operonId, 'not-found', 'Source or target Markdown file was not found.');
+		}
+
+		const sourceContent = await this.app.vault.cachedRead(sourceFile);
+		const sourceLines = sourceContent.split('\n');
+		let sourceLineNumber = task.primary.lineNumber;
+		if (this.parseInlineTaskLine(sourceLines[sourceLineNumber] ?? '', sourceLineNumber, sourceFile.path)?.operonId !== operonId) {
+			sourceLineNumber = sourceLines.findIndex((line, index) => (
+				this.parseInlineTaskLine(line, index, sourceFile.path)?.operonId === operonId
+			));
+		}
+		if (sourceLineNumber < 0) {
+			return this.publicMutationResult(false, operonId, 'conflict', 'The indexed source line no longer contains this task.');
+		}
+		const sourceLine = (sourceLines[sourceLineNumber] ?? '').replace(/\r$/u, '');
+		let insertedLineNumber: number | null = null;
+		let sourceDeleted = false;
+		const removeTargetCopy = async (): Promise<boolean> => {
+			if (insertedLineNumber === null) return true;
+			const removed = await this.deleteInlineTaskById(targetFile.path, operonId, insertedLineNumber).catch(() => false);
+			await this.indexer.reindexFilePath(targetFile.path).catch(() => undefined);
+			return removed;
+		};
+		const restoreSource = async (): Promise<boolean> => {
+			if (!sourceDeleted) return true;
+			try {
+				await this.app.vault.process(sourceFile, content => {
+					const lines = content.split('\n');
+					if (lines.some((line, index) => this.parseInlineTaskLine(line, index, sourceFile.path)?.operonId === operonId)) {
+						return content;
+					}
+					lines.splice(Math.min(sourceLineNumber, lines.length), 0, sourceLine);
+					return lines.join('\n');
+				});
+				await this.indexer.reindexFilePath(sourceFile.path);
+				return this.indexer.getTask(operonId)?.primary.filePath === sourceFile.path;
+			} catch {
+				return false;
+			}
+		};
+
+		try {
+			const inserted = await this.insertInlineTaskLineIntoFile(targetFile, sourceLine);
+			if (!inserted) return this.publicMutationResult(false, operonId, 'rejected', 'Operon rejected target insertion.');
+			insertedLineNumber = inserted.lineNumber;
+			await this.indexer.reindexFilePath(targetFile.path);
+			sourceDeleted = await this.deleteInlineTaskById(sourceFile.path, operonId, sourceLineNumber);
+			if (!sourceDeleted) {
+				const targetRolledBack = await removeTargetCopy();
+				return this.publicMutationResult(false, operonId, targetRolledBack ? 'conflict' : 'failed', targetRolledBack
+					? 'The source changed before relocation; the target copy was removed.'
+					: 'The source changed before relocation and target rollback could not be proven.');
+			}
+			await this.indexer.reindexFilePath(sourceFile.path);
+			await this.indexer.reindexFilePath(targetFile.path);
+			const relocated = this.indexer.getTask(operonId);
+			if (relocated?.primary.format === 'inline' && relocated.primary.filePath === targetFile.path) {
+				this.refreshViews();
+				return this.publicMutationResult(true, operonId, 'applied');
+			}
+			const targetRolledBack = await removeTargetCopy();
+			const sourceRestored = await restoreSource();
+			return this.publicMutationResult(false, operonId, 'failed', targetRolledBack && sourceRestored
+				? 'Relocation final-state verification failed; the source task was restored.'
+				: 'Relocation final-state verification failed and rollback could not be proven.');
+		} catch (error) {
+			const targetRolledBack = await removeTargetCopy();
+			const sourceRestored = await restoreSource();
+			return this.publicMutationResult(false, operonId, 'failed', targetRolledBack && sourceRestored
+				? `Relocation was rolled back: ${error instanceof Error ? error.message : String(error)}`
+				: 'Relocation failed and rollback could not be proven.');
 		}
 	}
 
@@ -13560,6 +13773,7 @@ export default class OperonPlugin extends Plugin {
 			seedTagsPresent?: boolean;
 			targetFolderOverride?: string | null;
 			onCreated?: (created: CreatedCalendarFileTask, draft: TaskCreatorDraft) => void | Promise<void>;
+			rollbackOnFinalizeFailure?: boolean;
 		},
 	): Promise<boolean> {
 		const preservedDraft = cloneTaskCreatorDraft(draft);
@@ -13605,6 +13819,13 @@ export default class OperonPlugin extends Plugin {
 			} catch (error) {
 				console.error('Operon: file task was created but creator follow-up failed', error);
 				this.refreshViews();
+				if (options.rollbackOnFinalizeFailure) {
+					const rolledBack = await this.deleteYamlTaskByPath(created.file.path).catch(() => false);
+					if (!rolledBack) {
+						console.error('Operon: failed to roll back file task after public creation failure', created.file.path);
+					}
+					return false;
+				}
 				new Notice(t('notifications', 'creatorPostCreateFinalizeFailed'));
 				return true;
 			}
