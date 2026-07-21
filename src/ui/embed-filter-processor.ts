@@ -61,6 +61,13 @@ import { getLocationPlaceIndex } from '../core/location-source-resolver';
 import type { InlineRepeatCompletionMode } from '../storage/repeat-series-store';
 import { getTableFilePropertyIndex } from './table/table-file-property';
 import { getFilterGroupDisplayLabel } from './filter-group-label';
+import {
+    filterTasksToFolderTree,
+    parseEmbeddedFilterReference,
+    resolveEmbeddedFilterSourceFolder,
+    type EmbeddedFilterReference,
+    type EmbeddedFilterScope,
+} from '../core/embed-filter-scope';
 
 function generateFilterSetId(): string {
     return 'fs_' + Math.random().toString(36).slice(2, 9);
@@ -117,6 +124,8 @@ export interface FilterSurfaceInstance {
 interface EmbedInstance extends FilterSurfaceInstance {
     filterId: string | null;
     filterName: string | null;
+    scope: EmbeddedFilterScope;
+    sourceFolderPath: string | null;
 }
 
 export interface FilterSurfaceRenderOptions {
@@ -128,6 +137,7 @@ export interface FilterSurfaceRenderOptions {
     showSettingsButton?: boolean;
     subtaskSorts?: FilterSortSpec[];
     dynamicRootTaskId?: string;
+    taskScopeFolderPath?: string;
     onEditFilter?: (filterSet: FilterSet) => void;
 }
 
@@ -154,32 +164,9 @@ export function destroyFilterSurfaceInstance(instance: FilterSurfaceInstance): v
     instance.lastRenderSignature = null;
 }
 
-/**
- * Parse the code block content to extract a filter reference.
- * Supports:
- * - filterId: "fs_abc123"
- * - filter: "My Filter Name"
- */
-function parseFilterReference(source: string): { filterId: string | null; filterName: string | null } | null {
-    let filterId: string | null = null;
-    let filterName: string | null = null;
-
-    for (const line of source.split('\n')) {
-        const trimmed = line.trim();
-        const idMatch = trimmed.match(/^filterId:\s*["']?(.+?)["']?\s*$/i);
-        if (idMatch) filterId = idMatch[1];
-
-        const nameMatch = trimmed.match(/^filter:\s*["']?(.+?)["']?\s*$/i);
-        if (nameMatch) filterName = nameMatch[1];
-    }
-
-    if (!filterId && !filterName) return null;
-    return { filterId, filterName };
-}
-
 function resolveFilterSet(
     settings: OperonSettings,
-    ref: { filterId: string | null; filterName: string | null },
+    ref: EmbeddedFilterReference,
 ): FilterSet | null {
     if (ref.filterId) {
         const byId = settings.filterSets.find(fs => fs.id === ref.filterId);
@@ -203,11 +190,19 @@ export function registerEmbedFilterProcessor(
     registerFn: (lang: string, handler: (source: string, el: HTMLElement, ctx: MarkdownPostProcessorContext) => void | Promise<void>) => void,
     deps: EmbedFilterDeps,
 ): void {
-    registerFn('operon', (source: string, el: HTMLElement, _ctx: MarkdownPostProcessorContext) => {
-        const filterRef = parseFilterReference(source);
+    registerFn('operon', (source: string, el: HTMLElement, ctx: MarkdownPostProcessorContext) => {
+        const filterRef = parseEmbeddedFilterReference(source);
 
         if (!filterRef) {
-            renderError(el, 'Invalid syntax. Use: filterId: "Filter Id" or filter: "Filter Name"');
+            renderError(el, 'Invalid syntax. Use filterId or filter, with optional scope: "current-folder".');
+            return;
+        }
+
+        const sourceFolderPath = filterRef.scope === 'current-folder'
+            ? resolveEmbeddedFilterSourceFolder(ctx.sourcePath)
+            : null;
+        if (filterRef.scope === 'current-folder' && !sourceFolderPath) {
+            renderError(el, 'scope: "current-folder" requires the note to be inside a vault folder.');
             return;
         }
 
@@ -217,6 +212,8 @@ export function registerEmbedFilterProcessor(
             el,
             filterId: filterRef.filterId,
             filterName: filterRef.filterName,
+            scope: filterRef.scope,
+            sourceFolderPath,
         };
         activeEmbeds.add(instance);
 
@@ -240,13 +237,14 @@ export function refreshEmbedFilters(deps: EmbedFilterDeps): void {
         renderEmbed(instance, {
             filterId: instance.filterId,
             filterName: instance.filterName,
+            scope: instance.scope,
         }, deps);
     }
 }
 
 function renderEmbed(
     instance: EmbedInstance,
-    filterRef: { filterId: string | null; filterName: string | null },
+    filterRef: EmbeddedFilterReference,
     deps: EmbedFilterDeps,
 ): void {
     const el = instance.el;
@@ -264,6 +262,7 @@ function renderEmbed(
     renderFilterSurface(instance, filterSet, deps, {
         surfaceClassName: 'operon-filter-surface--embed',
         showSettingsButton: true,
+        taskScopeFolderPath: instance.sourceFolderPath ?? undefined,
     });
 }
 
@@ -291,6 +290,9 @@ export function renderFilterSurface(
 	const requestedSubtaskSorts = options.subtaskSorts ?? getFilterSortSpecs(filterSet);
 	const subtaskSorts = requestedSubtaskSorts.length > 0 ? requestedSubtaskSorts : undefined;
 	const allTasks = deps.indexer.getAllTasks();
+	const scopedTasks = options.taskScopeFolderPath
+		? filterTasksToFolderTree(allTasks, options.taskScopeFolderPath)
+		: allTasks;
 	const filePropertyContext = getTableFilePropertyIndex(deps.app).getSnapshot(
 		allTasks,
 		deps.indexer.getGeneration(),
@@ -314,6 +316,7 @@ export function renderFilterSurface(
         options.showSettingsButton === false ? 'no-settings' : 'settings',
         subtaskSorts === undefined ? 'subtask-sort-default' : JSON.stringify(subtaskSorts),
         dynamicRootTaskId,
+        options.taskScopeFolderPath ?? 'vault',
         JSON.stringify(deps.settings.filterTaskCompactChips),
         filterActionSettingsSignature,
         buildTaskWikilinkOverlaySettingsSignature(deps.settings),
@@ -486,8 +489,8 @@ export function renderFilterSurface(
             return;
         }
 
-        const baseGrouped = evaluateFilterSetGrouped(filterSet, allTasks, priorities, deps.pinnedCache, pipelines, filterEvaluationOptions);
-        const baseRootTasks = filterTasksOnly(filterSet, allTasks, priorities, deps.pinnedCache, filterEvaluationOptions);
+        const baseGrouped = evaluateFilterSetGrouped(filterSet, scopedTasks, priorities, deps.pinnedCache, pipelines, filterEvaluationOptions);
+        const baseRootTasks = filterTasksOnly(filterSet, scopedTasks, priorities, deps.pinnedCache, filterEvaluationOptions);
         const treeScopeTasks = getEmbedTreeScope(instance, filterSet, baseRootTasks, deps, includeSubtasksInSearch, embedShowOnlyOpenSubtasks);
         const searchInput = renderHeader(container, filterSet, deps, treeScopeTasks.length, instance, options);
 
@@ -546,7 +549,7 @@ export function renderFilterSurface(
         restoreEmbedSearchFocus(searchInput, restoreSearchFocus, searchSelectionStart, searchSelectionEnd);
     } else {
         // Flat
-        const baseTasks = evaluateFilterSet(filterSet, allTasks, priorities, deps.pinnedCache, pipelines, filterEvaluationOptions);
+        const baseTasks = evaluateFilterSet(filterSet, scopedTasks, priorities, deps.pinnedCache, pipelines, filterEvaluationOptions);
         const searchActive = isFilterSearchActive(instance.searchQuery);
         const treeScopeTasks = getEmbedTreeScope(instance, filterSet, baseTasks, deps, includeSubtasksInSearch, embedShowOnlyOpenSubtasks);
         const tasks = searchActive

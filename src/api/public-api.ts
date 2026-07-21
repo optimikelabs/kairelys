@@ -18,6 +18,8 @@ export interface OperonPublicMutationResult {
 export interface OperonPublicCreateTaskInput {
 	source: 'inline' | 'file';
 	description: string;
+	/** Stable configured status id, independent from pipeline/status display language. */
+	statusId?: string;
 	tags?: string[];
 	fields?: Record<string, string>;
 	properties?: Record<string, string | number | boolean | null | Array<string | number | boolean | null>>;
@@ -35,7 +37,10 @@ export interface OperonPublicUpdateTaskInput {
 }
 
 export interface OperonPublicTransitionTaskInput {
-	status: string;
+	/** Exact configured `Pipeline.Status` value. */
+	status?: string;
+	/** Stable configured status id, independent from pipeline/status display language. */
+	statusId?: string;
 }
 
 export interface OperonPublicConvertTaskInput {

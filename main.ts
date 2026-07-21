@@ -607,6 +607,7 @@ interface CalendarTaskCreatorOpenOptions extends Pick<OpenTaskCreatorOptions, 'i
 interface TaskCreatorInlineCreationOptions {
 	targetDateKey?: string | null;
 	targetPath?: string | null;
+	forceDailyNote?: boolean;
 	parentAwarePlacement?: boolean;
 }
 
@@ -2173,6 +2174,9 @@ export default class OperonPlugin extends Plugin {
 		if (input.source === 'file' && input.targetPath?.trim()) {
 			return this.publicMutationResult(false, null, 'invalid-input', 'targetPath is supported only for inline tasks.');
 		}
+		if (input.statusId?.trim() && input.fields?.status?.trim()) {
+			return this.publicMutationResult(false, null, 'invalid-input', 'Provide at most one of fields.status or statusId.');
+		}
 
 		const draft = createEmptyTaskCreatorDraft();
 		draft.description = description;
@@ -2194,12 +2198,16 @@ export default class OperonPlugin extends Plugin {
 				const created = await this.createInlineTaskFromCreatorDraftResult(draft, {
 					targetDateKey: input.targetDateKey,
 					targetPath: input.targetPath,
+					forceDailyNote: Boolean(input.targetDateKey?.trim() && !input.targetPath?.trim()),
 					parentAwarePlacement: input.targetPath?.trim() ? false : undefined,
 				});
 				if (!created) return this.publicMutationResult(false, null, 'rejected', 'Operon rejected inline task creation.');
 				const requestedStatus = input.fields?.status;
-				if (requestedStatus) {
-					const transitioned = await this.publicTransitionTask(created.operonId, { status: requestedStatus });
+				const requestedStatusId = input.statusId?.trim();
+				if (requestedStatus || requestedStatusId) {
+					const transitioned = await this.publicTransitionTask(created.operonId, requestedStatusId
+						? { statusId: requestedStatusId }
+						: { status: requestedStatus });
 					if (!transitioned.ok) return transitioned;
 				}
 				return this.publicMutationResult(true, created.operonId, 'applied');
@@ -2232,8 +2240,11 @@ export default class OperonPlugin extends Plugin {
 				}
 			}
 			const requestedStatus = input.fields?.status;
-			if (requestedStatus) {
-				const transitioned = await this.publicTransitionTask(createdOperonId, { status: requestedStatus });
+			const requestedStatusId = input.statusId?.trim();
+			if (requestedStatus || requestedStatusId) {
+				const transitioned = await this.publicTransitionTask(createdOperonId, requestedStatusId
+					? { statusId: requestedStatusId }
+					: { status: requestedStatus });
 				if (!transitioned.ok) return transitioned;
 			}
 			return this.publicMutationResult(true, createdOperonId, 'applied');
@@ -2349,9 +2360,23 @@ export default class OperonPlugin extends Plugin {
 		if (notReady) return { ...notReady, operonId };
 		const task = this.indexer.getTask(operonId);
 		if (!task) return this.publicMutationResult(false, operonId, 'not-found');
-		const workflow = resolveWorkflowStatus(this.settings.pipelines, input.status);
+		const requestedStatus = input.status?.trim() ?? '';
+		const requestedStatusId = input.statusId?.trim() ?? '';
+		if ((!requestedStatus && !requestedStatusId) || (requestedStatus && requestedStatusId)) {
+			return this.publicMutationResult(
+				false,
+				operonId,
+				'invalid-input',
+				'Provide exactly one of status or statusId.',
+			);
+		}
+		const statusValue = requestedStatus || this.resolvePublicStatusValueById(requestedStatusId);
+		if (!statusValue) {
+			return this.publicMutationResult(false, operonId, 'invalid-input', `Unknown workflow status id: ${requestedStatusId}`);
+		}
+		const workflow = resolveWorkflowStatus(this.settings.pipelines, statusValue);
 		if (!workflow) {
-			return this.publicMutationResult(false, operonId, 'invalid-input', `Unknown workflow status: ${input.status}`);
+			return this.publicMutationResult(false, operonId, 'invalid-input', `Unknown workflow status: ${statusValue}`);
 		}
 		try {
 			const payload = this.buildStatusCycleFieldPayload(task, workflow, localNow(), localToday());
@@ -2365,6 +2390,15 @@ export default class OperonPlugin extends Plugin {
 		} catch (error) {
 			return this.publicMutationResult(false, operonId, 'failed', error instanceof Error ? error.message : String(error));
 		}
+	}
+
+	private resolvePublicStatusValueById(statusId: string): string {
+		if (!statusId) return '';
+		for (const pipeline of this.settings.pipelines) {
+			const status = pipeline.statuses.find(candidate => candidate.id === statusId);
+			if (status) return composeStatusValue(pipeline.name, status.label);
+		}
+		return '';
 	}
 
 	private async publicConvertTask(
@@ -13461,6 +13495,7 @@ export default class OperonPlugin extends Plugin {
 	private async resolveTaskCreatorInlineTargetFile(options: {
 		targetDateKey?: string | null;
 		targetPath?: string | null;
+		forceDailyNote?: boolean;
 		excludedFilePath?: string | null;
 	} = {}): Promise<TaskCreatorInlineTargetResolution> {
 		const targetDateKey = options.targetDateKey?.trim() || localToday();
@@ -13474,6 +13509,21 @@ export default class OperonPlugin extends Plugin {
 				fallbackParentTaskId: null,
 				fallbackParentFieldValues: null,
 				fallbackParentTags: null,
+				dailyDateHeading: null,
+			};
+		}
+		if (options.forceDailyNote === true) {
+			const dailyNote = await this.resolveOrCreateCalendarDailyNoteResult(targetDateKey);
+			if (!(dailyNote.file instanceof TFile)) {
+				new Notice(t('notifications', 'dailyNoteResolveFailed'));
+				return { kind: 'failed' };
+			}
+			return {
+				kind: 'target',
+				file: dailyNote.file,
+				fallbackParentTaskId: dailyNote.wasCreated ? dailyNote.operonParentTaskId : null,
+				fallbackParentFieldValues: dailyNote.wasCreated ? dailyNote.operonParentFieldValues : null,
+				fallbackParentTags: dailyNote.wasCreated ? dailyNote.operonParentTags : null,
 				dailyDateHeading: null,
 			};
 		}
@@ -13693,6 +13743,7 @@ export default class OperonPlugin extends Plugin {
 		const target = await this.resolveTaskCreatorInlineTargetFile({
 			targetDateKey: options.targetDateKey,
 			targetPath: options.targetPath,
+			forceDailyNote: options.forceDailyNote,
 		});
 		if (target.kind !== 'target') return target;
 
@@ -13818,6 +13869,7 @@ export default class OperonPlugin extends Plugin {
 		return await this.insertTaskCreatorInlineTaskUsingDefaultTarget(draft, {
 			targetDateKey: options.targetDateKey,
 			targetPath: options.targetPath,
+			forceDailyNote: options.forceDailyNote,
 		});
 	}
 
@@ -13828,6 +13880,7 @@ export default class OperonPlugin extends Plugin {
 		const creation = await this.insertTaskCreatorInlineTaskWithResolvedTarget(draft, {
 			targetDateKey: options.targetDateKey,
 			targetPath: options.targetPath,
+			forceDailyNote: options.forceDailyNote,
 			parentAwarePlacement: options.parentAwarePlacement,
 		});
 		if (creation.kind === 'cancelled') return null;

@@ -9,6 +9,7 @@
 		"dev": "npm run i18n:check && node esbuild.config.mjs",
 		"docs:sync": "node scripts/sync-operon-docs.mjs",
 		"docs:sync-runtime:test": "node scripts/test-operon-docs-sync.mjs",
+		"embed:scope:test": "node --test scripts/embed-filter-scope.test.mts",
 		"i18n:generate": "node scripts/generate-dense-locales.mjs --write",
 		"i18n:check": "node scripts/generate-dense-locales.mjs --check",
 		"i18n:test": "node --test scripts/generate-dense-locales.test.mjs scripts/dense-locales-runtime.test.mjs && npm run i18n:pack-manager:test",
