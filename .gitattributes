@@ -1,0 +1,2 @@
+src/generated/*.json text eol=lf
+release-assets/locales/*.json text eol=lf
