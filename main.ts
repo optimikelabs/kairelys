@@ -2193,6 +2193,7 @@ export default class OperonPlugin extends Plugin {
 					return content;
 				}
 				const normalizedCurrentLine = currentLine.endsWith('\r') ? currentLine.slice(0, -1) : currentLine;
+				const sourceIndent = normalizedCurrentLine.match(/^\s*/u)?.[0] ?? '';
 				if (normalizedCurrentLine !== input.expectedLine) {
 					adoptionState.outcome = 'conflict';
 					adoptionState.message = 'expectedLine does not match the live source line.';
@@ -2244,7 +2245,11 @@ export default class OperonPlugin extends Plugin {
 				} else {
 					parsed = this.parseInlineTaskLine(normalizedCurrentLine, lineNumber, targetPath);
 					if (parsed && !parsed.operonId && parsed.fields.length === 0) {
-						this.setParsedTaskField(parsed, 'operonId', generateOperonId(), 'text');
+						const generatedOperonId = generateOperonId();
+						this.setParsedTaskField(parsed, 'operonId', generatedOperonId, 'text');
+						// setParsedTaskField mutates the serialized fields, while the parsed identity
+						// remains a separate property until the line is reparsed.
+						parsed.operonId = generatedOperonId;
 						this.normalizeParsedTaskCreatedTimestamp(parsed, now);
 						this.applyInheritedSubtaskFields(parsed, inherited);
 					}
@@ -2261,7 +2266,8 @@ export default class OperonPlugin extends Plugin {
 				}
 				this.touchParsedTaskModifiedTimestamp(parsed, now);
 				adoptionState.operonId = parsed.operonId;
-				lines[lineNumber] = `${this.serializeInlineTask(parsed)}${currentLine.endsWith('\r') ? '\r' : ''}`;
+				const serialized = this.serializeInlineTask(parsed).trimStart();
+				lines[lineNumber] = `${sourceIndent}${serialized}${currentLine.endsWith('\r') ? '\r' : ''}`;
 				adoptionState.outcome = 'applied';
 				return lines.join('\n');
 			});
