@@ -2581,7 +2581,9 @@ export default class OperonPlugin extends Plugin {
 					return applied;
 				});
 				if (!attemptedCoalescedStop) {
-					await this.stopActiveTimer('terminal-status');
+					if (this.timeTracker.isTimerRunning(operonId)) {
+						await this.stopActiveTimer('terminal-status');
+					}
 					applied = await applyTransition(payload);
 				}
 			} else {
