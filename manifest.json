@@ -1,7 +1,7 @@
 {
 	"id": "kairelys",
 	"name": "Kairélys",
-	"version": "2.5.2",
+	"version": "2.5.3",
 	"minAppVersion": "1.7.2",
 	"description": "Temporary, unofficial fork of Operon with a versioned public API for safe agent integrations. Not endorsed by the Operon maintainer.",
 	"author": "Optimike Labs; based on Operon by Hasan Yılmaz",

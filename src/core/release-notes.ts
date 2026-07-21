@@ -13,6 +13,21 @@ const RELEASE_NOTE_LIMIT = 1;
 
 export const OPERON_RELEASE_NOTES: OperonReleaseNote[] = [
 	{
+		version: '2.5.3',
+		date: '2026-07-21',
+		title: 'Terminal transition race guard',
+		showOnUpdate: true,
+		bannerUrl: false,
+		body: `
+### Time tracking safety
+- Rechecks timer ownership after a raced public terminal transition so completing task A cannot
+  stop a newly started timer on task B.
+
+### Compatibility
+- Preserved the Operon 2.5.0 task format and the public API V1 contract.
+`.trim(),
+	},
+	{
 		version: '2.5.2',
 		date: '2026-07-21',
 		title: 'Public API lifecycle hardening',
