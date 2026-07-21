@@ -2166,6 +2166,9 @@ export default class OperonPlugin extends Plugin {
 		if (input.source === 'inline' && input.properties && Object.keys(input.properties).length > 0) {
 			return this.publicMutationResult(false, null, 'invalid-input', 'Unmanaged properties are supported only for file tasks.');
 		}
+		if (input.source === 'inline' && input.targetFolder?.trim()) {
+			return this.publicMutationResult(false, null, 'invalid-input', 'targetFolder is supported only for file tasks.');
+		}
 
 		const draft = createEmptyTaskCreatorDraft();
 		draft.description = description;
@@ -2208,6 +2211,7 @@ export default class OperonPlugin extends Plugin {
 			let createdOperonId: string | null = null;
 			const created = await this.createFileTaskFromCreatorDraft(draft, {
 				reopenCreator: () => {},
+				targetFolderOverride: input.targetFolder?.trim() || null,
 				onCreated: result => {
 					createdOperonId = (result.fieldValues['operonId'] ?? '').trim() || null;
 				},
@@ -13366,6 +13370,7 @@ export default class OperonPlugin extends Plugin {
 			fallbackFile?: TFile | null;
 			reopenCreator: (draft: TaskCreatorDraft) => void | Promise<void>;
 			seedTagsPresent?: boolean;
+			targetFolderOverride?: string | null;
 			onCreated?: (created: CreatedCalendarFileTask, draft: TaskCreatorDraft) => void | Promise<void>;
 		},
 	): Promise<boolean> {
@@ -13392,7 +13397,8 @@ export default class OperonPlugin extends Plugin {
 				seedTagsPresent: options.seedTagsPresent === true ||
 					preservedDraft.tags.length > 0 ||
 					preservedDraft.explicitFieldKeys.includes('tags'),
-				targetFolderOverride: this.resolveTaskCreatorFileTargetFolderOverride(preservedDraft),
+				targetFolderOverride: options.targetFolderOverride
+					?? this.resolveTaskCreatorFileTargetFolderOverride(preservedDraft),
 				openEditorOnCreate: false,
 			});
 			if (!created) {

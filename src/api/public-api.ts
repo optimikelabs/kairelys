@@ -23,6 +23,7 @@ export interface OperonPublicCreateTaskInput {
 	properties?: Record<string, string | number | boolean | null | Array<string | number | boolean | null>>;
 	fileTemplateId?: string;
 	targetDateKey?: string;
+	targetFolder?: string;
 }
 
 export interface OperonPublicUpdateTaskInput {
