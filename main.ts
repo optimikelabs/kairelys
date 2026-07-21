@@ -826,7 +826,7 @@ interface TablePresetSettingsSnapshot {
 }
 
 export default class OperonPlugin extends Plugin {
-	api!: OperonPublicApiV1;
+	api: OperonPublicApiV1 = this.buildPublicApi();
 	storage!: OperonStorage;
 	indexer!: OperonIndexer;
 	writer!: TaskWriter;
@@ -2562,11 +2562,31 @@ export default class OperonPlugin extends Plugin {
 			return this.publicMutationResult(false, operonId, 'invalid-input', `Unknown workflow status: ${statusValue}`);
 		}
 		try {
-			const payload = this.buildStatusCycleFieldPayload(task, workflow, localNow(), localToday());
-			const applied = await this.updateTaskFieldsAndRefresh(operonId, payload, {
-				changedKeys: Object.keys(payload),
-				refreshReason: 'status-cycle',
-			});
+			const now = localNow();
+			const payload = this.buildStatusCycleFieldPayload(task, workflow, now, now.substring(0, 10));
+			if (!await this.guardTaskStatusChangeOrShow(task, payload)) {
+				return this.publicMutationResult(false, operonId, 'rejected');
+			}
+			const applyTransition = (fieldValues: Record<string, string>): Promise<boolean> =>
+				this.updateTaskFieldsAndRefresh(operonId, fieldValues, {
+					changedKeys: Object.keys(fieldValues),
+					refreshReason: 'status-cycle',
+				});
+			let applied = false;
+			if (workflow.checkbox !== 'open' && this.timeTracker.isTimerRunning(operonId)) {
+				let attemptedCoalescedStop = false;
+				await this.timeTracker.stopActiveWithExternalTaskMutation(operonId, now, async (timerPayload) => {
+					attemptedCoalescedStop = true;
+					applied = await applyTransition({ ...timerPayload, ...payload });
+					return applied;
+				});
+				if (!attemptedCoalescedStop) {
+					await this.stopActiveTimer('terminal-status');
+					applied = await applyTransition(payload);
+				}
+			} else {
+				applied = await applyTransition(payload);
+			}
 			return applied
 				? this.publicMutationResult(true, operonId, 'applied')
 				: this.publicMutationResult(false, operonId, 'rejected');
@@ -3484,7 +3504,6 @@ export default class OperonPlugin extends Plugin {
 			operonId => this.suppressRawTaskCreationNotice(operonId),
 		);
 		this.formatConverter = new FormatConverter(this.app, this.indexer, this.settings);
-		this.api = this.buildPublicApi();
 		this.fileTaskArchiver = new FileTaskArchiver(this.app, this.indexer, () => this.settings, {
 			isTaskActive: operonId => this.timeTracker.isTimerRunning(operonId),
 		});

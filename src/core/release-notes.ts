@@ -13,6 +13,23 @@ const RELEASE_NOTE_LIMIT = 1;
 
 export const OPERON_RELEASE_NOTES: OperonReleaseNote[] = [
 	{
+		version: '2.5.2',
+		date: '2026-07-21',
+		title: 'Public API lifecycle hardening',
+		showOnUpdate: true,
+		bannerUrl: false,
+		body: `
+### Agent integration
+- Made the versioned public API available synchronously during plugin loading while reporting
+  \`ready: false\` until startup completes.
+- Routed terminal public transitions through Kairélys's native timer-stop and dependency-guard
+  paths so completed or cancelled tasks cannot remain actively tracked.
+
+### Compatibility
+- Preserved the Operon 2.5.0 task format and the public API V1 contract.
+`.trim(),
+	},
+	{
 		version: '2.5.1',
 		date: '2026-07-21',
 		title: 'Kairélys compatibility fork',
