@@ -6,7 +6,7 @@
  * Plugin entry point. Manages lifecycle, commands, and module initialization.
  */
 
-import { Editor, EditorPosition, EditorSelection, MarkdownRenderer, MarkdownRenderChild, MarkdownSectionInformation, MarkdownView, MarkdownPostProcessorContext, Menu, MenuItem, Notice, Platform, Plugin, TFile, TAbstractFile, TFolder, WorkspaceLeaf, editorLivePreviewField, requestUrl, requireApiVersion, setIcon } from 'obsidian';
+import { Editor, EditorPosition, EditorSelection, MarkdownRenderer, MarkdownRenderChild, MarkdownSectionInformation, MarkdownView, MarkdownPostProcessorContext, Menu, MenuItem, Notice, Platform, Plugin, TFile, TAbstractFile, TFolder, WorkspaceLeaf, editorLivePreviewField, normalizePath, requestUrl, requireApiVersion, setIcon } from 'obsidian';
 import { EditorView } from '@codemirror/view';
 import type { StateEffect } from '@codemirror/state';
 import { OperonStorage } from './src/storage/operon-storage';
@@ -105,6 +105,7 @@ import {
 import {
 	OPERON_PUBLIC_API_VERSION,
 	type OperonPublicApiV1,
+	type OperonPublicAdoptInlineTaskInput,
 	type OperonPublicConvertTaskInput,
 	type OperonPublicCreateTaskInput,
 	type OperonPublicMutationResult,
@@ -2131,11 +2132,13 @@ export default class OperonPlugin extends Plugin {
 			version: OPERON_PUBLIC_API_VERSION,
 			capabilities: () => ({
 				ready: this.startupReady,
+				adopt: this.startupReady,
 				create: this.startupReady,
 				update: this.startupReady,
 				transition: this.startupReady,
 				convert: this.startupReady,
 			}),
+			adoptInlineTask: input => this.publicAdoptInlineTask(input),
 			createTask: input => this.publicCreateTask(input),
 			updateTask: (operonId, input) => this.publicUpdateTask(operonId, input),
 			transitionTask: (operonId, input) => this.publicTransitionTask(operonId, input),
@@ -2147,6 +2150,136 @@ export default class OperonPlugin extends Plugin {
 		return this.startupReady
 			? null
 			: this.publicMutationResult(false, null, 'not-ready', 'Operon startup is not complete.');
+	}
+
+	private async publicAdoptInlineTask(
+		input: OperonPublicAdoptInlineTaskInput,
+	): Promise<OperonPublicMutationResult> {
+		const notReady = this.ensurePublicApiReady();
+		if (notReady) return notReady;
+		const targetPath = normalizePath(input.targetPath?.trim() ?? '');
+		if (!targetPath || !Number.isInteger(input.line) || input.line < 1) {
+			return this.publicMutationResult(false, null, 'invalid-input', 'targetPath and a positive one-based line are required.');
+		}
+		if (!input.expectedLine || /[\r\n]/.test(input.expectedLine)) {
+			return this.publicMutationResult(false, null, 'invalid-input', 'expectedLine must contain exactly one non-empty source line.');
+		}
+		const file = this.app.vault.getAbstractFileByPath(targetPath);
+		if (!(file instanceof TFile) || file.extension.toLocaleLowerCase() !== 'md') {
+			return this.publicMutationResult(false, null, 'not-found', `Markdown source file not found: ${targetPath}`);
+		}
+		const requestedStatusId = input.statusId?.trim() ?? '';
+		const requestedStatusValue = requestedStatusId ? this.resolvePublicStatusValueById(requestedStatusId) : '';
+		const requestedWorkflow = requestedStatusValue
+			? resolveWorkflowStatus(this.settings.pipelines, requestedStatusValue)
+			: null;
+		if (requestedStatusId && !requestedWorkflow) {
+			return this.publicMutationResult(false, null, 'invalid-input', `Unknown workflow status id: ${requestedStatusId}`);
+		}
+
+		const lineNumber = input.line - 1;
+		const adoptionState: {
+			operonId: string | null;
+			outcome: 'pending' | 'applied' | 'conflict' | 'invalid';
+			message: string;
+		} = { operonId: null, outcome: 'pending', message: '' };
+		try {
+			await this.app.vault.process(file, content => {
+				const lines = content.split('\n');
+				const currentLine = lines[lineNumber];
+				if (currentLine === undefined) {
+					adoptionState.outcome = 'conflict';
+					adoptionState.message = `Source line no longer exists: ${input.line}`;
+					return content;
+				}
+				const normalizedCurrentLine = currentLine.endsWith('\r') ? currentLine.slice(0, -1) : currentLine;
+				if (normalizedCurrentLine !== input.expectedLine) {
+					adoptionState.outcome = 'conflict';
+					adoptionState.message = 'expectedLine does not match the live source line.';
+					return content;
+				}
+
+				const now = localNow();
+				const inherited = this.resolveInlineTaskInheritedFields(file);
+				const tasksEmojiConversion = convertTasksEmojiLineToOperon(normalizedCurrentLine, {
+					priorities: this.settings.priorities ?? DEFAULT_PRIORITIES,
+				});
+				let parsed: ParsedTask | null = null;
+				if (tasksEmojiConversion.kind === 'converted') {
+					const provisionalTaskLine = this.buildNewInlineTaskWithInheritedFields(
+						tasksEmojiConversion.description,
+						tasksEmojiConversion.checkbox,
+						inherited,
+						now,
+						targetPath,
+						lineNumber,
+					);
+					parsed = this.parseInlineTaskLine(provisionalTaskLine, lineNumber, targetPath);
+					if (parsed?.operonId) {
+						const previousFieldValues = this.getParsedTaskFieldValues(parsed);
+						const applied = applyTasksEmojiConversionToParsedTask({
+							task: parsed,
+							tags: tasksEmojiConversion.tags,
+							mappedFields: tasksEmojiConversion.mappedFields,
+							leftovers: tasksEmojiConversion.leftovers,
+							previousFieldValues,
+							pipelines: this.settings.pipelines,
+							defaultPipelineName: this.settings.defaultPipelineName,
+							defaultPriority: this.settings.defaultPriority,
+							repeatSeriesIdFactory: this.createRepeatSeriesIdFactory(),
+						});
+						if (!applied.ok) {
+							parsed = null;
+							adoptionState.message = applied.errorMessage ?? 'Tasks metadata conversion failed.';
+						}
+					}
+				} else if (tasksEmojiConversion.kind === 'already_operon') {
+					adoptionState.outcome = 'conflict';
+					adoptionState.message = 'The source line is already an Operon task.';
+					return content;
+				} else if (tasksEmojiConversion.kind === 'hybrid_unsupported') {
+					adoptionState.outcome = 'invalid';
+					adoptionState.message = 'The source line mixes Operon and unsupported Tasks metadata.';
+					return content;
+				} else {
+					parsed = this.parseInlineTaskLine(normalizedCurrentLine, lineNumber, targetPath);
+					if (parsed && !parsed.operonId && parsed.fields.length === 0) {
+						this.setParsedTaskField(parsed, 'operonId', generateOperonId(), 'text');
+						this.normalizeParsedTaskCreatedTimestamp(parsed, now);
+						this.applyInheritedSubtaskFields(parsed, inherited);
+					}
+				}
+
+				if (!parsed?.operonId) {
+					adoptionState.outcome = 'invalid';
+					adoptionState.message ||= 'The source line is not an adoptable plain Markdown or Tasks checkbox.';
+					return content;
+				}
+				if (requestedWorkflow) {
+					parsed.checkbox = requestedWorkflow.checkbox;
+					this.setParsedTaskField(parsed, 'status', requestedWorkflow.value, 'text');
+				}
+				this.touchParsedTaskModifiedTimestamp(parsed, now);
+				adoptionState.operonId = parsed.operonId;
+				lines[lineNumber] = `${this.serializeInlineTask(parsed)}${currentLine.endsWith('\r') ? '\r' : ''}`;
+				adoptionState.outcome = 'applied';
+				return lines.join('\n');
+			});
+
+			if (adoptionState.outcome === 'conflict') return this.publicMutationResult(false, null, 'conflict', adoptionState.message);
+			if (adoptionState.outcome !== 'applied' || !adoptionState.operonId) {
+				return this.publicMutationResult(false, null, 'invalid-input', adoptionState.message || 'Operon rejected checkbox adoption.');
+			}
+			await this.indexer.reindexFilePath(targetPath);
+			this.refreshViews();
+			const adopted = this.indexer.getTask(adoptionState.operonId);
+			if (!adopted || adopted.primary.filePath !== targetPath || adopted.primary.lineNumber !== lineNumber) {
+				return this.publicMutationResult(false, adoptionState.operonId, 'failed', 'The adopted task could not be proven in the final index.');
+			}
+			return this.publicMutationResult(true, adoptionState.operonId, 'applied');
+		} catch (error) {
+			return this.publicMutationResult(false, adoptionState.operonId, 'failed', error instanceof Error ? error.message : String(error));
+		}
 	}
 
 	private async publicCreateTask(input: OperonPublicCreateTaskInput): Promise<OperonPublicMutationResult> {
