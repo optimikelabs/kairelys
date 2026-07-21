@@ -373,7 +373,7 @@ export class LocalePackManager {
 		try {
 			const listed = await this.adapter.list(this.paths.runtime.locales.packsPath);
 			const keep = new Set([current.fileName, previous?.fileName].filter((name): name is string => Boolean(name)));
-			const prefix = `operon-locale-${locale}-`;
+			const prefix = `kairelys-locale-${locale}-`;
 			for (const filePath of listed.files) {
 				const fileName = filePath.slice(filePath.lastIndexOf('/') + 1);
 				if (fileName.startsWith(prefix) && !keep.has(fileName)) await this.adapter.remove(filePath);

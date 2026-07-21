@@ -96,7 +96,7 @@ function buildCatalog(locale: 'tr' | 'de', raw: string): LocalePackCatalog {
 		languageOrder: [locale],
 		locales: {
 			[locale]: {
-				assetName: `operon-locale-${locale}-${sha256.slice(0, 12)}.json`,
+				assetName: `kairelys-locale-${locale}-${sha256.slice(0, 12)}.json`,
 				url: `https://example.com/${locale}/${sha256}`,
 				sha256,
 				sizeBytes: Buffer.byteLength(raw),
@@ -205,7 +205,7 @@ test('rejects integrity, oversize, and wrong-locale responses without installing
 			const sha256 = createHash('sha256').update(response.raw).digest('hex');
 			catalog.locales.tr = {
 				...catalog.locales.tr,
-				assetName: `operon-locale-tr-${sha256.slice(0, 12)}.json`,
+				assetName: `kairelys-locale-tr-${sha256.slice(0, 12)}.json`,
 				sha256,
 				sizeBytes: Buffer.byteLength(response.raw),
 				sourceVersion: SOURCE_VERSION,

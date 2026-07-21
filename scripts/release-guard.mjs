@@ -277,7 +277,7 @@ function checkVersionAndAssets() {
 		assertEqual(
 			`${locale} locale repository tag URL`,
 			entry.url,
-			`https://raw.githubusercontent.com/hasanyilmaz/operon/${manifest.version}/release-assets/locales/${entry.assetName}`,
+			`https://raw.githubusercontent.com/optimikelabs/kairelys/${manifest.version}/release-assets/locales/${entry.assetName}`,
 		);
 		if (!fs.existsSync(path.join(rootDir, relativePath))) continue;
 		const contents = fs.readFileSync(path.join(rootDir, relativePath));
@@ -305,7 +305,7 @@ function checkVersionAndAssets() {
 		assertEqual(
 			`${entry.id} reminder sound repository URL`,
 			entry.url,
-			`https://raw.githubusercontent.com/hasanyilmaz/operon/main/release-assets/reminder-sounds/${entry.assetName}`,
+			`https://raw.githubusercontent.com/optimikelabs/kairelys/main/release-assets/reminder-sounds/${entry.assetName}`,
 		);
 		if (!fs.existsSync(path.join(rootDir, relativePath))) continue;
 		const contents = fs.readFileSync(path.join(rootDir, relativePath));

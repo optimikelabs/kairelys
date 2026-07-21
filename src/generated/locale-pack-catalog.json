@@ -15,60 +15,60 @@
   ],
   "locales": {
     "tr": {
-      "assetName": "operon-locale-tr-da4dd1bb8a9c.json",
-      "url": "https://raw.githubusercontent.com/hasanyilmaz/operon/2.5.0/release-assets/locales/operon-locale-tr-da4dd1bb8a9c.json",
-      "sourceVersion": "8a05f850113e1308da81f5a5afba8238dba20ec78c2bc0716c08f3331defb22f",
-      "sha256": "da4dd1bb8a9c3d1a0241ef14bd3889363b780a50758d47f1baf1ba0ea33ec6ab",
-      "sizeBytes": 219649
+      "assetName": "kairelys-locale-tr-4e0cd483e9cd.json",
+      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.5.0/release-assets/locales/kairelys-locale-tr-4e0cd483e9cd.json",
+      "sourceVersion": "5e93827c42ccbc2a03b685a6c6872fe7ab1d21acea2d849b56c7410b495df769",
+      "sha256": "4e0cd483e9cd3ee144c40a83ea85452a4097fc58fca32cb67c4e157898058efa",
+      "sizeBytes": 220087
     },
     "de": {
-      "assetName": "operon-locale-de-cab496f1dcef.json",
-      "url": "https://raw.githubusercontent.com/hasanyilmaz/operon/2.5.0/release-assets/locales/operon-locale-de-cab496f1dcef.json",
-      "sourceVersion": "9e5cc4e3256191b76f874cbd26694e43c5047a158688d865c959b361ec8d2cec",
-      "sha256": "cab496f1dcefc744a7e75d866845ca8e3eb9b3c8be39235d689693e85d9bd039",
-      "sizeBytes": 229228
+      "assetName": "kairelys-locale-de-62e06cea7c14.json",
+      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.5.0/release-assets/locales/kairelys-locale-de-62e06cea7c14.json",
+      "sourceVersion": "6fd6e1115a96539bf1f6099f7baae97221bb3e29352dce9b26b6178473d687da",
+      "sha256": "62e06cea7c14b4ffbc685d904d009b4f54e13113ecb9d9ad6bd5736e2612137e",
+      "sizeBytes": 229660
     },
     "fr": {
-      "assetName": "operon-locale-fr-e470da91b948.json",
-      "url": "https://raw.githubusercontent.com/hasanyilmaz/operon/2.5.0/release-assets/locales/operon-locale-fr-e470da91b948.json",
-      "sourceVersion": "60ee6b6eba4bad49c58787775a00c773b781332ba8ddc900f2748150726e8467",
-      "sha256": "e470da91b94810bedc28406777146e159b7e712a4aa5cb1d0229127606c99787",
-      "sizeBytes": 235662
+      "assetName": "kairelys-locale-fr-a30930eca53d.json",
+      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.5.0/release-assets/locales/kairelys-locale-fr-a30930eca53d.json",
+      "sourceVersion": "5ecf8583d50edecc56edf30d380f6ef4f51bc7d58a27db890f08dfaa6c9ada86",
+      "sha256": "a30930eca53d20dc7dee0344dc9f4966486470bf2d00da7c314718320d262e2c",
+      "sizeBytes": 236097
     },
     "es": {
-      "assetName": "operon-locale-es-d909b4b8d24a.json",
-      "url": "https://raw.githubusercontent.com/hasanyilmaz/operon/2.5.0/release-assets/locales/operon-locale-es-d909b4b8d24a.json",
-      "sourceVersion": "953080ae66266e657feee6a04c87a4d6df3c88372028a51ca4ef3abf22c9b997",
-      "sha256": "d909b4b8d24a4a85f63ea25415883c7733bffaf0fab4a1dcde6b9788a51a598b",
-      "sizeBytes": 229544
+      "assetName": "kairelys-locale-es-3936e80432ca.json",
+      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.5.0/release-assets/locales/kairelys-locale-es-3936e80432ca.json",
+      "sourceVersion": "e31958d15629a25f217068ff88b4f58a1a139b79698125978616b14eabd42ab2",
+      "sha256": "3936e80432cabab932dc2bd3dbaca35d5fa6c2bb97dd641631534f123d2e8f79",
+      "sizeBytes": 229979
     },
     "zh-CN": {
-      "assetName": "operon-locale-zh-CN-e4083111c8eb.json",
-      "url": "https://raw.githubusercontent.com/hasanyilmaz/operon/2.5.0/release-assets/locales/operon-locale-zh-CN-e4083111c8eb.json",
-      "sourceVersion": "1d70c906be730010b6cfc71fbc00cb4377e3ceba4d3a42216cf22faa5b49b5ab",
-      "sha256": "e4083111c8ebb4318103ad8ff8910104be6bc918a0b8544ac7ef1ba4a3f09de1",
-      "sizeBytes": 199948
+      "assetName": "kairelys-locale-zh-CN-4b104b0bf8b1.json",
+      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.5.0/release-assets/locales/kairelys-locale-zh-CN-4b104b0bf8b1.json",
+      "sourceVersion": "96662e9ce5f6f07897139c29082fa2eac851c9c99c2156332bcded838eb1109a",
+      "sha256": "4b104b0bf8b1630fec2c51aebbd804223fd3961a00e121309b56dc37f9ecc163",
+      "sizeBytes": 200383
     },
     "zh-TW": {
-      "assetName": "operon-locale-zh-TW-d5c2e0bf334d.json",
-      "url": "https://raw.githubusercontent.com/hasanyilmaz/operon/2.5.0/release-assets/locales/operon-locale-zh-TW-d5c2e0bf334d.json",
-      "sourceVersion": "381c3ffa17f59eca9b70167fd86b768c8193e03af3b52df6a779d20c5b25a42b",
-      "sha256": "d5c2e0bf334da09b13a1267c8d6b0131c816b7bc0774e108620200d5400d928c",
-      "sizeBytes": 200659
+      "assetName": "kairelys-locale-zh-TW-6f2a35ffa5b6.json",
+      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.5.0/release-assets/locales/kairelys-locale-zh-TW-6f2a35ffa5b6.json",
+      "sourceVersion": "188f9fdbf2ae29c9437f7c05ef253af591be53dc87449c8b22752287359162e1",
+      "sha256": "6f2a35ffa5b61f77db232ee796a182d885c80936a35f8f60ad0952d156736851",
+      "sizeBytes": 201094
     },
     "ja": {
-      "assetName": "operon-locale-ja-c6fb13d7e7b3.json",
-      "url": "https://raw.githubusercontent.com/hasanyilmaz/operon/2.5.0/release-assets/locales/operon-locale-ja-c6fb13d7e7b3.json",
-      "sourceVersion": "9d537c998e4b611ecad39a6890df2f10cad28bacba32cc0e2518d263e3bebf22",
-      "sha256": "c6fb13d7e7b339bc16660a233b5f9a17aefd4024c92eb57ec2bda18b1cc69749",
-      "sizeBytes": 254007
+      "assetName": "kairelys-locale-ja-8abe831400f7.json",
+      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.5.0/release-assets/locales/kairelys-locale-ja-8abe831400f7.json",
+      "sourceVersion": "3a63e5bf3344909e17a39fa8ce9309f5020f914be720025cbcc159de31fc5d0c",
+      "sha256": "8abe831400f7dfa7d00c9fecb965b9cc6d8359e101932072721283f995984916",
+      "sizeBytes": 254436
     },
     "ru": {
-      "assetName": "operon-locale-ru-729c586e5718.json",
-      "url": "https://raw.githubusercontent.com/hasanyilmaz/operon/2.5.0/release-assets/locales/operon-locale-ru-729c586e5718.json",
-      "sourceVersion": "49d853a7fa12a991be6dd6d90a444c98bae4337deeed7ade62afa513497cf170",
-      "sha256": "729c586e57184aadd3c868593ae25b355f3af6d4e5cf34df507a4881cd411992",
-      "sizeBytes": 313609
+      "assetName": "kairelys-locale-ru-335966c7b8e9.json",
+      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.5.0/release-assets/locales/kairelys-locale-ru-335966c7b8e9.json",
+      "sourceVersion": "a61cbf6af21827e39838057e6101f61fe7ab870631896ec4d1db6a28e8798f3d",
+      "sha256": "335966c7b8e9e105bfb37698a75909b0a7d75b742051afe9d09356ba45e691b9",
+      "sizeBytes": 314044
     }
   }
 }

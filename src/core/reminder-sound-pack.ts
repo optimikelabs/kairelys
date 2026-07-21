@@ -41,8 +41,8 @@ export function validateReminderSoundPackCatalog(value: unknown): ReminderSoundP
 	for (const entry of value.files) {
 		if (!isPlainRecord(entry)
 			|| typeof entry.id !== 'string' || !/^[a-z0-9-]+$/u.test(entry.id) || ids.has(entry.id)
-			|| typeof entry.assetName !== 'string' || !/^operon-reminder-[1-4]\.mp3$/u.test(entry.assetName)
-			|| typeof entry.fileName !== 'string' || !/^Operon Reminder [1-4]\.mp3$/u.test(entry.fileName) || names.has(entry.fileName)
+			|| typeof entry.assetName !== 'string' || !/^kairelys-reminder-[1-4]\.mp3$/u.test(entry.assetName)
+			|| typeof entry.fileName !== 'string' || !/^Kairélys Reminder [1-4]\.mp3$/u.test(entry.fileName) || names.has(entry.fileName)
 			|| typeof entry.url !== 'string' || !isRepositoryAssetUrl(entry.url, entry.assetName)
 			|| typeof entry.sha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(entry.sha256)
 			|| !Number.isSafeInteger(entry.sizeBytes) || Number(entry.sizeBytes) <= 0 || Number(entry.sizeBytes) > MAX_REMINDER_SOUND_FILE_BYTES) {
@@ -75,7 +75,7 @@ function isRepositoryAssetUrl(value: string, assetName: string): boolean {
 		const url = new URL(value);
 		return url.protocol === 'https:'
 			&& url.hostname === 'raw.githubusercontent.com'
-			&& url.pathname === `/hasanyilmaz/operon/main/release-assets/reminder-sounds/${assetName}`;
+			&& url.pathname === `/optimikelabs/kairelys/main/release-assets/reminder-sounds/${assetName}`;
 	} catch {
 		return false;
 	}

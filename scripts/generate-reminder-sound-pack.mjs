@@ -5,16 +5,16 @@ import { fileURLToPath } from 'node:url';
 
 export const REMINDER_SOUND_PACK_SCHEMA_VERSION = 1;
 export const REMINDER_SOUND_FILES = Object.freeze([
-	{ id: 'reminder-1', assetName: 'operon-reminder-1.mp3', fileName: 'Operon Reminder 1.mp3' },
-	{ id: 'reminder-2', assetName: 'operon-reminder-2.mp3', fileName: 'Operon Reminder 2.mp3' },
-	{ id: 'reminder-3', assetName: 'operon-reminder-3.mp3', fileName: 'Operon Reminder 3.mp3' },
-	{ id: 'reminder-4', assetName: 'operon-reminder-4.mp3', fileName: 'Operon Reminder 4.mp3' },
+	{ id: 'reminder-1', assetName: 'kairelys-reminder-1.mp3', fileName: 'Kairélys Reminder 1.mp3' },
+	{ id: 'reminder-2', assetName: 'kairelys-reminder-2.mp3', fileName: 'Kairélys Reminder 2.mp3' },
+	{ id: 'reminder-3', assetName: 'kairelys-reminder-3.mp3', fileName: 'Kairélys Reminder 3.mp3' },
+	{ id: 'reminder-4', assetName: 'kairelys-reminder-4.mp3', fileName: 'Kairélys Reminder 4.mp3' },
 ]);
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const defaultAssetDirectory = path.join(rootDir, 'release-assets/reminder-sounds');
 const defaultCatalogPath = path.join(rootDir, 'src/generated/reminder-sound-pack-catalog.json');
-const repositoryAssetBaseUrl = 'https://raw.githubusercontent.com/hasanyilmaz/operon/main/release-assets/reminder-sounds';
+const repositoryAssetBaseUrl = 'https://raw.githubusercontent.com/optimikelabs/kairelys/main/release-assets/reminder-sounds';
 
 export class ReminderSoundPackGeneratorError extends Error {
 	constructor(message) {

@@ -1,7 +1,7 @@
 {
-	"name": "operon",
+	"name": "kairelys",
 	"version": "2.5.0",
-	"description": "Task management system for humans and agents with inline tasks, file tasks, filters, pipelines, pinned tasks, calendar views, Kanban views, recurrence, and time tracking.",
+	"description": "Temporary, unofficial Operon fork exposing a versioned public API for safe agent integrations.",
 	"main": "main.js",
 	"scripts": {
 		"bundle:size": "node scripts/check-main-bundle-size.mjs",
@@ -48,7 +48,7 @@
 		"phase5:regression": "node scripts/run-phase5-regression.mjs"
 	},
 	"keywords": [],
-	"author": "Hasan Yılmaz",
+	"author": "Optimike Labs; based on Operon by Hasan Yılmaz",
 	"license": "GPL-3.0-or-later",
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",

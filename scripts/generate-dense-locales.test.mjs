@@ -158,14 +158,14 @@ test('locale generator is deterministic and embeds only English', t => {
 		alpha: { first: LOCALE_DEFINITIONS.map(definition => `First${definition.code === 'en' ? '' : ` ${definition.code}`}`) },
 	});
 	for (const asset of first.releaseAssets) {
-		assert.match(asset.assetName, new RegExp(`^operon-locale-${asset.code}-[a-f0-9]{12}\\.json$`, 'u'));
+		assert.match(asset.assetName, new RegExp(`^kairelys-locale-${asset.code}-[a-f0-9]{12}\\.json$`, 'u'));
 		assert.equal(first.catalog.locales[asset.code].sha256, asset.sha256);
 		assert.equal(first.catalog.locales[asset.code].sourceVersion, asset.pack.sourceVersion);
 		assert.match(asset.pack.sourceVersion, /^[a-f0-9]{64}$/u);
 		assert.equal(first.catalog.locales[asset.code].sizeBytes, Buffer.byteLength(asset.contents, 'utf8'));
 		assert.equal(
 			first.catalog.locales[asset.code].url,
-			`https://raw.githubusercontent.com/hasanyilmaz/operon/9.8.7/release-assets/locales/${asset.assetName}`,
+			`https://raw.githubusercontent.com/optimikelabs/kairelys/9.8.7/release-assets/locales/${asset.assetName}`,
 		);
 	}
 	const nextPluginRelease = buildLocaleArtifacts({ ...options, sourceVersion: '9.8.8' });
@@ -175,7 +175,7 @@ test('locale generator is deterministic and embeds only English', t => {
 		'unchanged translations must not produce a new downloadable pack',
 	);
 	assert.equal(nextPluginRelease.catalog.sourceVersion, '9.8.8');
-	assert.match(nextPluginRelease.catalog.locales.de.url, /\/9\.8\.8\/release-assets\/locales\/operon-locale-de-/u);
+	assert.match(nextPluginRelease.catalog.locales.de.url, /\/9\.8\.8\/release-assets\/locales\/kairelys-locale-de-/u);
 });
 
 test('dense locale generator realigns every language when a key is inserted', t => {

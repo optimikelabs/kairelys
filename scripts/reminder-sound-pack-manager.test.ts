@@ -59,14 +59,14 @@ function sha256(value: ArrayBuffer): string {
 function catalog(): { catalog: ReminderSoundPackCatalog; assets: Map<string, ArrayBuffer> } {
 	const assets = new Map<string, ArrayBuffer>();
 	const files = [1, 2, 3, 4].map(number => {
-		const assetName = `operon-reminder-${String(number)}.mp3`;
+		const assetName = `kairelys-reminder-${String(number)}.mp3`;
 		const assetBytes = bytesForText(`sound-${String(number)}`);
 		assets.set(assetName, assetBytes);
 		return {
 			id: `reminder-${String(number)}`,
 			assetName,
-			fileName: `Operon Reminder ${String(number)}.mp3`,
-			url: `https://raw.githubusercontent.com/hasanyilmaz/operon/main/release-assets/reminder-sounds/${assetName}`,
+			fileName: `Kairélys Reminder ${String(number)}.mp3`,
+			url: `https://raw.githubusercontent.com/optimikelabs/kairelys/main/release-assets/reminder-sounds/${assetName}`,
 			sha256: sha256(assetBytes),
 			sizeBytes: assetBytes.byteLength,
 		};
@@ -107,7 +107,7 @@ test('downloads the four verified sounds and reports an installed package', asyn
 	assert.equal(result.skippedCount, 0);
 	assert.equal(manager.getStatus().installed, true);
 	assert.equal(fetchCount, 4);
-	assert.equal(adapter.files.has('Operon/Reminder Sounds/Operon Reminder 1.mp3'), true);
+	assert.equal(adapter.files.has('Operon/Reminder Sounds/Kairélys Reminder 1.mp3'), true);
 });
 
 test('skips exact installed files without downloading them', async () => {
@@ -127,7 +127,7 @@ test('skips exact installed files without downloading them', async () => {
 test('refuses to overwrite a different user file before any download or write', async () => {
 	const adapter = new MemoryAdapter();
 	const fixture = catalog();
-	adapter.files.set('Operon/Reminder Sounds/Operon Reminder 2.mp3', bytesForText('user file'));
+	adapter.files.set('Operon/Reminder Sounds/Kairélys Reminder 2.mp3', bytesForText('user file'));
 	let fetchCount = 0;
 	const manager = new ReminderSoundPackManager(managerOptions(adapter, fixture, async () => {
 			fetchCount += 1;
@@ -136,7 +136,7 @@ test('refuses to overwrite a different user file before any download or write', 
 	await assert.rejects(manager.ensurePack(), /Refusing to overwrite/u);
 	assert.equal(fetchCount, 0);
 	assert.equal(adapter.createCount, 0);
-	assert.equal(new TextDecoder().decode(adapter.files.get('Operon/Reminder Sounds/Operon Reminder 2.mp3')), 'user file');
+	assert.equal(new TextDecoder().decode(adapter.files.get('Operon/Reminder Sounds/Kairélys Reminder 2.mp3')), 'user file');
 });
 
 test('verifies every download before writing the first file', async () => {
@@ -145,7 +145,7 @@ test('verifies every download before writing the first file', async () => {
 	let releaseFourth!: () => void;
 	const fourthReady = new Promise<void>(resolve => { releaseFourth = resolve; });
 	const manager = new ReminderSoundPackManager(managerOptions(adapter, fixture, async url => {
-			if (assetNameFromUrl(url) === 'operon-reminder-4.mp3') await fourthReady;
+			if (assetNameFromUrl(url) === 'kairelys-reminder-4.mp3') await fourthReady;
 			return { status: 200, arrayBuffer: fixture.assets.get(assetNameFromUrl(url))!.slice(0) };
 	}));
 	const install = manager.ensurePack();
@@ -162,15 +162,15 @@ test('rolls back only assets created by the failed transaction', async () => {
 	const fixture = catalog();
 	const first = fixture.catalog.files[0]!;
 	adapter.files.set(`Operon/Reminder Sounds/${first.fileName}`, fixture.assets.get(first.assetName)!.slice(0));
-	adapter.createConflictFor = 'Operon Reminder 3.mp3';
+	adapter.createConflictFor = 'Kairélys Reminder 3.mp3';
 	const manager = new ReminderSoundPackManager(managerOptions(adapter, fixture, async url => ({
 		status: 200,
 		arrayBuffer: fixture.assets.get(assetNameFromUrl(url))!.slice(0),
 	})));
 	await assert.rejects(manager.ensurePack(), /Refusing to overwrite/u);
-	assert.equal(adapter.files.has('Operon/Reminder Sounds/Operon Reminder 1.mp3'), true);
-	assert.equal(adapter.files.has('Operon/Reminder Sounds/Operon Reminder 2.mp3'), false);
-	assert.equal(new TextDecoder().decode(adapter.files.get('Operon/Reminder Sounds/Operon Reminder 3.mp3')), 'foreign file');
+	assert.equal(adapter.files.has('Operon/Reminder Sounds/Kairélys Reminder 1.mp3'), true);
+	assert.equal(adapter.files.has('Operon/Reminder Sounds/Kairélys Reminder 2.mp3'), false);
+	assert.equal(new TextDecoder().decode(adapter.files.get('Operon/Reminder Sounds/Kairélys Reminder 3.mp3')), 'foreign file');
 });
 
 test('deduplicates concurrent install requests and exposes downloading status', async () => {
@@ -213,7 +213,7 @@ test('rechecks skipped files after creates and rolls back only this transaction 
 	const first = fixture.catalog.files[0]!;
 	adapter.files.set(`Operon/Reminder Sounds/${first.fileName}`, fixture.assets.get(first.assetName)!.slice(0));
 	adapter.onCreateBinary = path => {
-		if (path.endsWith('Operon Reminder 4.mp3')) {
+		if (path.endsWith('Kairélys Reminder 4.mp3')) {
 			adapter.files.set(`Operon/Reminder Sounds/${first.fileName}`, bytesForText('changed by sync'));
 		}
 	};
@@ -224,9 +224,9 @@ test('rechecks skipped files after creates and rolls back only this transaction 
 	await assert.rejects(manager.ensurePack(), /could not verify every file/u);
 	assert.equal(manager.getStatus().installed, false);
 	assert.equal(new TextDecoder().decode(adapter.files.get(`Operon/Reminder Sounds/${first.fileName}`)), 'changed by sync');
-	assert.equal(adapter.files.has('Operon/Reminder Sounds/Operon Reminder 2.mp3'), false);
-	assert.equal(adapter.files.has('Operon/Reminder Sounds/Operon Reminder 3.mp3'), false);
-	assert.equal(adapter.files.has('Operon/Reminder Sounds/Operon Reminder 4.mp3'), false);
+	assert.equal(adapter.files.has('Operon/Reminder Sounds/Kairélys Reminder 2.mp3'), false);
+	assert.equal(adapter.files.has('Operon/Reminder Sounds/Kairélys Reminder 3.mp3'), false);
+	assert.equal(adapter.files.has('Operon/Reminder Sounds/Kairélys Reminder 4.mp3'), false);
 });
 
 test('refresh waits for an in-flight install before reporting status', async () => {
@@ -235,7 +235,7 @@ test('refresh waits for an in-flight install before reporting status', async () 
 	let releaseFetch!: () => void;
 	const fetchReady = new Promise<void>(resolve => { releaseFetch = resolve; });
 	const manager = new ReminderSoundPackManager(managerOptions(adapter, fixture, async url => {
-		if (assetNameFromUrl(url) === 'operon-reminder-4.mp3') await fetchReady;
+		if (assetNameFromUrl(url) === 'kairelys-reminder-4.mp3') await fetchReady;
 		return { status: 200, arrayBuffer: fixture.assets.get(assetNameFromUrl(url))!.slice(0) };
 	}));
 	const install = manager.ensurePack();
@@ -275,7 +275,7 @@ test('install waits for an in-flight refresh before changing durable status', as
 test('rejects oversized existing targets without reading their contents', async () => {
 	const adapter = new MemoryAdapter();
 	const fixture = catalog();
-	const target = 'Operon/Reminder Sounds/Operon Reminder 1.mp3';
+	const target = 'Operon/Reminder Sounds/Kairélys Reminder 1.mp3';
 	adapter.files.set(target, bytesForText('placeholder'));
 	adapter.stat = async path => path === target
 		? { type: 'file', ctime: 0, mtime: 0, size: 100_000_000 }
