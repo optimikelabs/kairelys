@@ -42,6 +42,7 @@ export interface OperonPublicConvertTaskInput {
 	target: 'inline' | 'file';
 	fileTemplateId?: string;
 	targetPath?: string;
+	targetFolder?: string;
 }
 
 export interface OperonPublicApiV1 {

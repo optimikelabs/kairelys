@@ -2389,7 +2389,12 @@ export default class OperonPlugin extends Plugin {
 					input.fileTemplateId || this.getAvailableTaskCreatorDefaultFileTemplateId() || options[0]?.id || '',
 				);
 				if (!template) return this.publicMutationResult(false, operonId, 'invalid-input', 'No file task template is available.');
-				await this.finishInlineTaskToFileTaskConversion(sourceFile, parsed, template);
+				await this.finishInlineTaskToFileTaskConversion(
+					sourceFile,
+					parsed,
+					template,
+					input.targetFolder?.trim() || null,
+				);
 				const converted = this.indexer.getTask(operonId);
 				return converted?.primary.format === 'yaml'
 					? this.publicMutationResult(true, operonId, 'applied')
@@ -14058,8 +14063,9 @@ export default class OperonPlugin extends Plugin {
 		file: TFile,
 		parsed: ParsedTask,
 		selectedTemplate: FileTaskTemplateOption,
+		targetFolderOverride?: string | null,
 	): Promise<void> {
-		const folder = this.getTargetFileTaskFolder(file);
+		const folder = this.getTargetFileTaskFolder(file, targetFolderOverride);
 
 		const initialDescription = parsed.description || t('taskEditor', 'newOperonTaskFile');
 		const now = localNow();
