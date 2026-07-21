@@ -24,6 +24,7 @@ export interface OperonPublicCreateTaskInput {
 	fileTemplateId?: string;
 	targetDateKey?: string;
 	targetFolder?: string;
+	targetPath?: string;
 }
 
 export interface OperonPublicUpdateTaskInput {

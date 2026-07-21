@@ -606,6 +606,7 @@ interface CalendarTaskCreatorOpenOptions extends Pick<OpenTaskCreatorOptions, 'i
 
 interface TaskCreatorInlineCreationOptions {
 	targetDateKey?: string | null;
+	targetPath?: string | null;
 	parentAwarePlacement?: boolean;
 }
 
@@ -2169,6 +2170,9 @@ export default class OperonPlugin extends Plugin {
 		if (input.source === 'inline' && input.targetFolder?.trim()) {
 			return this.publicMutationResult(false, null, 'invalid-input', 'targetFolder is supported only for file tasks.');
 		}
+		if (input.source === 'file' && input.targetPath?.trim()) {
+			return this.publicMutationResult(false, null, 'invalid-input', 'targetPath is supported only for inline tasks.');
+		}
 
 		const draft = createEmptyTaskCreatorDraft();
 		draft.description = description;
@@ -2189,6 +2193,8 @@ export default class OperonPlugin extends Plugin {
 			if (input.source === 'inline') {
 				const created = await this.createInlineTaskFromCreatorDraftResult(draft, {
 					targetDateKey: input.targetDateKey,
+					targetPath: input.targetPath,
+					parentAwarePlacement: input.targetPath?.trim() ? false : undefined,
 				});
 				if (!created) return this.publicMutationResult(false, null, 'rejected', 'Operon rejected inline task creation.');
 				const requestedStatus = input.fields?.status;
@@ -13445,9 +13451,23 @@ export default class OperonPlugin extends Plugin {
 
 	private async resolveTaskCreatorInlineTargetFile(options: {
 		targetDateKey?: string | null;
+		targetPath?: string | null;
 		excludedFilePath?: string | null;
 	} = {}): Promise<TaskCreatorInlineTargetResolution> {
 		const targetDateKey = options.targetDateKey?.trim() || localToday();
+		const explicitTargetPath = options.targetPath?.trim();
+		if (explicitTargetPath) {
+			const explicitTargetFile = await this.resolveOrCreateInlineTaskTargetFile(explicitTargetPath);
+			if (!(explicitTargetFile instanceof TFile)) return { kind: 'failed' };
+			return {
+				kind: 'target',
+				file: explicitTargetFile,
+				fallbackParentTaskId: null,
+				fallbackParentFieldValues: null,
+				fallbackParentTags: null,
+				dailyDateHeading: null,
+			};
+		}
 		const saveMode = this.resolveEffectiveInlineTaskSaveMode();
 		if (saveMode === 'daily-notes') {
 			const dailyNote = await this.resolveOrCreateCalendarDailyNoteResult(targetDateKey);
@@ -13663,6 +13683,7 @@ export default class OperonPlugin extends Plugin {
 	): Promise<TaskCreatorInlineCreationAttempt> {
 		const target = await this.resolveTaskCreatorInlineTargetFile({
 			targetDateKey: options.targetDateKey,
+			targetPath: options.targetPath,
 		});
 		if (target.kind !== 'target') return target;
 
@@ -13787,6 +13808,7 @@ export default class OperonPlugin extends Plugin {
 
 		return await this.insertTaskCreatorInlineTaskUsingDefaultTarget(draft, {
 			targetDateKey: options.targetDateKey,
+			targetPath: options.targetPath,
 		});
 	}
 
@@ -13796,6 +13818,7 @@ export default class OperonPlugin extends Plugin {
 	): Promise<QuickInlineTaskCreationResult | null> {
 		const creation = await this.insertTaskCreatorInlineTaskWithResolvedTarget(draft, {
 			targetDateKey: options.targetDateKey,
+			targetPath: options.targetPath,
 			parentAwarePlacement: options.parentAwarePlacement,
 		});
 		if (creation.kind === 'cancelled') return null;
