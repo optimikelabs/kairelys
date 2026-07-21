@@ -462,7 +462,8 @@ Time tracking turns effort into task history instead of leaving it as a separate
 ## Status
 
 Kairélys is maintained by Optimike Labs as a temporary compatibility fork. Its task engine is based
-on Operon `2.5.0`; the public API and ÉLYSIA compatibility layers are maintained separately so they
+on Operon `2.5.0`; Kairélys `2.5.1` uses a distinct release tag so its language packs and update
+assets cannot collide with upstream tags. The public API and ÉLYSIA compatibility layers are maintained separately so they
 can be removed cleanly if equivalent capabilities are released upstream.
 
 The original Operon engine has been developed in its maintainer's live Obsidian vault. Kairélys is

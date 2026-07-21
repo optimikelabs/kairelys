@@ -1,6 +1,6 @@
 {
 	"name": "kairelys",
-	"version": "2.5.0",
+	"version": "2.5.1",
 	"description": "Temporary, unofficial Operon fork exposing a versioned public API for safe agent integrations.",
 	"main": "main.js",
 	"scripts": {

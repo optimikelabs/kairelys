@@ -13,12 +13,16 @@ const RELEASE_NOTE_LIMIT = 1;
 
 export const OPERON_RELEASE_NOTES: OperonReleaseNote[] = [
 	{
-		version: '2.5.0',
+		version: '2.5.1',
 		date: '2026-07-21',
 		title: 'Kairélys compatibility fork',
 		showOnUpdate: true,
 		bannerUrl: false,
 		body: `
+### Upstream baseline
+- Based on Operon **2.5.0**; Kairélys uses its own release number to avoid colliding with
+  upstream tags and language-pack assets.
+
 ### Identity
 - Introduced the distinct **Kairélys** name and plugin ID.
 - Preserved Operon's task Markdown and canonical \`operonId\` field for interoperability.
