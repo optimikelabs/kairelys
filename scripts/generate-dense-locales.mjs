@@ -57,7 +57,7 @@ const defaultCompatibilityAliasesPath = path.join(scriptRoot, 'src/generated/loc
 const defaultReleaseAssetDirectory = path.join(scriptRoot, 'release-assets/locales');
 const defaultManifestPath = path.join(scriptRoot, 'manifest.json');
 const placeholderPattern = /\{\{([A-Za-z0-9_]+)\}\}/gu;
-const rawRepositoryBaseUrl = 'https://raw.githubusercontent.com/hasanyilmaz/operon';
+const rawRepositoryBaseUrl = 'https://raw.githubusercontent.com/optimikelabs/kairelys';
 
 export class DenseLocaleError extends Error {
 	constructor(message) {
@@ -297,7 +297,7 @@ export function buildLocaleArtifacts(options = {}) {
 		};
 		const contents = serializeLocalePack(localePack);
 		const digest = sha256(contents);
-		const assetName = `operon-locale-${definition.code}-${digest.slice(0, 12)}.json`;
+		const assetName = `kairelys-locale-${definition.code}-${digest.slice(0, 12)}.json`;
 		releaseAssets.push({ assetName, code: definition.code, contents, pack: localePack, sha256: digest });
 		catalogLocales[definition.code] = {
 			assetName,

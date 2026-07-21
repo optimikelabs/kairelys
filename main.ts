@@ -1,5 +1,5 @@
 /**
- * Operon is a task management system for humans and agents in Obsidian, built around inline tasks,
+ * Kairélys is a temporary, unofficial fork of Operon for humans and agents in Obsidian, built around inline tasks,
  * file tasks, reusable filters, customizable pipelines, pinned task workflows, unique calendar and
  * Kanban views, recurrence, and time tracking.
  *
@@ -3633,7 +3633,7 @@ export default class OperonPlugin extends Plugin {
 			}, 10);
 			runAsyncAction('startup layout maintenance failed', async () => {
 			// Add ribbon icons after all plugins have loaded so they appear at the end
-			this.addRibbonIcon('list-plus', t('commands', 'openTaskCreator'), () => {
+			this.addRibbonIcon('sparkles', t('commands', 'openTaskCreator'), () => {
 				this.openTaskCreator();
 			});
 

@@ -1,8 +1,8 @@
 export const OPERON_RELEASE_MANIFEST_URL =
-	'https://github.com/hasanyilmaz/operon/releases/latest/download/manifest.json';
+	'https://github.com/optimikelabs/kairelys/releases/latest/download/manifest.json';
 export const OPERON_VERSIONS_URL =
-	'https://raw.githubusercontent.com/hasanyilmaz/operon/main/versions.json';
-export const OPERON_COMMUNITY_PLUGIN_URL = 'obsidian://show-plugin?id=operon';
+	'https://raw.githubusercontent.com/optimikelabs/kairelys/main/versions.json';
+export const OPERON_COMMUNITY_PLUGIN_URL = 'https://github.com/optimikelabs/kairelys/releases/latest';
 
 interface PluginManifest {
 	version?: string;

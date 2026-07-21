@@ -1,40 +1,46 @@
-# Operon
+# Kairélys
 
-Operon is a **task management plugin for humans and agents in Obsidian**. It keeps tasks in **Markdown** while giving them structured metadata, durable identity, reusable views, planning surfaces, recurrence, and time tracking.
+Kairélys is a **task management plugin for humans and agents in Obsidian**. It keeps tasks in **Markdown** while giving them structured metadata, durable identity, reusable views, planning surfaces, recurrence, and time tracking.
 
-## What problem does Operon solve?
+> [!IMPORTANT]
+> Kairélys is a temporary, unofficial fork of [Operon](https://github.com/hasanyilmaz/operon),
+> maintained independently by Optimike Labs. It is not endorsed by Operon's maintainer. The fork
+> exists to provide a versioned public API for safe agent integrations while that API is proposed
+> upstream. See [FORK.md](FORK.md) for the convergence and retirement policy.
 
-Obsidian keeps work close to notes, but tasks can spread across daily notes, project notes, checklists, files, calendars, and boards as a vault grows. Operon brings those fragments into **one task system** without pulling them out of Markdown.
+## What problem does Kairélys solve?
 
-A key part of that is unifying Obsidian's two natural task shapes: **lightweight inline tasks** inside notes and **larger file-based tasks** that deserve their own note. Operon indexes and manages both under the same workflows, filters, Calendar, Kanban, and Task Editor.
+Obsidian keeps work close to notes, but tasks can spread across daily notes, project notes, checklists, files, calendars, and boards as a vault grows. Kairélys brings those fragments into **one task system** without pulling them out of Markdown.
+
+A key part of that is unifying Obsidian's two natural task shapes: **lightweight inline tasks** inside notes and **larger file-based tasks** that deserve their own note. Kairélys indexes and manages both under the same workflows, filters, Calendar, Kanban, and Task Editor.
 
 It helps you capture tasks where they naturally belong, then later find, edit, filter, schedule, pin, track, or move them through a workflow from one set of tools.
 
-## Who is Operon for?
+## Who is Kairélys for?
 
-Operon is for Obsidian users who want task management to live inside their vault instead of a separate app. It is especially useful if your work already spans daily notes, project notes, meeting notes, long-running areas, recurring responsibilities, or agent-assisted workflows.
+Kairélys is for Obsidian users who want task management to live inside their vault instead of a separate app. It is especially useful if your work already spans daily notes, project notes, meeting notes, long-running areas, recurring responsibilities, or agent-assisted workflows.
 
 It is designed for people who need **more than plain checkboxes**, but still want their tasks to remain readable, editable, linkable Markdown.
 
-![Real Operon Calendar workflow showing day planning, multi-week context, task pools, and scheduled work](assets/readme/IMG02-real-operon-calendar-workflow.png)
+![Real Kairélys Calendar workflow showing day planning, multi-week context, task pools, and scheduled work](assets/readme/IMG02-real-operon-calendar-workflow.png)
 
 ## Core features
 
 ### Durable task identity and index
 
-Every Operon task gets an `operonId` and is indexed from its source location in the vault. That lets **the same task stay recognizable** as it appears in notes, filters, Calendar, Kanban, the Pinned Task Dock, recurrence, and time tracking.
+Every Kairélys task gets an `operonId` and is indexed from its source location in the vault. That lets **the same task stay recognizable** as it appears in notes, filters, Calendar, Kanban, the Pinned Task Dock, recurrence, and time tracking.
 
 The result is one task record that can move through many views without becoming duplicated work.
 
 ### Unified inline and file tasks
 
-Operon brings lightweight inline checkbox tasks and larger file-based tasks into the same system. Inline tasks can behave like micro-files with identity, metadata, history, and context; larger work can become a file task with its own note.
+Kairélys brings lightweight inline checkbox tasks and larger file-based tasks into the same system. Inline tasks can behave like micro-files with identity, metadata, history, and context; larger work can become a file task with its own note.
 
 Both task shapes stay part of the same index, Task Editor, filters, schedules, Kanban boards, and Calendar views.
 
-At any point, an inline task can be converted into a file task, or a file task can be converted back into an inline task. Operon preserves **canonical task information** during these format changes, so the task can change shape without losing its core identity or structured fields.
+At any point, an inline task can be converted into a file task, or a file task can be converted back into an inline task. Kairélys preserves **canonical task information** during these format changes, so the task can change shape without losing its core identity or structured fields.
 
-![Inline task and file task appearing together in the same filtered Operon view](assets/readme/IMG04-file-task-overlay-with-inline-child-tasks.png)
+![Inline task and file task appearing together in the same filtered Kairélys view](assets/readme/IMG04-file-task-overlay-with-inline-child-tasks.png)
 
 The point is not choosing one task format forever; it is letting the task grow into the shape it needs.
 
@@ -42,14 +48,14 @@ The point is not choosing one task format forever; it is letting the task grow i
 
 Turn notes into executable work from the place where the work appears: the command palette, the current cursor line, the Task Creator, inline task chips, an inline task command, a file task, a selected note fragment, an existing note, a Calendar event, or a Kanban/Calendar context.
 
-Across these entry points, Operon supports **more than twenty inline and file task creation or conversion variations**.
+Across these entry points, Kairélys supports **more than twenty inline and file task creation or conversion variations**.
 
 Quick capture stays fast, while richer creation flows can add metadata, parent tasks, subtasks, templates, dates, recurrence, or a dedicated file when the work needs more structure.
 
-#### Create New Operon Task
+#### Create New Kairélys Task
 
-- Open the main Task Creator from the Command Palette with `Create New Operon Task`.
-- Open it from the Operon ribbon icon.
+- Open the main Task Creator from the Command Palette with `Create New Kairélys Task`.
+- Open it from the Kairélys ribbon icon.
 - Choose whether the new task should become an inline task or a file task.
 - Use it when the task needs structured fields before it is written.
 - Add fields such as description, notes, icon, color, priority, status, parent task, schedule, deadline, recurrence, pinned state, assignees, or contexts.
@@ -63,10 +69,10 @@ Quick capture stays fast, while richer creation flows can add metadata, parent t
 #### Create or edit inline task
 
 - Run `Create or edit inline task` from the Command Palette.
-- Run the command on an empty line to create a new inline Operon task.
+- Run the command on an empty line to create a new inline Kairélys task.
 - Run it on plain text or a list item to convert that line into an inline task.
-- Run it on a **normal Markdown checkbox** to upgrade an existing checklist item into an Operon inline task without rewriting the line.
-- Run it on an existing Operon inline task to open the Task Editor.
+- Run it on a **normal Markdown checkbox** to upgrade an existing checklist item into a Kairélys inline task without rewriting the line.
+- Run it on an existing Kairélys inline task to open the Task Editor.
 - Select a text fragment and run the command to create an inline task from the selection.
 - Inherit useful parent fields when creating inside a file task or another parent context.
 - Place the new inline task at the current cursor position when the editor context allows it.
@@ -118,16 +124,16 @@ Source note after conversion:
 #### Edit or convert to file task
 
 - Run `Edit or convert to file task` from the Command Palette.
-- Open the current file task for editing when the active note is already an Operon file task.
-- Open the Task Editor when the current note already has Operon task frontmatter.
-- Convert a normal Markdown note into an Operon file task when the note becomes actionable.
+- Open the current file task for editing when the active note is already a Kairélys file task.
+- Open the Task Editor when the current note already has Kairélys task frontmatter.
+- Convert a normal Markdown note into a Kairélys file task when the note becomes actionable.
 - Preserve existing managed frontmatter, tags, and the note body while applying the selected file task template.
 - Promote work into a file task when it needs sections, references, decisions, or inline subtasks.
 
 #### Convert file task to inline task
 
 - Run `Convert file task to inline task` from the Command Palette.
-- Convert an Operon file task into a single inline task representation.
+- Convert a Kairélys file task into a single inline task representation.
 - Preserve **canonical task information** such as description, checkbox state, tags, and canonical fields.
 - Insert the inline task at the current empty cursor line when that target is available.
 - Otherwise, insert it into the configured inline task target file or daily-note target.
@@ -154,12 +160,12 @@ After conversion:
 #### Convert Tasks emoji line to inline task
 
 - Run `Convert Tasks emoji line to inline task` from the Command Palette.
-- Convert a compatible Obsidian Tasks-style emoji line into an Operon inline task.
-- Map supported Tasks dates such as due, scheduled, start, completed, cancelled, and created dates into Operon fields.
+- Convert a compatible Obsidian Tasks-style emoji line into a Kairélys inline task.
+- Map supported Tasks dates such as due, scheduled, start, completed, cancelled, and created dates into Kairélys fields.
 - Convert leading time ranges into timed scheduling fields when possible.
 - Preserve unsupported Tasks syntax as a note instead of silently dropping it.
-- Use this when adopting Operon inside a vault that already contains Tasks-style task lines.
-- Keep the conversion focused on task metadata that Operon can understand and manage.
+- Use this when adopting Kairélys inside a vault that already contains Tasks-style task lines.
+- Keep the conversion focused on task metadata that Kairélys can understand and manage.
 
 ```md
 Before:
@@ -169,15 +175,15 @@ After:
 - [ ] Review release plan #release {{operonId:: ...}} {{dateScheduled:: 2026-05-20}} {{datetimeStart:: 2026-05-20T09:00:00}} {{datetimeEnd:: 2026-05-20T10:30:00}} {{estimate:: 5400}} {{dateDue:: 2026-05-22}} {{dateStarted:: 2026-05-19}} {{datetimeCreated:: 2026-05-18T00:00:01}}
 ```
 
-#### Convert Selection to Operon Tasks
+#### Convert Selection to Kairélys Tasks
 
-- Run `Convert Selection to Operon Tasks` from the Command Palette after selecting Markdown list items.
-- Convert selected checkbox lines, Tasks emoji lines, bullet items, and numbered items into Operon inline tasks.
+- Run `Convert Selection to Kairélys Tasks` from the Command Palette after selecting Markdown list items.
+- Convert selected checkbox lines, Tasks emoji lines, bullet items, and numbered items into Kairélys inline tasks.
 - Preserve indentation and infer parent-child links from selected list hierarchy only.
 - Apply normal inline task inheritance to top-level converted items, including file-task auto-parent behavior when enabled.
-- Use Tasks priority emojis when present; when they are absent, keep Operon's default priority instead of inheriting a parent priority.
+- Use Tasks priority emojis when present; when they are absent, keep Kairélys's default priority instead of inheriting a parent priority.
 - Skip paragraphs, empty markers, code blocks, and unsupported task lines instead of converting them.
-- Use this when migrating a checklist or outline into Operon without converting surrounding prose.
+- Use this when migrating a checklist or outline into Kairélys without converting surrounding prose.
 
 ```md
 Before:
@@ -205,7 +211,7 @@ After:
 - Create inline or file tasks from Kanban cell actions.
 - Seed the new task with the target date, time range, status, lane, pipeline, or context implied by the surface.
 - Create tracked time sessions directly from timed Calendar selections.
-- Use Calendar daily-note parent seeding when daily notes are configured as Operon tasks.
+- Use Calendar daily-note parent seeding when daily notes are configured as Kairélys tasks.
 - Show the Task Editor when a newly placed or created task does not match the active Calendar or Kanban filter.
 - Use this when planning creates the task, not just schedules an existing one.
 
@@ -213,13 +219,13 @@ After:
 
 #### Create from external Calendar events
 
-- Create an Operon task from a read-only external Calendar event.
+- Create a Kairélys task from a read-only external Calendar event.
 - Choose whether the new task should be an inline task or a file task.
 - Seed the new task with the event title and selected event time.
 - Keep the external event as read-only Calendar context while creating a local task record you can manage.
 - Use this when an outside commitment needs to become actionable inside the vault.
 
-![Read-only external Calendar sources shown beside local Operon tasks in Calendar](assets/readme/IMG11-external-calendars-in-calendar-view.png)
+![Read-only external Calendar sources shown beside local Kairélys tasks in Calendar](assets/readme/IMG11-external-calendars-in-calendar-view.png)
 
 #### Create from TrackTime and FlowTime
 
@@ -236,7 +242,7 @@ After:
 
 Break larger work into subtasks, connect related tasks, define dependencies, and keep parent-child structure visible without leaving Markdown.
 
-When a subtask is created from a parent, Operon can seed it with inherited canonical context: `parentTask`, `status`, `priority`, `taskIcon`, and `taskColor`. These values are starting context, not a lock; they can be changed after the subtask is created.
+When a subtask is created from a parent, Kairélys can seed it with inherited canonical context: `parentTask`, `status`, `priority`, `taskIcon`, and `taskColor`. These values are starting context, not a lock; they can be changed after the subtask is created.
 
 The `parentTask` field links the child back to the parent. Priority, icon, and color can follow the parent, while status starts from the relevant workflow's initial status.
 
@@ -286,7 +292,7 @@ Saved filters can be reused in the Filter View, embedded inside notes with an `o
 
 ![Filter builder showing conditions, logic groups, sort/group controls, and reusable Filter View results](assets/readme/IMG17-filter-builder-conditions-groups-sort.png)
 
-A filter is not just a one-time query; it is a named slice of the vault that can travel across Operon surfaces.
+A filter is not just a one-time query; it is a named slice of the vault that can travel across Kairélys surfaces.
 
 ### Custom pipelines, statuses, priorities, and colors
 
@@ -300,7 +306,7 @@ Customization works best when the same rules travel across every surface.
 
 ### Key mappings
 
-Key mappings keep Operon's internal task model aligned with the property names you see in YAML and the UI. Each task field has a stable canonical key, while the visible property name can be adjusted for your vault.
+Key mappings keep Kairélys's internal task model aligned with the property names you see in YAML and the UI. Each task field has a stable canonical key, while the visible property name can be adjusted for your vault.
 
 This matters because the same field may appear in file-task frontmatter, inline task metadata, filters, the Task Editor, Calendar, Kanban, compact chips, and task cards. A mapped field keeps its meaning across those surfaces instead of becoming a collection of similar-looking but disconnected properties.
 
@@ -308,7 +314,7 @@ Key mappings can also define field types, custom keys, icons, and whether a prop
 
 #### Inline task syntax
 
-Operon inline tasks stay readable as normal Markdown checkboxes. Structured fields are stored after the task text in `{{key:: value}}` containers, while Obsidian tags remain regular `#tags` outside those containers.
+Kairélys inline tasks stay readable as normal Markdown checkboxes. Structured fields are stored after the task text in `{{key:: value}}` containers, while Obsidian tags remain regular `#tags` outside those containers.
 
 ```md
 - [ ] Draft release notes #release {{operonId:: abc1234}} {{status:: Project.InProgress}} {{priority:: A}} {{dateDue:: 2026-05-31}}
@@ -324,7 +330,7 @@ A task field means the same thing everywhere because it is mapped once.
 
 Plan scheduled, due, recurring, and time-blocked work with Calendar presets. A preset can use **Time Grid** for day-style timed planning or **Multi-Week** for broader planning across several weeks, and multiple calendar leaves can stay open side by side when you want different views at the same time.
 
-Tasks can appear as all-day items, due items, timed blocks, finished work, or projected recurring occurrences depending on the view. Read-only external ICS calendars can sit beside Operon tasks in Calendar for context.
+Tasks can appear as all-day items, due items, timed blocks, finished work, or projected recurring occurrences depending on the view. Read-only external ICS calendars can sit beside Kairélys tasks in Calendar for context.
 
 The **Task Pool** turns the Calendar sidebar into a planning inbox. It can show **Overdue**, **Unscheduled**, or **All/Open** tasks, and tasks can be dragged from the pool onto Calendar to schedule them as all-day or timed work.
 
@@ -340,7 +346,7 @@ Calendar gives intention a place in time without stripping away task metadata.
 
 Turn task metadata into a visual workflow board. Columns come from pipeline statuses, while swimlanes can organize cards by priority, tags, contexts, assignees, due date, or scheduled date.
 
-Cards are still **the same Operon task records**. Dragging a card across columns or swimlanes updates the underlying task metadata, so Kanban, Filters, Calendar, and the Task Editor stay aligned.
+Cards are still **the same Kairélys task records**. Dragging a card across columns or swimlanes updates the underlying task metadata, so Kanban, Filters, Calendar, and the Task Editor stay aligned.
 
 Saved board presets let different workflows keep their own pipeline, filter, swimlane, color source, appearance, collapsed sections, and sort rules.
 
@@ -364,7 +370,7 @@ Pinned tasks make focus portable across the vault.
 
 ### Contextual menus and task actions
 
-Operon keeps common task actions close to the task surface you are already using. A contextual menu can appear on pinned tasks, filter rows, Kanban cards, Calendar items, task pool entries, FlowTime tasks, and time history rows.
+Kairélys keeps common task actions close to the task surface you are already using. A contextual menu can appear on pinned tasks, filter rows, Kanban cards, Calendar items, task pool entries, FlowTime tasks, and time history rows.
 
 The visible actions change by context. A task can offer actions such as **open editor**, **jump to source**, **mark done**, **start timer**, **pin or unpin**, **change status**, **cancel task**, **unschedule**, or **skip this occurrence** only when that action makes sense for the current surface.
 
@@ -376,7 +382,7 @@ Contextual menus reduce navigation by bringing the next useful action to the pla
 
 ### Recurrence
 
-Create repeating tasks without turning them into a separate calendar system. Operon recurrence rules can be schedule-based, completion-based, or count-based, with daily, weekly, monthly, and yearly patterns.
+Create repeating tasks without turning them into a separate calendar system. Kairélys recurrence rules can be schedule-based, completion-based, or count-based, with daily, weekly, monthly, and yearly patterns.
 
 Recurring tasks can create fresh occurrences with new task identity while carrying the useful task context forward. Per-occurrence fields such as completion state, tracked time, progress, and dependencies are reset so each occurrence remains a real task of its own.
 
@@ -390,7 +396,7 @@ Renamed to:      2026-05-19 - Weekly Review.md
 Next file:       Weekly Review.md
 ```
 
-The body of a recurring file task is also prepared for the next run. Plain Markdown checkboxes are reset to unchecked, and owned Operon inline subtasks are recreated with fresh task ids under the new file task.
+The body of a recurring file task is also prepared for the next run. Plain Markdown checkboxes are reset to unchecked, and owned Kairélys inline subtasks are recreated with fresh task ids under the new file task.
 
 ```md
 Previous file body:
@@ -416,11 +422,11 @@ Image:
 
 #### Inline task recurrence
 
-Recurring **inline tasks** stay in the Markdown file where they already live. When a new occurrence is created, Operon inserts a fresh checkbox line with a new task identity and keeps the recurring task close to its original note context.
+Recurring **inline tasks** stay in the Markdown file where they already live. When a new occurrence is created, Kairélys inserts a fresh checkbox line with a new task identity and keeps the recurring task close to its original note context.
 
 #### Date and week tokens
 
-If an inline task name or file task title contains a single date token or week token, Operon updates that token for the next occurrence.
+If an inline task name or file task title contains a single date token or week token, Kairélys updates that token for the next occurrence.
 
 ```md
 Review 2026-05-19.md -> Review 2026-05-26.md
@@ -435,7 +441,7 @@ Recurrence keeps repeated work connected to its original context without making 
 
 ### Time tracking
 
-Track work from the task itself. Operon can start and stop timers, store completed tracking sessions, and keep duration fields attached to the task record that explains the work.
+Track work from the task itself. Kairélys can start and stop timers, store completed tracking sessions, and keep duration fields attached to the task record that explains the work.
 
 TrackTime records actual sessions. FlowTime adds a focused countdown rhythm, while manual session editing makes it possible to add, correct, or remove tracked ranges after the fact.
 
@@ -455,59 +461,75 @@ Time tracking turns effort into task history instead of leaving it as a separate
 
 ## Status
 
-Operon is maintained by Hasan Yılmaz and is prepared for public distribution as of version 1.0.0.
+Kairélys is maintained by Optimike Labs as a temporary compatibility fork. Its task engine is based
+on Operon `2.5.0`; Kairélys `2.5.1` uses a distinct release tag so its language packs and update
+assets cannot collide with upstream tags. The public API and ÉLYSIA compatibility layers are maintained separately so they
+can be removed cleanly if equivalent capabilities are released upstream.
 
-Operon has been developed in the maintainer's live Obsidian vault from the beginning and is still actively used there; the current working vault contains **about 3,000 indexed Operon tasks**. This is real-world usage evidence, not a formal benchmark.
+The original Operon engine has been developed in its maintainer's live Obsidian vault. Kairélys is
+validated separately against ÉLYSIA and synthetic compatibility fixtures; test results must not be
+presented as upstream Operon endorsements.
 
 ## Compatibility and Requirements
 
-Operon requires Obsidian `1.7.2` or newer and is not marked as desktop-only, so it can be installed on both desktop and mobile Obsidian. Some workflows are naturally more comfortable on larger screens, and the pinned dock can be disabled on phones.
+Kairélys requires Obsidian `1.7.2` or newer and is not marked as desktop-only, so it can be installed on both desktop and mobile Obsidian. Some workflows are naturally more comfortable on larger screens, and the pinned dock can be disabled on phones.
 
-Operon's inline task metadata syntax is specific to Operon. Compatibility risk is more likely to come from overlapping surfaces: another task plugin may also render checkbox rows, rewrite Markdown tasks, manage recurrence, or add its own task planning views. If you use another task-management plugin, test the combination on a small set of notes first and avoid letting multiple plugins manage the same task surfaces.
+Kairélys deliberately preserves Operon's inline metadata syntax and canonical `operonId` field. This
+keeps task Markdown interoperable and makes a future return to official Operon possible without
+rewriting the task corpus.
 
 Installation uses Obsidian's normal Community Plugins flow. No separate beta installer or manual installation path is required for regular users.
 
 ## Core integrations
 
-Operon does not require another community plugin to be installed.
+Kairélys does not require another community plugin to be installed.
 
 Some workflows use Obsidian core plugin behavior:
 
 - **Daily Notes**: used by daily-note based inline task creation, daily-note navigation, and related date-based workflows. If you do not use Daily Notes, inline tasks can be directed to a fixed target file instead.
 - **Page Preview**: used by Obsidian's `hover-link` preview behavior for task title and wikilink previews. If Page Preview is disabled, those hover previews may not appear, but the task data and task actions still work.
 
-Operon bundles **CodeMirror** modules for editor integrations and **ical.js** for parsing read-only external Calendar sources.
+Kairélys bundles **CodeMirror** modules for editor integrations and **ical.js** for parsing read-only external Calendar sources.
 
 ## Data and Network Behavior
 
-Operon stores its canonical plugin data in Obsidian's plugin configuration area under `.obsidian/plugins/operon/`. User-facing settings and configuration live in `data.json`, organized into stable domains for core settings, taxonomy, views, interface preferences, automation, and integrations. Non-settings data is kept separate: `state/` stores user state such as pinned tasks, active trackers, and repeat series; `runtime/` stores the task index; and `cache/` stores parsed external calendar cache data.
+Kairélys stores its plugin data under `.obsidian/plugins/kairelys/`. User-facing settings and
+configuration live in `data.json`; runtime state, indexes and caches remain separate from task
+Markdown.
 
-Older Operon versions used a vault-root `.operon/` folder. Current versions no longer read from, write to, or clean up that legacy folder. If a stale `.operon/` folder remains in a vault or reappears from sync, Operon ignores it and continues using the canonical plugin configuration area.
+Because Kairélys has a different plugin ID, settings stored under `.obsidian/plugins/operon/` are not
+implicitly shared. Switching engines must use the documented import and validation procedure; the
+two plugins must never write the same task set simultaneously.
 
-For Obsidian Sync users, Operon's canonical settings package follows Obsidian's plugin data location. If you sync plugin settings, Operon settings in `data.json` can sync with the rest of your Obsidian configuration. Runtime index and cache files remain local plugin data and can be rebuilt from vault content when needed.
+For Obsidian Sync users, Kairélys's canonical settings package follows Obsidian's plugin data location. If you sync plugin settings, Kairélys settings in `data.json` can sync with the rest of your Obsidian configuration. Runtime index and cache files remain local plugin data and can be rebuilt from vault content when needed.
 
 ### Vault and clipboard access
 
-Operon is a local-first task manager for Markdown tasks. To build its task index and keep task views accurate, it uses Obsidian's Vault API to work with files inside the active vault.
+Kairélys is a local-first task manager for Markdown tasks. To build its task index and keep task views accurate, it uses Obsidian's Vault API to work with files inside the active vault.
 
-- **Vault enumeration**: Operon lists Markdown files in the vault to find inline tasks, file tasks, task templates, daily-note targets, filters, and picker suggestions. This gives Operon access to vault file paths, but it is used for local indexing and navigation inside Obsidian.
-- **Vault read/write**: Operon reads task files to parse task metadata and writes only when you create, edit, move, convert, schedule, complete, or otherwise update tasks through Operon.
-- **Clipboard access**: Operon writes to the system clipboard only for user-initiated copy actions, such as copying an `operonId`, copying an external task link, or copying an embeddable filter block. Operon may also read the system clipboard only after an explicit user action, such as using the Location picker clipboard button to import coordinates copied from the Maps plugin. Clipboard text is parsed locally and used only when it contains valid `lat, lng` coordinates.
-- **External calendar sources**: If you configure external ICS calendar URLs, Operon fetches those read-only calendar sources and stores the parsed cache locally under the plugin cache folder.
-- **Release checks**: When enabled, Operon checks GitHub once on startup for newer compatible Operon releases. This is enabled by default and can be disabled in Operon settings.
-- **Language packs**: English is included with Operon. If you choose another interface language, Operon downloads that data-only language pack from the matching version tag in the Operon GitHub repository and stores the verified copy locally under `runtime/locales/`. Downloaded languages are checked for updates only when Operon ships a different pack hash; task or vault content is never included in these requests.
+- **Vault enumeration**: Kairélys lists Markdown files in the vault to find inline tasks, file tasks, task templates, daily-note targets, filters, and picker suggestions. This gives Kairélys access to vault file paths, but it is used for local indexing and navigation inside Obsidian.
+- **Vault read/write**: Kairélys reads task files to parse task metadata and writes only when you create, edit, move, convert, schedule, complete, or otherwise update tasks through Kairélys.
+- **Clipboard access**: Kairélys writes to the system clipboard only for user-initiated copy actions, such as copying an `operonId`, copying an external task link, or copying an embeddable filter block. Kairélys may also read the system clipboard only after an explicit user action, such as using the Location picker clipboard button to import coordinates copied from the Maps plugin. Clipboard text is parsed locally and used only when it contains valid `lat, lng` coordinates.
+- **External calendar sources**: If you configure external ICS calendar URLs, Kairélys fetches those read-only calendar sources and stores the parsed cache locally under the plugin cache folder.
+- **Release checks**: When enabled, Kairélys checks GitHub once on startup for newer compatible Kairélys releases. This is enabled by default and can be disabled in Kairélys settings.
+- **Language packs**: English is included with Kairélys. If you choose another interface language, Kairélys downloads that data-only language pack from the matching version tag in the Kairélys GitHub repository and stores the verified copy locally under `runtime/locales/`. Downloaded languages are checked for updates only when Kairélys ships a different pack hash; task or vault content is never included in these requests.
 
-Operon does not monitor clipboard changes, include telemetry, analytics, tracking pixels, or background usage reporting. Task data stays in your vault, and Operon plugin data stays inside Obsidian's plugin configuration storage.
+Kairélys does not monitor clipboard changes, include telemetry, analytics, tracking pixels, or background usage reporting. Task data stays in your vault, and Kairélys plugin data stays inside Obsidian's plugin configuration storage.
 
 ## License
 
-Operon is licensed under the GNU General Public License, version 3 or later (`GPL-3.0-or-later`). See [LICENSE](LICENSE) for the full license text.
+Kairélys is licensed under the GNU General Public License, version 3 or later
+(`GPL-3.0-or-later`). See [LICENSE](LICENSE) for the full license text and [FORK.md](FORK.md) for
+fork attribution.
 
 This license allows use, study, modification, redistribution, and commercial distribution, but distributed modified versions and derivative works must preserve the same GPL freedoms and provide the corresponding source code under GPL-compatible terms.
 
 ## Branding
 
-The Operon name, logo, icon, plugin ID, and official release identity are reserved by the maintainer. Modified versions and forks must use clearly different branding and must not imply that they are official Operon releases or endorsed by the Operon maintainer. See [TRADEMARK.md](TRADEMARK.md).
+Kairélys is a distinct name and plugin identity. The Operon name is used only to describe ancestry
+and compatibility. Kairélys is not an official Operon release and is not endorsed by Operon's
+maintainer. The upstream requirements that govern distributed forks are preserved in
+[TRADEMARK.md](TRADEMARK.md).
 
 ## Contributions
 
