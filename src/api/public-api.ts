@@ -121,6 +121,15 @@ function isRawPropertyRecord(value: unknown): boolean {
 	return isRecord(value) && Object.values(value).every(isRawPropertyValue);
 }
 
+function isPublicTagArray(value: unknown): value is string[] {
+	return Array.isArray(value)
+		&& value.every(entry => {
+			if (typeof entry !== 'string' || /[\r\n]/u.test(entry)) return false;
+			const normalized = entry.replace(/^#/, '').trim();
+			return /^[a-zA-Z0-9_\-/]+$/u.test(normalized);
+		});
+}
+
 export function isOperonPublicAdoptInlineTaskInput(value: unknown): value is OperonPublicAdoptInlineTaskInput {
 	return isRecord(value)
 		&& typeof value.targetPath === 'string'
@@ -132,14 +141,15 @@ export function isOperonPublicAdoptInlineTaskInput(value: unknown): value is Ope
 export function isOperonPublicCreateTaskInput(value: unknown): value is OperonPublicCreateTaskInput {
 	if (!isRecord(value) || (value.source !== 'inline' && value.source !== 'file') || typeof value.description !== 'string') return false;
 	if (!hasOnlyOptionalStrings(value, ['statusId', 'fileTemplateId', 'targetDateKey', 'targetFolder', 'targetPath'])) return false;
-	if (value.tags !== undefined && (!Array.isArray(value.tags) || !value.tags.every(tag => typeof tag === 'string'))) return false;
+	if (value.tags !== undefined && !isPublicTagArray(value.tags)) return false;
 	if (value.fields !== undefined && !isStringRecord(value.fields)) return false;
 	return value.properties === undefined || isRawPropertyRecord(value.properties);
 }
 
 export function isOperonPublicUpdateTaskInput(value: unknown): value is OperonPublicUpdateTaskInput {
 	if (!isRecord(value) || !hasOnlyOptionalStrings(value, ['description'])) return false;
-	if (value.tags !== undefined && (!Array.isArray(value.tags) || !value.tags.every(tag => typeof tag === 'string'))) return false;
+	if (typeof value.description === 'string' && /[\r\n]/u.test(value.description)) return false;
+	if (value.tags !== undefined && !isPublicTagArray(value.tags)) return false;
 	if (value.fields !== undefined && !isStringRecord(value.fields)) return false;
 	return value.properties === undefined || isRawPropertyRecord(value.properties);
 }
@@ -153,13 +163,33 @@ export function isOperonPublicConvertTaskInput(value: unknown): value is OperonP
 		|| (value.target !== 'inline' && value.target !== 'file')
 		|| !hasOnlyOptionalStrings(value, ['fileTemplateId', 'targetPath', 'targetFolder'])) return false;
 	if (value.target === 'inline') {
-		return typeof value.targetPath === 'string' && /\.md$/iu.test(value.targetPath.trim());
+		return typeof value.targetPath === 'string'
+			&& /\.md$/iu.test(value.targetPath.trim())
+			&& value.fileTemplateId === undefined
+			&& value.targetFolder === undefined;
 	}
-	return true;
+	return value.targetPath === undefined;
 }
 
 export function isOperonPublicFilterQueryInput(value: unknown): value is OperonPublicFilterQueryInput {
 	return isRecord(value) && typeof value.filterSetId === 'string' && hasOnlyOptionalStrings(value, ['scopePath']);
+}
+
+/** Keep public saved-filter queries aligned with the contexts used by Operon's UI surfaces. */
+export function buildOperonPublicFilterEvaluationOptions<TTask, TProjectSerialScope, TFilePropertyContext>(
+	allTasks: readonly TTask[],
+	projectSerialScopes: readonly TProjectSerialScope[],
+	filePropertyContext: TFilePropertyContext | null | undefined,
+): {
+	projectSerialScopes: readonly TProjectSerialScope[];
+	projectSerialScopeTasks: readonly TTask[];
+	filePropertyContext?: TFilePropertyContext;
+} {
+	return {
+		projectSerialScopes,
+		projectSerialScopeTasks: allTasks,
+		...(filePropertyContext ? { filePropertyContext } : {}),
+	};
 }
 
 export function isOperonPublicRelocateTaskInput(value: unknown): value is OperonPublicRelocateTaskInput {
@@ -176,8 +206,9 @@ export interface PublicWritableKeyMapping {
 export function isPublicManagedFieldWritable(
 	key: string,
 	mappings: readonly PublicWritableKeyMapping[],
+	isEditableField: (key: string) => boolean,
 ): boolean {
 	if (!key || key === 'operonId' || key === 'status' || key === '_checkbox') return false;
 	const mapping = mappings.find(candidate => candidate.canonicalKey === key);
-	return mapping?.sync === 'yes' && mapping.isInternal !== true;
+	return mapping?.sync === 'yes' && mapping.isInternal !== true && isEditableField(key);
 }

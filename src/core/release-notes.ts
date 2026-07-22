@@ -13,6 +13,30 @@ const RELEASE_NOTE_LIMIT = 1;
 
 export const OPERON_RELEASE_NOTES: OperonReleaseNote[] = [
 	{
+		version: '2.6.2',
+		date: '2026-07-23',
+		title: 'Public API query and description safety',
+		showOnUpdate: true,
+		bannerUrl: false,
+		body: `
+### Agent integration
+- Saved-filter queries through the public API now use the same Project Serial and raw file-property
+  evaluation context as Kairélys views.
+- Public description updates reject multiline input before writing, preventing inline tasks from
+  being split into stray Markdown lines.
+- Public tag values must round-trip through the inline parser without changing the task description.
+- Public managed-field writes reuse the engine's editable-field gate, protecting derived aggregate
+  and time-tracking values from direct mutation.
+- Public adoption, inline/file creation, conversion and relocation reject excluded/template-folder
+  targets; success is confirmed against the live index and rolled back when that proof fails.
+- Public file properties are validated before creation, and conversion options are rejected when
+  the selected target shape cannot honor them.
+
+### Compatibility
+- Preserved the Public API V1 contract, Operon task Markdown and canonical \`operonId\` field.
+`.trim(),
+	},
+	{
 		version: '2.6.1',
 		date: '2026-07-22',
 		title: 'Operon 2.6 foundation with Kairélys API compatibility',
