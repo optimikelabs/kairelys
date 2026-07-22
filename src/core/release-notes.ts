@@ -24,9 +24,11 @@ export const OPERON_RELEASE_NOTES: OperonReleaseNote[] = [
   evaluation context as Kairélys views.
 - Public description updates reject multiline input before writing, preventing inline tasks from
   being split into stray Markdown lines.
-- Public tag values reject multiline input in both create and update operations.
+- Public tag values must round-trip through the inline parser without changing the task description.
 - Public managed-field writes reuse the engine's editable-field gate, protecting derived aggregate
   and time-tracking values from direct mutation.
+- Public inline creation and file-to-inline conversion reject excluded/template-folder targets;
+  creation success is confirmed against the live index and rolled back when that proof fails.
 
 ### Compatibility
 - Preserved the Public API V1 contract, Operon task Markdown and canonical \`operonId\` field.
