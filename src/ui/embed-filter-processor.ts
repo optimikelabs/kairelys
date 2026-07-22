@@ -45,8 +45,6 @@ import {
 } from '../systems/filter-lazy-render';
 import { getOwnerDocument } from '../core/dom-compat';
 import { asyncHandler, runAsyncAction } from '../core/async-action';
-import { closeFloatingPanelsForRoot } from './field-pickers/common';
-import { closeIconOnlyChipPreviewsForRoot } from './icon-only-chip-preview';
 import { setAccessibleLabelWithoutTooltip } from './accessibility-label';
 import { buildTaskWikilinkOverlaySettingsSignature } from './task-wikilink-overlay-chips';
 import { buildTaskStatusIconRenderSettingsSignature } from './task-status-icon-signature';
@@ -68,6 +66,7 @@ import {
     type EmbeddedFilterReference,
     type EmbeddedFilterScope,
 } from '../core/embed-filter-scope';
+import { cleanupOperonRenderRoot } from './render-root-cleanup';
 
 function generateFilterSetId(): string {
     return 'fs_' + Math.random().toString(36).slice(2, 9);
@@ -86,8 +85,8 @@ export interface EmbedFilterDeps {
     getChildIds: (parentId: string) => string[];
     navigateToTask: (task: import('../types/fields').IndexedTask) => void;
     getSettings: () => OperonSettings;
-    updateField: (operonId: string, key: string, value: string) => void;
-    updateFields?: (operonId: string, payload: Record<string, string>) => void;
+    updateField: (operonId: string, key: string, value: string) => void | boolean | Promise<void | boolean>;
+    updateFields?: (operonId: string, payload: Record<string, string>) => void | boolean | Promise<void | boolean>;
     updateSubtasks?: (operonId: string, subtaskIds: string[]) => void;
     updateDependencyField?: (operonId: string, field: 'blocking' | 'blockedBy', value: string) => void;
     getRepeatSkipDates?: (repeatSeriesId: string) => string[];
@@ -158,7 +157,7 @@ export function createFilterSurfaceInstance(el: HTMLElement): FilterSurfaceInsta
 }
 
 export function destroyFilterSurfaceInstance(instance: FilterSurfaceInstance): void {
-    closeEmbedTransientUi(instance.el);
+    cleanupOperonRenderRoot(instance.el);
     instance.lazyLoadObserver?.disconnect();
     instance.lazyLoadObserver = null;
     instance.lastRenderSignature = null;
@@ -229,7 +228,7 @@ export function refreshEmbedFilters(deps: EmbedFilterDeps): void {
     for (const instance of activeEmbeds) {
         // Prune detached DOM nodes
         if (!instance.el.isConnected) {
-            closeEmbedTransientUi(instance.el);
+            cleanupOperonRenderRoot(instance.el);
             instance.lazyLoadObserver?.disconnect();
             activeEmbeds.delete(instance);
             continue;
@@ -252,7 +251,7 @@ function renderEmbed(
 
     if (!filterSet) {
         instance.lastRenderSignature = null;
-        closeEmbedTransientUi(el);
+        cleanupOperonRenderRoot(el);
         el.empty();
         const label = filterRef.filterId ?? filterRef.filterName ?? 'unknown';
         renderError(el, `Filter "${label}" not found. Define it in Settings → Operon → Filters.`);
@@ -283,6 +282,7 @@ export function renderFilterSurface(
     const filterActionSettingsSignature = JSON.stringify([
         deps.settings.filterTaskShowPlayAction,
         deps.settings.filterTaskShowPinAction,
+        deps.settings.filterTaskShowNoteAction,
         deps.settings.filterTaskShowSubtaskAction,
         deps.settings.filterTaskShowPlainCheckboxAction,
     ]);
@@ -338,7 +338,7 @@ export function renderFilterSurface(
     instance.lastRenderSignature = renderSignature;
     instance.lazyLoadObserver?.disconnect();
     instance.lazyLoadObserver = null;
-    closeEmbedTransientUi(el);
+    cleanupOperonRenderRoot(el);
     el.empty();
 
     // Build callbacks — same interface as sidebar FilterView
@@ -724,11 +724,6 @@ function isOpenFilterSubtask(
     if (task.checkbox === 'cancelled' || !!task.fieldValues['dateCancelled']?.trim()) return false;
     if (task.checkbox === 'done' || !!task.fieldValues['dateCompleted']?.trim()) return false;
     return true;
-}
-
-function closeEmbedTransientUi(root: HTMLElement): void {
-    closeFloatingPanelsForRoot(root);
-    closeIconOnlyChipPreviewsForRoot(root);
 }
 
 function renderHeader(

@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "sourceVersion": "2.5.3",
-  "keyCount": 2930,
-  "keyFingerprint": "a725e0b8caf3203a4f32d57c5ca7e815690bf0c52a4f5479771be8335476afad",
+  "sourceVersion": "2.6.1",
+  "keyCount": 2947,
+  "keyFingerprint": "6db2c3306703763d294907b95b7223a780fd57f6fd069d80cc0485dc0e3ef5f0",
   "languageOrder": [
     "tr",
     "de",
@@ -15,60 +15,60 @@
   ],
   "locales": {
     "tr": {
-      "assetName": "kairelys-locale-tr-4e0cd483e9cd.json",
-      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.5.3/release-assets/locales/kairelys-locale-tr-4e0cd483e9cd.json",
-      "sourceVersion": "5e93827c42ccbc2a03b685a6c6872fe7ab1d21acea2d849b56c7410b495df769",
-      "sha256": "4e0cd483e9cd3ee144c40a83ea85452a4097fc58fca32cb67c4e157898058efa",
-      "sizeBytes": 220087
+      "assetName": "kairelys-locale-tr-8268d1ca9d64.json",
+      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.6.1/release-assets/locales/kairelys-locale-tr-8268d1ca9d64.json",
+      "sourceVersion": "71fafd2c5588f50241b6bca1968e7515046eecaaac870846e3db3c6b106d5638",
+      "sha256": "8268d1ca9d64456d783fd0bc098383bf526a4a1013468cf08b8cdc3e1f9bcce2",
+      "sizeBytes": 221632
     },
     "de": {
-      "assetName": "kairelys-locale-de-62e06cea7c14.json",
-      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.5.3/release-assets/locales/kairelys-locale-de-62e06cea7c14.json",
-      "sourceVersion": "6fd6e1115a96539bf1f6099f7baae97221bb3e29352dce9b26b6178473d687da",
-      "sha256": "62e06cea7c14b4ffbc685d904d009b4f54e13113ecb9d9ad6bd5736e2612137e",
-      "sizeBytes": 229660
+      "assetName": "kairelys-locale-de-0f5177f0dd72.json",
+      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.6.1/release-assets/locales/kairelys-locale-de-0f5177f0dd72.json",
+      "sourceVersion": "6d77802797ac74f0ae1c5692f9df00958e3b5c24c7875e677cc54a4147310d9c",
+      "sha256": "0f5177f0dd72e972b3887fb8e5ef688373bca824a4d78c33074739cd8dba8df0",
+      "sizeBytes": 231283
     },
     "fr": {
-      "assetName": "kairelys-locale-fr-a30930eca53d.json",
-      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.5.3/release-assets/locales/kairelys-locale-fr-a30930eca53d.json",
-      "sourceVersion": "5ecf8583d50edecc56edf30d380f6ef4f51bc7d58a27db890f08dfaa6c9ada86",
-      "sha256": "a30930eca53d20dc7dee0344dc9f4966486470bf2d00da7c314718320d262e2c",
-      "sizeBytes": 236097
+      "assetName": "kairelys-locale-fr-f958602ddccc.json",
+      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.6.1/release-assets/locales/kairelys-locale-fr-f958602ddccc.json",
+      "sourceVersion": "f506350714ecc5c25273b75d5ac321403c89275b471542fb09af0805cebabb9a",
+      "sha256": "f958602ddccc1ab8859e344ea2f594a96838e26d7c3ec9515c94e8a05d49d697",
+      "sizeBytes": 237677
     },
     "es": {
-      "assetName": "kairelys-locale-es-3936e80432ca.json",
-      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.5.3/release-assets/locales/kairelys-locale-es-3936e80432ca.json",
-      "sourceVersion": "e31958d15629a25f217068ff88b4f58a1a139b79698125978616b14eabd42ab2",
-      "sha256": "3936e80432cabab932dc2bd3dbaca35d5fa6c2bb97dd641631534f123d2e8f79",
-      "sizeBytes": 229979
+      "assetName": "kairelys-locale-es-d1e7078ca351.json",
+      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.6.1/release-assets/locales/kairelys-locale-es-d1e7078ca351.json",
+      "sourceVersion": "cbe3888573dc4c159116adf1b6772c2821f0a00e23d12c4c34bf26df7942e2ed",
+      "sha256": "d1e7078ca351c1c42467469942d8896459d2bfb50028a982bccbb2b0ac8b2678",
+      "sizeBytes": 231520
     },
     "zh-CN": {
-      "assetName": "kairelys-locale-zh-CN-4b104b0bf8b1.json",
-      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.5.3/release-assets/locales/kairelys-locale-zh-CN-4b104b0bf8b1.json",
-      "sourceVersion": "96662e9ce5f6f07897139c29082fa2eac851c9c99c2156332bcded838eb1109a",
-      "sha256": "4b104b0bf8b1630fec2c51aebbd804223fd3961a00e121309b56dc37f9ecc163",
-      "sizeBytes": 200383
+      "assetName": "kairelys-locale-zh-CN-a9f25b8fb1c4.json",
+      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.6.1/release-assets/locales/kairelys-locale-zh-CN-a9f25b8fb1c4.json",
+      "sourceVersion": "827406c06942f6f6abed5065ddf23538ee11eac95efbd543c1cee9517d727cc2",
+      "sha256": "a9f25b8fb1c4240ea483214482debd87b3d150c0a543cf24298a4fe8fc6b6def",
+      "sizeBytes": 201667
     },
     "zh-TW": {
-      "assetName": "kairelys-locale-zh-TW-6f2a35ffa5b6.json",
-      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.5.3/release-assets/locales/kairelys-locale-zh-TW-6f2a35ffa5b6.json",
-      "sourceVersion": "188f9fdbf2ae29c9437f7c05ef253af591be53dc87449c8b22752287359162e1",
-      "sha256": "6f2a35ffa5b61f77db232ee796a182d885c80936a35f8f60ad0952d156736851",
-      "sizeBytes": 201094
+      "assetName": "kairelys-locale-zh-TW-18d92a45d3db.json",
+      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.6.1/release-assets/locales/kairelys-locale-zh-TW-18d92a45d3db.json",
+      "sourceVersion": "37fb7a155e72ae8a0599f8cf332bd552fbe098d2af342b582538fe782dc2f504",
+      "sha256": "18d92a45d3db0f1e52f00805975705b2db51d1d14b5c243b12491ff233f589ff",
+      "sizeBytes": 202384
     },
     "ja": {
-      "assetName": "kairelys-locale-ja-8abe831400f7.json",
-      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.5.3/release-assets/locales/kairelys-locale-ja-8abe831400f7.json",
-      "sourceVersion": "3a63e5bf3344909e17a39fa8ce9309f5020f914be720025cbcc159de31fc5d0c",
-      "sha256": "8abe831400f7dfa7d00c9fecb965b9cc6d8359e101932072721283f995984916",
-      "sizeBytes": 254436
+      "assetName": "kairelys-locale-ja-44b5292b3a96.json",
+      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.6.1/release-assets/locales/kairelys-locale-ja-44b5292b3a96.json",
+      "sourceVersion": "baa9e6aaf232eccb3dececdd94cd1a4fd09bac5dd1ea6c78f5a0d08532322036",
+      "sha256": "44b5292b3a962303c9979ad28cf68b5e960186b5de80132e867e3b4c04982d9d",
+      "sizeBytes": 256186
     },
     "ru": {
-      "assetName": "kairelys-locale-ru-335966c7b8e9.json",
-      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.5.3/release-assets/locales/kairelys-locale-ru-335966c7b8e9.json",
-      "sourceVersion": "a61cbf6af21827e39838057e6101f61fe7ab870631896ec4d1db6a28e8798f3d",
-      "sha256": "335966c7b8e9e105bfb37698a75909b0a7d75b742051afe9d09356ba45e691b9",
-      "sizeBytes": 314044
+      "assetName": "kairelys-locale-ru-fe142681aebe.json",
+      "url": "https://raw.githubusercontent.com/optimikelabs/kairelys/2.6.1/release-assets/locales/kairelys-locale-ru-fe142681aebe.json",
+      "sourceVersion": "835b9b6903b21384a766921b8083993af994b995b64b225aa89d496793c2f221",
+      "sha256": "fe142681aebeacfb2d2276a128d0d3242c252aa77c5afa26fd6a5e92f0e660a3",
+      "sizeBytes": 316308
     }
   }
 }
