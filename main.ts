@@ -2367,6 +2367,10 @@ export default class OperonPlugin extends Plugin {
 		if (input.source === 'inline' && input.targetFolder?.trim()) {
 			return this.publicMutationResult(false, null, 'invalid-input', 'targetFolder is supported only for file tasks.');
 		}
+		if (input.source === 'inline' && input.targetPath?.trim()
+			&& isOperonExcludedPath(input.targetPath.trim(), this.settings)) {
+			return this.publicMutationResult(false, null, 'invalid-input', 'targetPath is excluded from Operon indexing.');
+		}
 		if (input.source === 'file' && input.targetPath?.trim()) {
 			return this.publicMutationResult(false, null, 'invalid-input', 'targetPath is supported only for inline tasks.');
 		}
@@ -2407,6 +2411,24 @@ export default class OperonPlugin extends Plugin {
 					parentAwarePlacement: input.targetPath?.trim() ? false : undefined,
 				});
 				if (!created) return this.publicMutationResult(false, null, 'rejected', 'Operon rejected inline task creation.');
+				const createdFilePath = created.filePath;
+				const createdLineNumber = created.lineNumber;
+				if (!createdFilePath || createdLineNumber === undefined) {
+					return this.publicMutationResult(false, created.operonId, 'failed', 'Inline task creation returned no source location.');
+				}
+				const indexedCreatedTask = this.indexer.getTask(created.operonId);
+				if (indexedCreatedTask?.primary.format !== 'inline'
+					|| indexedCreatedTask.primary.filePath !== createdFilePath) {
+					const rolledBack = await this.deleteInlineTaskById(
+						createdFilePath,
+						created.operonId,
+						createdLineNumber,
+					).catch(() => false);
+					await this.indexer.reindexFilePath(createdFilePath).catch(() => undefined);
+					return this.publicMutationResult(false, created.operonId, 'failed', rolledBack
+						? 'Inline task creation was rolled back because the task was not indexed.'
+						: 'Inline task creation could not be proven and rollback failed.');
+				}
 				return this.publicMutationResult(true, created.operonId, 'applied');
 			}
 
@@ -2674,8 +2696,9 @@ export default class OperonPlugin extends Plugin {
 			}
 			const targetFile = this.app.vault.getAbstractFileByPath(targetPath);
 			if (!(targetFile instanceof TFile) || targetFile.extension.toLowerCase() !== 'md'
+				|| isOperonExcludedPath(targetFile.path, this.settings)
 				|| targetFile.path === task.primary.filePath) {
-				return this.publicMutationResult(false, operonId, 'invalid-input', 'targetPath must identify a different Markdown file.');
+				return this.publicMutationResult(false, operonId, 'invalid-input', 'targetPath must identify a different indexed Markdown file.');
 			}
 			const inlineTaskLine = this.formatConverter.yamlToInline(operonId);
 			if (!inlineTaskLine?.trim()) return this.publicMutationResult(false, operonId, 'rejected');

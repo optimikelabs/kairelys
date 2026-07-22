@@ -121,9 +121,13 @@ function isRawPropertyRecord(value: unknown): boolean {
 	return isRecord(value) && Object.values(value).every(isRawPropertyValue);
 }
 
-function isSingleLineStringArray(value: unknown): value is string[] {
+function isPublicTagArray(value: unknown): value is string[] {
 	return Array.isArray(value)
-		&& value.every(entry => typeof entry === 'string' && !/[\r\n]/u.test(entry));
+		&& value.every(entry => {
+			if (typeof entry !== 'string' || /[\r\n]/u.test(entry)) return false;
+			const normalized = entry.replace(/^#/, '').trim();
+			return /^[a-zA-Z0-9_\-/]+$/u.test(normalized);
+		});
 }
 
 export function isOperonPublicAdoptInlineTaskInput(value: unknown): value is OperonPublicAdoptInlineTaskInput {
@@ -137,7 +141,7 @@ export function isOperonPublicAdoptInlineTaskInput(value: unknown): value is Ope
 export function isOperonPublicCreateTaskInput(value: unknown): value is OperonPublicCreateTaskInput {
 	if (!isRecord(value) || (value.source !== 'inline' && value.source !== 'file') || typeof value.description !== 'string') return false;
 	if (!hasOnlyOptionalStrings(value, ['statusId', 'fileTemplateId', 'targetDateKey', 'targetFolder', 'targetPath'])) return false;
-	if (value.tags !== undefined && !isSingleLineStringArray(value.tags)) return false;
+	if (value.tags !== undefined && !isPublicTagArray(value.tags)) return false;
 	if (value.fields !== undefined && !isStringRecord(value.fields)) return false;
 	return value.properties === undefined || isRawPropertyRecord(value.properties);
 }
@@ -145,7 +149,7 @@ export function isOperonPublicCreateTaskInput(value: unknown): value is OperonPu
 export function isOperonPublicUpdateTaskInput(value: unknown): value is OperonPublicUpdateTaskInput {
 	if (!isRecord(value) || !hasOnlyOptionalStrings(value, ['description'])) return false;
 	if (typeof value.description === 'string' && /[\r\n]/u.test(value.description)) return false;
-	if (value.tags !== undefined && !isSingleLineStringArray(value.tags)) return false;
+	if (value.tags !== undefined && !isPublicTagArray(value.tags)) return false;
 	if (value.fields !== undefined && !isStringRecord(value.fields)) return false;
 	return value.properties === undefined || isRawPropertyRecord(value.properties);
 }
