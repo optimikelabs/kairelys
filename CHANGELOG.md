@@ -23,11 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refused excluded/template-folder targets across public adoption, inline/file creation, conversion
   in both directions and relocation. New tasks and adoptions are reported as applied only after the
   final live-index state is proven, with rollback when that proof fails.
+- Prevalidated every unmanaged file property before task creation and rejected shape-specific
+  conversion options that the selected target cannot honor.
 
 ### Validation
-- Public API contract coverage increased from 25 to 43 assertions.
+- Public API contract coverage increased from 25 to 47 assertions.
 - Full Linux validation passed on the exact upstream commit: `npm run check`, production bundle
-  3,699,576 bytes and `npm audit` with 0 vulnerabilities.
+  3,699,862 bytes and `npm audit` with 0 vulnerabilities.
 
 ## [2.6.1] - 2026-07-22
 

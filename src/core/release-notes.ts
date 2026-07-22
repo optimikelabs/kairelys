@@ -29,6 +29,8 @@ export const OPERON_RELEASE_NOTES: OperonReleaseNote[] = [
   and time-tracking values from direct mutation.
 - Public adoption, inline/file creation, conversion and relocation reject excluded/template-folder
   targets; success is confirmed against the live index and rolled back when that proof fails.
+- Public file properties are validated before creation, and conversion options are rejected when
+  the selected target shape cannot honor them.
 
 ### Compatibility
 - Preserved the Public API V1 contract, Operon task Markdown and canonical \`operonId\` field.
