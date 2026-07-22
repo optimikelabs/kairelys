@@ -16,11 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   queries, keeping MCP results aligned with the same filters in Kairélys views.
 - Rejected CR/LF in public description updates and normalized the accepted single-line value before
   the writer path, preventing an inline task from being split into stray Markdown lines.
+- Rejected CR/LF in public tag values for create and update operations before the inline serializer.
+- Reused the engine's editable-field gate for public managed-field writes, preventing agents from
+  overwriting derived aggregate and time-tracking values.
 
 ### Validation
-- Public API contract coverage increased from 25 to 31 assertions.
+- Public API contract coverage increased from 25 to 39 assertions.
 - Full Linux validation passed on the exact upstream commit: `npm run check`, production bundle
-  3,697,101 bytes and `npm audit` with 0 vulnerabilities.
+  3,697,146 bytes and `npm audit` with 0 vulnerabilities.
 
 ## [2.6.1] - 2026-07-22
 
