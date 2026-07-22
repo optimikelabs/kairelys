@@ -102,10 +102,12 @@ test('bundle size guard reports missing and unreadable bundle paths', t => {
 	const blockingFile = path.join(temporaryDir, 'not-a-directory');
 	fs.writeFileSync(blockingFile, 'blocker', 'utf8');
 	const unreadablePath = path.join(blockingFile, 'main.js');
-	assert.equal(inspectBundleFile(unreadablePath).reason, 'read-error');
+	const unreadableResult = inspectBundleFile(unreadablePath);
+	// Windows reports a child of a regular file as ENOENT, while POSIX reports ENOTDIR.
+	assert.equal(unreadableResult.reason, process.platform === 'win32' ? 'missing' : 'read-error');
 	const messages = createMessages();
 	assert.equal(runBundleSizeCheck(unreadablePath, messages.logger, {}), 1);
-	assert.match(messages.error[0], /could not inspect/u);
+	assert.match(messages.error[0], process.platform === 'win32' ? /not found/u : /could not inspect/u);
 });
 
 function createBundleFixture(t, bytes) {
