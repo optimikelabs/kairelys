@@ -27,8 +27,8 @@ export const OPERON_RELEASE_NOTES: OperonReleaseNote[] = [
 - Public tag values must round-trip through the inline parser without changing the task description.
 - Public managed-field writes reuse the engine's editable-field gate, protecting derived aggregate
   and time-tracking values from direct mutation.
-- Public inline creation and file-to-inline conversion reject excluded/template-folder targets;
-  creation success is confirmed against the live index and rolled back when that proof fails.
+- Public adoption, inline/file creation, conversion and relocation reject excluded/template-folder
+  targets; success is confirmed against the live index and rolled back when that proof fails.
 
 ### Compatibility
 - Preserved the Public API V1 contract, Operon task Markdown and canonical \`operonId\` field.

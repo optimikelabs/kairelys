@@ -20,14 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   other values that could not round-trip without changing the task description.
 - Reused the engine's editable-field gate for public managed-field writes, preventing agents from
   overwriting derived aggregate and time-tracking values.
-- Refused excluded/template-folder targets before file-to-inline conversion and explicit inline
-  creation; a public inline create is now reported as applied only after the task is present in the
-  live index, with rollback if that proof fails.
+- Refused excluded/template-folder targets across public adoption, inline/file creation, conversion
+  in both directions and relocation. New tasks and adoptions are reported as applied only after the
+  final live-index state is proven, with rollback when that proof fails.
 
 ### Validation
 - Public API contract coverage increased from 25 to 43 assertions.
 - Full Linux validation passed on the exact upstream commit: `npm run check`, production bundle
-  3,698,064 bytes and `npm audit` with 0 vulnerabilities.
+  3,699,576 bytes and `npm audit` with 0 vulnerabilities.
 
 ## [2.6.1] - 2026-07-22
 
