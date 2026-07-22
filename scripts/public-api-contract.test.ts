@@ -25,6 +25,8 @@ async function run(): Promise<void> {
 	equal(isOperonPublicCreateTaskInput({ source: 'file', description: 'Invalid', tags: [42] }), false);
 	equal(isOperonPublicCreateTaskInput({ source: 'inline', description: 'Invalid tag', tags: ['ok\n- [ ] injected'] }), false);
 	equal(isOperonPublicCreateTaskInput({ source: 'file', description: 'Invalid tag', tags: ['ok\rinjected'] }), false);
+	equal(isOperonPublicCreateTaskInput({ source: 'inline', description: 'Invalid tag', tags: ['client review'] }), false);
+	equal(isOperonPublicCreateTaskInput({ source: 'inline', description: 'Valid tag', tags: ['#client-review', 'nested/tag'] }), true);
 	equal(isOperonPublicCreateTaskInput({ source: 'file', description: 'Valid', properties: { score: 2, flags: ['a', true] } }), true);
 	equal(isOperonPublicAdoptInlineTaskInput({ targetPath: 'Daily.md', line: 1, expectedLine: '- [ ] Task' }), true);
 	equal(isOperonPublicAdoptInlineTaskInput({ targetPath: 'Daily.md', line: '1', expectedLine: '- [ ] Task' }), false);
@@ -36,6 +38,8 @@ async function run(): Promise<void> {
 	equal(isOperonPublicUpdateTaskInput({ tags: ['valid', 'nested/tag'] }), true);
 	equal(isOperonPublicUpdateTaskInput({ tags: ['ok\n- [ ] injected'] }), false);
 	equal(isOperonPublicUpdateTaskInput({ tags: ['ok\rinjected'] }), false);
+	equal(isOperonPublicUpdateTaskInput({ tags: ['client review'] }), false);
+	equal(isOperonPublicUpdateTaskInput({ tags: ['#valid-tag'] }), true);
 	equal(isOperonPublicTransitionTaskInput({ statusId: 'todo' }), true);
 	equal(isOperonPublicTransitionTaskInput({ statusId: 2 }), false);
 	equal(isOperonPublicConvertTaskInput({ target: 'inline', targetPath: 'Project.md' }), true);
