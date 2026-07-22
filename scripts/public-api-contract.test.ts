@@ -23,6 +23,8 @@ async function run(): Promise<void> {
 	equal(isOperonPublicCreateTaskInput({ source: 'other', description: 'Invalid' }), false);
 	equal(isOperonPublicCreateTaskInput(null), false);
 	equal(isOperonPublicCreateTaskInput({ source: 'file', description: 'Invalid', tags: [42] }), false);
+	equal(isOperonPublicCreateTaskInput({ source: 'inline', description: 'Invalid tag', tags: ['ok\n- [ ] injected'] }), false);
+	equal(isOperonPublicCreateTaskInput({ source: 'file', description: 'Invalid tag', tags: ['ok\rinjected'] }), false);
 	equal(isOperonPublicCreateTaskInput({ source: 'file', description: 'Valid', properties: { score: 2, flags: ['a', true] } }), true);
 	equal(isOperonPublicAdoptInlineTaskInput({ targetPath: 'Daily.md', line: 1, expectedLine: '- [ ] Task' }), true);
 	equal(isOperonPublicAdoptInlineTaskInput({ targetPath: 'Daily.md', line: '1', expectedLine: '- [ ] Task' }), false);
@@ -31,6 +33,9 @@ async function run(): Promise<void> {
 	equal(isOperonPublicUpdateTaskInput({ description: 'One line' }), true);
 	equal(isOperonPublicUpdateTaskInput({ description: 'First\nSecond' }), false);
 	equal(isOperonPublicUpdateTaskInput({ description: 'First\rSecond' }), false);
+	equal(isOperonPublicUpdateTaskInput({ tags: ['valid', 'nested/tag'] }), true);
+	equal(isOperonPublicUpdateTaskInput({ tags: ['ok\n- [ ] injected'] }), false);
+	equal(isOperonPublicUpdateTaskInput({ tags: ['ok\rinjected'] }), false);
 	equal(isOperonPublicTransitionTaskInput({ statusId: 'todo' }), true);
 	equal(isOperonPublicTransitionTaskInput({ statusId: 2 }), false);
 	equal(isOperonPublicConvertTaskInput({ target: 'inline', targetPath: 'Project.md' }), true);
@@ -56,15 +61,23 @@ async function run(): Promise<void> {
 
 	const mappings = [
 		{ canonicalKey: 'priority', sync: 'yes' as const },
+		{ canonicalKey: 'duration', sync: 'yes' as const },
+		{ canonicalKey: 'directSubtaskCount', sync: 'yes' as const },
+		{ canonicalKey: 'customEditable', sync: 'yes' as const },
 		{ canonicalKey: 'repeatSeriesId', sync: 'yes' as const, isInternal: true },
 		{ canonicalKey: 'derived', sync: 'no' as const },
 	];
-	equal(isPublicManagedFieldWritable('priority', mappings), true);
-	equal(isPublicManagedFieldWritable('repeatSeriesId', mappings), false);
-	equal(isPublicManagedFieldWritable('derived', mappings), false);
-	equal(isPublicManagedFieldWritable('status', mappings), false);
-	equal(isPublicManagedFieldWritable('operonId', mappings), false);
-	equal(isPublicManagedFieldWritable('unknown', mappings), false);
+	const editableFields = new Set(['priority', 'customEditable']);
+	const isEditableField = (key: string): boolean => editableFields.has(key);
+	equal(isPublicManagedFieldWritable('priority', mappings, isEditableField), true);
+	equal(isPublicManagedFieldWritable('customEditable', mappings, isEditableField), true);
+	equal(isPublicManagedFieldWritable('duration', mappings, isEditableField), false);
+	equal(isPublicManagedFieldWritable('directSubtaskCount', mappings, isEditableField), false);
+	equal(isPublicManagedFieldWritable('repeatSeriesId', mappings, isEditableField), false);
+	equal(isPublicManagedFieldWritable('derived', mappings, isEditableField), false);
+	equal(isPublicManagedFieldWritable('status', mappings, isEditableField), false);
+	equal(isPublicManagedFieldWritable('operonId', mappings, isEditableField), false);
+	equal(isPublicManagedFieldWritable('unknown', mappings, isEditableField), false);
 
 	console.log(`Public API contract tests passed: ${assertions} assertions`);
 }
