@@ -121,6 +121,11 @@ function isRawPropertyRecord(value: unknown): boolean {
 	return isRecord(value) && Object.values(value).every(isRawPropertyValue);
 }
 
+function isSingleLineStringArray(value: unknown): value is string[] {
+	return Array.isArray(value)
+		&& value.every(entry => typeof entry === 'string' && !/[\r\n]/u.test(entry));
+}
+
 export function isOperonPublicAdoptInlineTaskInput(value: unknown): value is OperonPublicAdoptInlineTaskInput {
 	return isRecord(value)
 		&& typeof value.targetPath === 'string'
@@ -132,7 +137,7 @@ export function isOperonPublicAdoptInlineTaskInput(value: unknown): value is Ope
 export function isOperonPublicCreateTaskInput(value: unknown): value is OperonPublicCreateTaskInput {
 	if (!isRecord(value) || (value.source !== 'inline' && value.source !== 'file') || typeof value.description !== 'string') return false;
 	if (!hasOnlyOptionalStrings(value, ['statusId', 'fileTemplateId', 'targetDateKey', 'targetFolder', 'targetPath'])) return false;
-	if (value.tags !== undefined && (!Array.isArray(value.tags) || !value.tags.every(tag => typeof tag === 'string'))) return false;
+	if (value.tags !== undefined && !isSingleLineStringArray(value.tags)) return false;
 	if (value.fields !== undefined && !isStringRecord(value.fields)) return false;
 	return value.properties === undefined || isRawPropertyRecord(value.properties);
 }
@@ -140,7 +145,7 @@ export function isOperonPublicCreateTaskInput(value: unknown): value is OperonPu
 export function isOperonPublicUpdateTaskInput(value: unknown): value is OperonPublicUpdateTaskInput {
 	if (!isRecord(value) || !hasOnlyOptionalStrings(value, ['description'])) return false;
 	if (typeof value.description === 'string' && /[\r\n]/u.test(value.description)) return false;
-	if (value.tags !== undefined && (!Array.isArray(value.tags) || !value.tags.every(tag => typeof tag === 'string'))) return false;
+	if (value.tags !== undefined && !isSingleLineStringArray(value.tags)) return false;
 	if (value.fields !== undefined && !isStringRecord(value.fields)) return false;
 	return value.properties === undefined || isRawPropertyRecord(value.properties);
 }
@@ -194,8 +199,9 @@ export interface PublicWritableKeyMapping {
 export function isPublicManagedFieldWritable(
 	key: string,
 	mappings: readonly PublicWritableKeyMapping[],
+	isEditableField: (key: string) => boolean,
 ): boolean {
 	if (!key || key === 'operonId' || key === 'status' || key === '_checkbox') return false;
 	const mapping = mappings.find(candidate => candidate.canonicalKey === key);
-	return mapping?.sync === 'yes' && mapping.isInternal !== true;
+	return mapping?.sync === 'yes' && mapping.isInternal !== true && isEditableField(key);
 }

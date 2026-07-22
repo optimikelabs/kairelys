@@ -2347,7 +2347,11 @@ export default class OperonPlugin extends Plugin {
 		const description = this.normalizeTaskCreatorText(input.description);
 		if (!description) return this.publicMutationResult(false, null, 'invalid-input', 'Description is required.');
 		const unsupportedFields = Object.keys(input.fields ?? {}).filter(key => (
-			key !== 'status' && !isPublicManagedFieldWritable(key, this.settings.keyMappings)
+			key !== 'status' && !isPublicManagedFieldWritable(
+				key,
+				this.settings.keyMappings,
+				candidate => isEditableTableTaskFieldKey(candidate, this.settings),
+			)
 		));
 		if (unsupportedFields.length > 0) {
 			return this.publicMutationResult(
@@ -2480,7 +2484,11 @@ export default class OperonPlugin extends Plugin {
 		const fields = Object.fromEntries(
 			Object.entries(input.fields ?? {})
 				.filter(([key]) => {
-					const supported = isPublicManagedFieldWritable(key, this.settings.keyMappings);
+					const supported = isPublicManagedFieldWritable(
+						key,
+						this.settings.keyMappings,
+						candidate => isEditableTableTaskFieldKey(candidate, this.settings),
+					);
 					if (!supported) unsupportedFields.push(key);
 					return supported;
 				})
