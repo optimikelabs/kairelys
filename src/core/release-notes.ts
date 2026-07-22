@@ -13,6 +13,23 @@ const RELEASE_NOTE_LIMIT = 1;
 
 export const OPERON_RELEASE_NOTES: OperonReleaseNote[] = [
 	{
+		version: '2.6.2',
+		date: '2026-07-23',
+		title: 'Public API query and description safety',
+		showOnUpdate: true,
+		bannerUrl: false,
+		body: `
+### Agent integration
+- Saved-filter queries through the public API now use the same Project Serial and raw file-property
+  evaluation context as Kairélys views.
+- Public description updates reject multiline input before writing, preventing inline tasks from
+  being split into stray Markdown lines.
+
+### Compatibility
+- Preserved the Public API V1 contract, Operon task Markdown and canonical \`operonId\` field.
+`.trim(),
+	},
+	{
 		version: '2.6.1',
 		date: '2026-07-22',
 		title: 'Operon 2.6 foundation with Kairélys API compatibility',

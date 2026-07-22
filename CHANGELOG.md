@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Validation
 
+## [2.6.2] - 2026-07-23
+
+### Agent integration
+- Passed Project Serial scope and raw file-property evaluation contexts through public saved-filter
+  queries, keeping MCP results aligned with the same filters in Kairélys views.
+- Rejected CR/LF in public description updates and normalized the accepted single-line value before
+  the writer path, preventing an inline task from being split into stray Markdown lines.
+
+### Validation
+- Public API contract coverage increased from 25 to 31 assertions.
+- Full Linux validation passed on the exact upstream commit: `npm run check`, production bundle
+  3,697,101 bytes and `npm audit` with 0 vulnerabilities.
+
 ## [2.6.1] - 2026-07-22
 
 ### Upstream baseline
