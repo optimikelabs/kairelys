@@ -33,10 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keeping immediate post-create compare-and-set writes correct when the cache is still stale.
 - Switched public inline relocation/conversion reads and shared insert/delete helpers to current
   vault content and atomic `Vault.process` mutations, avoiding stale-read overwrites.
+- Rejected every `{{` opener in public descriptions and applied canonical path validation to saved
+  filter scopes, preventing parser loss and silent request retargeting.
 - Added rollback-on-finalization-failure for public inline creation and adoption.
 
 ### Validation
-- Public API contract coverage increased from 51 to 134 assertions and now classifies every
+- Public API contract coverage increased from 51 to 137 assertions and now classifies every
   canonical key plus editable and read-only custom fields.
 - Full validation passed in an exact fresh Linux checkout: `npm run check`, production build and
   `npm audit` with 0 vulnerabilities.
