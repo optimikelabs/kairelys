@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Validation
 
+## [2.6.3] - 2026-07-23
+
+### Agent integration
+- Replaced the partial public-field gate with an exhaustive canonical write-policy matrix.
+- Restored public writes for `reminderDatetimes` and `reminderRules`, which are managed through
+  Operon's Task Editor rather than editable Table columns.
+- Reserved `status`, `dateCompleted` and `dateCancelled` for `transitionTask`, preventing generic
+  field updates from producing an open task with terminal dates.
+
+### Validation
+- Public API contract coverage increased from 51 to 93 assertions and now classifies every
+  canonical key plus editable and read-only custom fields.
+- Full validation passed in an exact fresh Linux checkout: `npm run check`, production build and
+  `npm audit` with 0 vulnerabilities.
+
 ## [2.6.2] - 2026-07-23
 
 ### Agent integration
