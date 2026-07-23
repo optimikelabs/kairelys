@@ -19,9 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   field updates from producing an open task with terminal dates.
 - Limited public creation and adoption seeds to open workflow statuses; terminal status, checkbox
   and date changes are applied together through `transitionTask`.
+- Rejected inline-field containers in public descriptions so text-only create/update calls cannot
+  inject `operonId`, terminal dates or other managed metadata during reparsing.
+- Rejected terminal checkbox, workflow status and terminal-date metadata after Tasks-line parsing,
+  before public adoption can write the converted task.
 
 ### Validation
-- Public API contract coverage increased from 51 to 96 assertions and now classifies every
+- Public API contract coverage increased from 51 to 111 assertions and now classifies every
   canonical key plus editable and read-only custom fields.
 - Full validation passed in an exact fresh Linux checkout: `npm run check`, production build and
   `npm audit` with 0 vulnerabilities.
