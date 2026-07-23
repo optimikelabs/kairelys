@@ -156,19 +156,7 @@ function isPublicTagArray(value: unknown): value is string[] {
 
 /** Public descriptions must stay plain text so reparsing cannot create managed inline fields. */
 export function isPublicTaskDescriptionSafe(value: unknown): value is string {
-	if (typeof value !== 'string' || /[\r\n]/u.test(value)) return false;
-	let offset = 0;
-	while (offset < value.length) {
-		const start = value.indexOf('{{', offset);
-		if (start === -1) return true;
-		const end = value.indexOf('}}', start + 2);
-		if (end === -1) return true;
-		const content = value.slice(start + 2, end);
-		const separator = content.indexOf('::');
-		if (separator !== -1 && content.slice(0, separator).trim()) return false;
-		offset = end + 2;
-	}
-	return true;
+	return typeof value === 'string' && !/[\r\n]/u.test(value) && !value.includes('{{');
 }
 
 export function isOperonPublicAdoptInlineTaskInput(value: unknown): value is OperonPublicAdoptInlineTaskInput {
@@ -226,10 +214,11 @@ export function isOperonPublicConvertTaskInput(value: unknown): value is OperonP
 }
 
 export function isOperonPublicFilterQueryInput(value: unknown): value is OperonPublicFilterQueryInput {
-	return isRecord(value)
-		&& hasOnlyKeys(value, ['filterSetId', 'scopePath'])
-		&& typeof value.filterSetId === 'string'
-		&& hasOnlyOptionalStrings(value, ['scopePath']);
+	if (!isRecord(value)
+		|| !hasOnlyKeys(value, ['filterSetId', 'scopePath'])
+		|| typeof value.filterSetId !== 'string'
+		|| !hasOnlyOptionalStrings(value, ['scopePath'])) return false;
+	return value.scopePath === undefined || isPublicVaultPath(value.scopePath, { markdown: false, allowEmpty: true });
 }
 
 /** Keep public saved-filter queries aligned with the contexts used by Operon's UI surfaces. */
