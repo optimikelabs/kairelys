@@ -35,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   vault content and atomic `Vault.process` mutations, avoiding stale-read overwrites.
 - Rejected every `{{` opener in public descriptions and applied canonical path validation to saved
   filter scopes, preventing parser loss and silent request retargeting.
+- Revalidated the live indexed state before task-creator finalization and again before public
+  success, rolling back terminal defaults inherited from targets or file templates.
 - Added rollback-on-finalization-failure for public inline creation and adoption.
 
 ### Validation
