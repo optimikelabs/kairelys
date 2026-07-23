@@ -105,6 +105,27 @@ function hasOnlyOptionalStrings(value: PublicRecord, keys: readonly string[]): b
 	return keys.every(key => value[key] === undefined || typeof value[key] === 'string');
 }
 
+function hasOnlyKeys(value: PublicRecord, keys: readonly string[]): boolean {
+	const allowed = new Set(keys);
+	return Object.keys(value).every(key => allowed.has(key));
+}
+
+function isPublicDateKey(value: unknown): value is string {
+	if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false;
+	const [year, month, day] = value.split('-').map(Number);
+	const parsed = new Date(Date.UTC(year, month - 1, day));
+	return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+}
+
+function isPublicVaultPath(value: unknown, options: { markdown: boolean; allowEmpty?: boolean }): value is string {
+	if (typeof value !== 'string') return false;
+	const normalized = value.trim();
+	if (!normalized) return options.allowEmpty === true;
+	if (/^[\\/]/u.test(normalized) || /^[a-zA-Z]:/u.test(normalized) || normalized.includes('\\')) return false;
+	if (normalized.split('/').some(segment => !segment || segment === '.' || segment === '..')) return false;
+	return !options.markdown || /\.md$/iu.test(normalized);
+}
+
 function isStringRecord(value: unknown): value is Record<string, string> {
 	return isRecord(value) && Object.values(value).every(entry => typeof entry === 'string');
 }
@@ -151,7 +172,8 @@ export function isPublicTaskDescriptionSafe(value: unknown): value is string {
 
 export function isOperonPublicAdoptInlineTaskInput(value: unknown): value is OperonPublicAdoptInlineTaskInput {
 	return isRecord(value)
-		&& typeof value.targetPath === 'string'
+		&& hasOnlyKeys(value, ['targetPath', 'line', 'expectedLine', 'statusId'])
+		&& isPublicVaultPath(value.targetPath, { markdown: true })
 		&& typeof value.line === 'number'
 		&& typeof value.expectedLine === 'string'
 		&& hasOnlyOptionalStrings(value, ['statusId']);
@@ -160,7 +182,14 @@ export function isOperonPublicAdoptInlineTaskInput(value: unknown): value is Ope
 export function isOperonPublicCreateTaskInput(value: unknown): value is OperonPublicCreateTaskInput {
 	if (!isRecord(value) || (value.source !== 'inline' && value.source !== 'file')
 		|| !isPublicTaskDescriptionSafe(value.description)) return false;
+	if (!hasOnlyKeys(value, [
+		'source', 'description', 'statusId', 'tags', 'fields', 'properties',
+		'fileTemplateId', 'targetDateKey', 'targetFolder', 'targetPath',
+	])) return false;
 	if (!hasOnlyOptionalStrings(value, ['statusId', 'fileTemplateId', 'targetDateKey', 'targetFolder', 'targetPath'])) return false;
+	if (value.targetDateKey !== undefined && !isPublicDateKey(value.targetDateKey)) return false;
+	if (value.targetPath !== undefined && !isPublicVaultPath(value.targetPath, { markdown: true, allowEmpty: true })) return false;
+	if (value.targetFolder !== undefined && !isPublicVaultPath(value.targetFolder, { markdown: false, allowEmpty: true })) return false;
 	if (value.tags !== undefined && !isPublicTagArray(value.tags)) return false;
 	if (value.fields !== undefined && !isStringRecord(value.fields)) return false;
 	return value.properties === undefined || isRawPropertyRecord(value.properties);
@@ -168,6 +197,7 @@ export function isOperonPublicCreateTaskInput(value: unknown): value is OperonPu
 
 export function isOperonPublicUpdateTaskInput(value: unknown): value is OperonPublicUpdateTaskInput {
 	if (!isRecord(value) || !hasOnlyOptionalStrings(value, ['description'])) return false;
+	if (!hasOnlyKeys(value, ['fields', 'properties', 'description', 'tags'])) return false;
 	if (value.description !== undefined && !isPublicTaskDescriptionSafe(value.description)) return false;
 	if (value.tags !== undefined && !isPublicTagArray(value.tags)) return false;
 	if (value.fields !== undefined && !isStringRecord(value.fields)) return false;
@@ -175,24 +205,30 @@ export function isOperonPublicUpdateTaskInput(value: unknown): value is OperonPu
 }
 
 export function isOperonPublicTransitionTaskInput(value: unknown): value is OperonPublicTransitionTaskInput {
-	return isRecord(value) && hasOnlyOptionalStrings(value, ['status', 'statusId']);
+	return isRecord(value)
+		&& hasOnlyKeys(value, ['status', 'statusId'])
+		&& hasOnlyOptionalStrings(value, ['status', 'statusId']);
 }
 
 export function isOperonPublicConvertTaskInput(value: unknown): value is OperonPublicConvertTaskInput {
 	if (!isRecord(value)
 		|| (value.target !== 'inline' && value.target !== 'file')
+		|| !hasOnlyKeys(value, ['target', 'fileTemplateId', 'targetPath', 'targetFolder'])
 		|| !hasOnlyOptionalStrings(value, ['fileTemplateId', 'targetPath', 'targetFolder'])) return false;
 	if (value.target === 'inline') {
-		return typeof value.targetPath === 'string'
-			&& /\.md$/iu.test(value.targetPath.trim())
+		return isPublicVaultPath(value.targetPath, { markdown: true })
 			&& value.fileTemplateId === undefined
 			&& value.targetFolder === undefined;
 	}
-	return value.targetPath === undefined;
+	return value.targetPath === undefined
+		&& (value.targetFolder === undefined || isPublicVaultPath(value.targetFolder, { markdown: false, allowEmpty: true }));
 }
 
 export function isOperonPublicFilterQueryInput(value: unknown): value is OperonPublicFilterQueryInput {
-	return isRecord(value) && typeof value.filterSetId === 'string' && hasOnlyOptionalStrings(value, ['scopePath']);
+	return isRecord(value)
+		&& hasOnlyKeys(value, ['filterSetId', 'scopePath'])
+		&& typeof value.filterSetId === 'string'
+		&& hasOnlyOptionalStrings(value, ['scopePath']);
 }
 
 /** Keep public saved-filter queries aligned with the contexts used by Operon's UI surfaces. */
@@ -213,7 +249,9 @@ export function buildOperonPublicFilterEvaluationOptions<TTask, TProjectSerialSc
 }
 
 export function isOperonPublicRelocateTaskInput(value: unknown): value is OperonPublicRelocateTaskInput {
-	return isRecord(value) && typeof value.targetPath === 'string';
+	return isRecord(value)
+		&& hasOnlyKeys(value, ['targetPath'])
+		&& isPublicVaultPath(value.targetPath, { markdown: true });
 }
 
 export interface PublicWritableKeyMapping {
