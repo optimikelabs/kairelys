@@ -40,9 +40,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added rollback-on-finalization-failure for public inline creation and adoption.
 - Made every inline task-creator placement atomic and required an exact live source-line match
   before relocation or rollback can delete a task, preserving concurrent human and agent edits.
+- Required inline descriptions to round-trip through the real parser without becoming implicit
+  time or tag metadata, and required the exact adopted line before source restoration.
 
 ### Validation
-- Public API contract coverage increased from 51 to 145 assertions and now classifies every
+- Public API contract coverage increased from 51 to 150 assertions and now classifies every
   canonical key plus editable and read-only custom fields.
 - Full validation passed in an exact fresh Linux checkout: `npm run check`, production build and
   `npm audit` with 0 vulnerabilities.
