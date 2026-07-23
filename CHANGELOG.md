@@ -23,9 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   inject `operonId`, terminal dates or other managed metadata during reparsing.
 - Rejected terminal checkbox, workflow status and terminal-date metadata after Tasks-line parsing,
   before public adoption can write the converted task.
+- Required unique task and parent identities across public updates, transitions, conversions,
+  relocations, creation and adoption final-state proofs.
+- Rejected unknown payload keys, invalid calendar dates and non-canonical vault paths instead of
+  silently ignoring or normalizing an agent request into a different operation.
+- Added rollback-on-finalization-failure for public inline creation and adoption.
 
 ### Validation
-- Public API contract coverage increased from 51 to 111 assertions and now classifies every
+- Public API contract coverage increased from 51 to 127 assertions and now classifies every
   canonical key plus editable and read-only custom fields.
 - Full validation passed in an exact fresh Linux checkout: `npm run check`, production build and
   `npm audit` with 0 vulnerabilities.
