@@ -35,6 +35,7 @@ async function run(): Promise<void> {
 	equal(isOperonPublicCreateTaskInput({ source: 'inline', description: 'Invalid date', targetDateKey: '2026-02-30' }), false);
 	equal(isOperonPublicCreateTaskInput({ source: 'inline', description: 'Invalid path', targetPath: '../Daily.md' }), false);
 	equal(isOperonPublicCreateTaskInput({ source: 'inline', description: 'Invalid path', targetPath: 'Daily.canvas' }), false);
+	equal(isOperonPublicCreateTaskInput({ source: 'inline', description: 'Invalid path', targetPath: 'Daily.md ' }), false);
 	equal(isOperonPublicCreateTaskInput({ source: 'file', description: 'Invalid folder', targetFolder: 'Tasks\\Nested' }), false);
 	equal(isOperonPublicCreateTaskInput({ source: 'other', description: 'Invalid' }), false);
 	equal(isOperonPublicCreateTaskInput(null), false);
@@ -47,6 +48,7 @@ async function run(): Promise<void> {
 	equal(isOperonPublicAdoptInlineTaskInput({ targetPath: 'Daily.md', line: 1, expectedLine: '- [ ] Task' }), true);
 	equal(isOperonPublicAdoptInlineTaskInput({ targetPath: 'Daily.md', line: 1, expectedLine: '- [ ] Task', ignored: true }), false);
 	equal(isOperonPublicAdoptInlineTaskInput({ targetPath: '../Daily.md', line: 1, expectedLine: '- [ ] Task' }), false);
+	equal(isOperonPublicAdoptInlineTaskInput({ targetPath: ' Daily.md', line: 1, expectedLine: '- [ ] Task' }), false);
 	equal(isOperonPublicAdoptInlineTaskInput({ targetPath: 'Daily.md', line: '1', expectedLine: '- [ ] Task' }), false);
 	equal(isOperonPublicUpdateTaskInput({ fields: { priority: 'High' } }), true);
 	equal(isOperonPublicUpdateTaskInput({ fields: { priority: 2 } }), false);
@@ -99,6 +101,7 @@ async function run(): Promise<void> {
 		...CANONICAL_KEYS.map(key => ({
 			canonicalKey: key.name,
 			sync: key.sync,
+			isSystem: true,
 			...(key.internal ? { isInternal: true } : {}),
 		})),
 		{ canonicalKey: 'customEditable', sync: 'yes' as const },
@@ -163,6 +166,11 @@ async function run(): Promise<void> {
 	equal(isPublicManagedFieldWritable('customReadonly', mappings, isEditableField), false);
 	equal(isPublicManagedFieldWritable('derived', mappings, isEditableField), false);
 	equal(isPublicManagedFieldWritable('unknown', mappings, isEditableField), false);
+	equal(isPublicManagedFieldWritable('reminderDatetimes', [{
+		canonicalKey: 'reminderDatetimes',
+		sync: 'yes',
+		isSystem: false,
+	}], isEditableField), false);
 	equal(isPublicTransitionOwnedField('status'), true);
 	equal(isPublicTransitionOwnedField('dateCompleted'), true);
 	equal(isPublicTransitionOwnedField('dateCancelled'), true);

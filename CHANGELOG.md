@@ -27,10 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   relocations, creation and adoption final-state proofs.
 - Rejected unknown payload keys, invalid calendar dates and non-canonical vault paths instead of
   silently ignoring or normalizing an agent request into a different operation.
+- Required public vault paths to be canonical byte-for-byte, including no leading or trailing
+  whitespace, and limited the reminder-field exception to built-in system mappings.
 - Added rollback-on-finalization-failure for public inline creation and adoption.
 
 ### Validation
-- Public API contract coverage increased from 51 to 127 assertions and now classifies every
+- Public API contract coverage increased from 51 to 130 assertions and now classifies every
   canonical key plus editable and read-only custom fields.
 - Full validation passed in an exact fresh Linux checkout: `npm run check`, production build and
   `npm audit` with 0 vulnerabilities.
