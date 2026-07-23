@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whitespace, and limited the reminder-field exception to built-in system mappings.
 - Read unmanaged YAML property expectations from current file content instead of MetadataCache,
   keeping immediate post-create compare-and-set writes correct when the cache is still stale.
+- Switched public inline relocation/conversion reads and shared insert/delete helpers to current
+  vault content and atomic `Vault.process` mutations, avoiding stale-read overwrites.
 - Added rollback-on-finalization-failure for public inline creation and adoption.
 
 ### Validation
