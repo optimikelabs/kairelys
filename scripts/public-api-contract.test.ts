@@ -30,7 +30,7 @@ async function run(): Promise<void> {
 	equal(isOperonPublicCreateTaskInput({ source: 'inline', description: 'Valid' }), true);
 	equal(isOperonPublicCreateTaskInput({ source: 'inline', description: 'Fix {{operonId:: existing}}' }), false);
 	equal(isOperonPublicCreateTaskInput({ source: 'file', description: '{{dateCompleted:: 2026-07-23}}' }), false);
-	equal(isOperonPublicCreateTaskInput({ source: 'inline', description: 'Literal {{braces}} without a field' }), true);
+	equal(isOperonPublicCreateTaskInput({ source: 'inline', description: 'Literal {{braces}} without a field' }), false);
 	equal(isOperonPublicCreateTaskInput({ source: 'inline', description: 'Unknown key', ignored: true }), false);
 	equal(isOperonPublicCreateTaskInput({ source: 'inline', description: 'Valid date', targetDateKey: '2026-07-23' }), true);
 	equal(isOperonPublicCreateTaskInput({ source: 'inline', description: 'Invalid date', targetDateKey: '2026-02-30' }), false);
@@ -79,6 +79,8 @@ async function run(): Promise<void> {
 	equal(isOperonPublicConvertTaskInput({ target: 'file', targetFolder: '../Tasks' }), false);
 	equal(isOperonPublicConvertTaskInput({ target: 'yaml' }), false);
 	equal(isOperonPublicFilterQueryInput({ filterSetId: 'now', scopePath: 'Efforts/Projets' }), true);
+	equal(isOperonPublicFilterQueryInput({ filterSetId: 'now', scopePath: ' Efforts/Projets' }), false);
+	equal(isOperonPublicFilterQueryInput({ filterSetId: 'now', scopePath: 'Efforts\\Projets' }), false);
 	equal(isOperonPublicFilterQueryInput({ filterSetId: 'now', ignored: true }), false);
 	equal(isOperonPublicFilterQueryInput({ filterSetId: 1 }), false);
 	equal(isOperonPublicRelocateTaskInput({ targetPath: 'Project.md' }), true);
@@ -179,9 +181,10 @@ async function run(): Promise<void> {
 	equal(isPublicInitialWorkflowStateAllowed('open'), true);
 	equal(isPublicInitialWorkflowStateAllowed('done'), false);
 	equal(isPublicInitialWorkflowStateAllowed('cancelled'), false);
-	equal(isPublicTaskDescriptionSafe('Plain {{braces}}'), true);
+	equal(isPublicTaskDescriptionSafe('Plain {braces}'), true);
+	equal(isPublicTaskDescriptionSafe('Plain {{braces}}'), false);
 	equal(isPublicTaskDescriptionSafe('Plain {{ key :: value }} field'), false);
-	equal(isPublicTaskDescriptionSafe('Unclosed {{operonId:: value'), true);
+	equal(isPublicTaskDescriptionSafe('Unclosed {{operonId:: value'), false);
 	equal(isPublicInitialTaskStateAllowed({ checkbox: 'open' }), true);
 	equal(isPublicInitialTaskStateAllowed({ checkbox: 'done' }), false);
 	equal(isPublicInitialTaskStateAllowed({ checkbox: 'cancelled' }), false);
