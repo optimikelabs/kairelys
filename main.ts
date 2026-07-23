@@ -2305,6 +2305,12 @@ export default class OperonPlugin extends Plugin {
 					adoptionState.message ||= 'The source line is not an adoptable plain Markdown or Tasks checkbox.';
 					return content;
 				}
+				const initialCheckbox = requestedWorkflow?.checkbox ?? parsed.checkbox;
+				if (!isPublicInitialWorkflowStateAllowed(initialCheckbox)) {
+					adoptionState.outcome = 'invalid';
+					adoptionState.message = 'Adopt an open checkbox, then use transitionTask for terminal states.';
+					return content;
+				}
 				if (requestedWorkflow) {
 					parsed.checkbox = requestedWorkflow.checkbox;
 					this.setParsedTaskField(parsed, 'status', requestedWorkflow.value, 'text');
