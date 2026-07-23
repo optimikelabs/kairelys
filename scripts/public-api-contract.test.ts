@@ -17,6 +17,7 @@ import {
 import { getExcludedTablePickerTaskIds } from '../src/ui/table/table-editing';
 import type { IndexedTask } from '../src/types/fields';
 import { CANONICAL_KEYS } from '../src/types/keys';
+import { readRawYamlPropertyExpectationFromContent } from '../src/core/raw-yaml-property';
 
 let assertions = 0;
 
@@ -188,6 +189,15 @@ async function run(): Promise<void> {
 	equal(isPublicInitialTaskStateAllowed({ checkbox: 'open', statusCheckbox: 'cancelled' }), false);
 	equal(isPublicInitialTaskStateAllowed({ checkbox: 'open', dateCompleted: '2026-07-23' }), false);
 	equal(isPublicInitialTaskStateAllowed({ checkbox: 'open', dateCancelled: '2026-07-23' }), false);
+	const liveProperty = readRawYamlPropertyExpectationFromContent(
+		'---\nscore: 2\n---\nBody',
+		'score',
+		() => ({ score: 2 }),
+	);
+	equal(liveProperty?.present, true);
+	equal(liveProperty?.value, 2);
+	equal(readRawYamlPropertyExpectationFromContent('Body', 'score', () => ({}))?.present, false);
+	equal(readRawYamlPropertyExpectationFromContent('---\nscore: [\n---\n', 'score', () => { throw new Error('invalid'); }), null);
 
 	const hierarchy = [
 		{ operonId: 'root', fieldValues: {} },
