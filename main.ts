@@ -6,7 +6,7 @@
  * Plugin entry point. Manages lifecycle, commands, and module initialization.
  */
 
-import { Editor, EditorPosition, EditorSelection, MarkdownRenderer, MarkdownRenderChild, MarkdownSectionInformation, MarkdownView, MarkdownPostProcessorContext, Menu, MenuItem, Notice, Platform, Plugin, TFile, TAbstractFile, TFolder, WorkspaceLeaf, editorLivePreviewField, normalizePath, requestUrl, requireApiVersion, setIcon } from 'obsidian';
+import { Editor, EditorPosition, EditorSelection, MarkdownRenderer, MarkdownRenderChild, MarkdownSectionInformation, MarkdownView, MarkdownPostProcessorContext, Menu, MenuItem, Notice, Platform, Plugin, TFile, TAbstractFile, TFolder, WorkspaceLeaf, editorLivePreviewField, normalizePath, parseYaml, requestUrl, requireApiVersion, setIcon } from 'obsidian';
 import { EditorView } from '@codemirror/view';
 import type { StateEffect } from '@codemirror/state';
 import { OperonStorage } from './src/storage/operon-storage';
@@ -48,7 +48,7 @@ import { TaskWriter } from './src/core/task-writer';
 import {
 	isSupportedRawYamlPropertyValue,
 	isWritableRawYamlPropertyName,
-	readRawYamlPropertyExpectation,
+	readRawYamlPropertyExpectationFromContent,
 	type RawYamlPropertyExpectation,
 	type RawYamlPropertyMutation,
 	type RawYamlPropertyWriteOutcome,
@@ -2691,8 +2691,7 @@ export default class OperonPlugin extends Plugin {
 					if (!latest || latest.primary.format !== 'yaml') return this.publicMutationResult(false, operonId, 'not-found');
 					const file = this.app.vault.getAbstractFileByPath(latest.primary.filePath);
 					if (!(file instanceof TFile)) return this.publicMutationResult(false, operonId, 'not-found');
-					const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter ?? {};
-					const expected = readRawYamlPropertyExpectation(frontmatter, propertyName);
+					const expected = await this.readLiveRawYamlPropertyExpectation(file, propertyName);
 					if (!expected) return this.publicMutationResult(false, operonId, 'rejected', `Current property value is unsupported: ${propertyName}`);
 					const outcome = await this.updateTableFilePropertyAndRefresh(operonId, {
 						propertyName,
@@ -2708,6 +2707,14 @@ export default class OperonPlugin extends Plugin {
 		} catch (error) {
 			return this.publicMutationResult(false, operonId, 'failed', error instanceof Error ? error.message : String(error));
 		}
+	}
+
+	private async readLiveRawYamlPropertyExpectation(
+		file: TFile,
+		propertyName: string,
+	): Promise<RawYamlPropertyExpectation | null> {
+		const content = await this.app.vault.read(file);
+		return readRawYamlPropertyExpectationFromContent(content, propertyName, parseYaml);
 	}
 
 	private getPublicParentTaskReferenceValidationError(requestedParentTaskId: string | undefined): string | null {
