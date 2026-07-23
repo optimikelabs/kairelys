@@ -639,6 +639,7 @@ interface TaskCreatorInlineCreationOptions {
 	targetPath?: string | null;
 	forceDailyNote?: boolean;
 	parentAwarePlacement?: boolean;
+	rollbackOnFinalizeFailure?: boolean;
 }
 
 interface TaskCreatorInlineTargetFile {
@@ -2224,6 +2225,23 @@ export default class OperonPlugin extends Plugin {
 		}
 
 		const lineNumber = input.line - 1;
+		const restoreAdoptedSourceLine = async (operonId: string): Promise<boolean> => {
+			let rolledBack = false;
+			await this.app.vault.process(file, content => {
+				const lines = content.split('\n');
+				const currentLine = lines[lineNumber];
+				if (currentLine === undefined) return content;
+				const normalizedCurrentLine = currentLine.endsWith('\r') ? currentLine.slice(0, -1) : currentLine;
+				if (this.parseInlineTaskLine(normalizedCurrentLine, lineNumber, targetPath)?.operonId !== operonId) {
+					return content;
+				}
+				lines[lineNumber] = `${input.expectedLine}${currentLine.endsWith('\r') ? '\r' : ''}`;
+				rolledBack = true;
+				return lines.join('\n');
+			}).catch(() => undefined);
+			await this.indexer.reindexFilePath(targetPath).catch(() => undefined);
+			return rolledBack;
+		};
 		const adoptionState: {
 			operonId: string | null;
 			outcome: 'pending' | 'applied' | 'conflict' | 'invalid';
@@ -2337,21 +2355,9 @@ export default class OperonPlugin extends Plugin {
 			await this.indexer.reindexFilePath(targetPath);
 			this.refreshViews();
 			const adopted = this.indexer.getTask(adoptionState.operonId);
-			if (!adopted || adopted.primary.filePath !== targetPath || adopted.primary.lineNumber !== lineNumber) {
-				let rolledBack = false;
-				await this.app.vault.process(file, content => {
-					const lines = content.split('\n');
-					const currentLine = lines[lineNumber];
-					if (currentLine === undefined) return content;
-					const normalizedCurrentLine = currentLine.endsWith('\r') ? currentLine.slice(0, -1) : currentLine;
-					if (this.parseInlineTaskLine(normalizedCurrentLine, lineNumber, targetPath)?.operonId !== adoptionState.operonId) {
-						return content;
-					}
-					lines[lineNumber] = `${input.expectedLine}${currentLine.endsWith('\r') ? '\r' : ''}`;
-					rolledBack = true;
-					return lines.join('\n');
-				}).catch(() => undefined);
-				await this.indexer.reindexFilePath(targetPath).catch(() => undefined);
+			if (!adopted || this.indexer.hasDuplicateOperonIdConflict(adoptionState.operonId)
+				|| adopted.primary.filePath !== targetPath || adopted.primary.lineNumber !== lineNumber) {
+				const rolledBack = await restoreAdoptedSourceLine(adoptionState.operonId);
 				return this.publicMutationResult(false, adoptionState.operonId, 'failed', rolledBack
 					? 'The adopted task could not be proven in the final index; the source line was restored.'
 					: 'The adopted task could not be proven and source rollback failed.');
@@ -2372,7 +2378,13 @@ export default class OperonPlugin extends Plugin {
 			this.refreshViews();
 			return this.publicMutationResult(true, adoptionState.operonId, 'applied');
 		} catch (error) {
-			return this.publicMutationResult(false, adoptionState.operonId, 'failed', error instanceof Error ? error.message : String(error));
+			const rolledBack = adoptionState.operonId && adoptionState.outcome === 'applied'
+				? await restoreAdoptedSourceLine(adoptionState.operonId)
+				: false;
+			const message = error instanceof Error ? error.message : String(error);
+			return this.publicMutationResult(false, adoptionState.operonId, 'failed', rolledBack
+				? `Adoption was rolled back after finalization failed: ${message}`
+				: message);
 		}
 	}
 
@@ -2411,8 +2423,9 @@ export default class OperonPlugin extends Plugin {
 			);
 		}
 		const requestedParentTaskId = input.fields?.parentTask?.trim() ?? '';
-		if (requestedParentTaskId && !this.indexer.getTask(requestedParentTaskId)) {
-			return this.publicMutationResult(false, null, 'invalid-input', `Parent task not found: ${requestedParentTaskId}`);
+		const parentReferenceError = this.getPublicParentTaskReferenceValidationError(requestedParentTaskId);
+		if (parentReferenceError) {
+			return this.publicMutationResult(false, null, 'invalid-input', parentReferenceError);
 		}
 		if (input.source === 'inline' && input.properties && Object.keys(input.properties).length > 0) {
 			return this.publicMutationResult(false, null, 'invalid-input', 'Unmanaged properties are supported only for file tasks.');
@@ -2480,6 +2493,7 @@ export default class OperonPlugin extends Plugin {
 					targetPath: input.targetPath,
 					forceDailyNote: Boolean(input.targetDateKey?.trim() && !input.targetPath?.trim()),
 					parentAwarePlacement: input.targetPath?.trim() ? false : undefined,
+					rollbackOnFinalizeFailure: true,
 				});
 				if (!created) return this.publicMutationResult(false, null, 'rejected', 'Operon rejected inline task creation.');
 				const createdFilePath = created.filePath;
@@ -2492,6 +2506,7 @@ export default class OperonPlugin extends Plugin {
 					? this.getPublicParentTaskValidationError(indexedCreatedTask, indexedCreatedTask.fieldValues['parentTask'])
 					: null;
 				if (indexedCreatedTask?.primary.format !== 'inline'
+					|| this.indexer.hasDuplicateOperonIdConflict(created.operonId)
 					|| indexedCreatedTask.primary.filePath !== createdFilePath
 					|| parentValidationError) {
 					const rolledBack = await this.deleteInlineTaskById(
@@ -2537,6 +2552,7 @@ export default class OperonPlugin extends Plugin {
 				? this.getPublicParentTaskValidationError(indexedCreatedFileTask, indexedCreatedFileTask.fieldValues['parentTask'])
 				: null;
 			if (!createdFilePath || indexedCreatedFileTask?.primary.format !== 'yaml'
+				|| this.indexer.hasDuplicateOperonIdConflict(createdOperonId)
 				|| indexedCreatedFileTask.primary.filePath !== createdFilePath
 				|| parentValidationError) {
 				const rolledBack = createdFilePath
@@ -2575,6 +2591,9 @@ export default class OperonPlugin extends Plugin {
 		if (notReady) return { ...notReady, operonId };
 		if (typeof operonId !== 'string' || !operonId.trim() || !isOperonPublicUpdateTaskInput(input)) {
 			return this.publicMutationResult(false, typeof operonId === 'string' ? operonId : null, 'invalid-input', 'Invalid task update payload.');
+		}
+		if (this.indexer.hasDuplicateOperonIdConflict(operonId)) {
+			return this.publicMutationResult(false, operonId, 'conflict', 'Resolve duplicate operonId instances before updating this task.');
 		}
 		const task = this.indexer.getTask(operonId);
 		if (!task) return this.publicMutationResult(false, operonId, 'not-found');
@@ -2691,10 +2710,20 @@ export default class OperonPlugin extends Plugin {
 		}
 	}
 
-	private getPublicParentTaskValidationError(task: IndexedTask, requestedParentTaskId: string | undefined): string | null {
+	private getPublicParentTaskReferenceValidationError(requestedParentTaskId: string | undefined): string | null {
 		const normalizedParentTaskId = requestedParentTaskId?.trim() ?? '';
 		if (!normalizedParentTaskId) return null;
 		if (!this.indexer.getTask(normalizedParentTaskId)) return `Parent task not found: ${normalizedParentTaskId}`;
+		return this.indexer.hasDuplicateOperonIdConflict(normalizedParentTaskId)
+			? `Parent task id is duplicated: ${normalizedParentTaskId}`
+			: null;
+	}
+
+	private getPublicParentTaskValidationError(task: IndexedTask, requestedParentTaskId: string | undefined): string | null {
+		const normalizedParentTaskId = requestedParentTaskId?.trim() ?? '';
+		const referenceError = this.getPublicParentTaskReferenceValidationError(normalizedParentTaskId);
+		if (referenceError) return referenceError;
+		if (!normalizedParentTaskId) return null;
 		const excludedParentTaskIds = new Set(getExcludedTablePickerTaskIds(
 			'parentTask',
 			task,
@@ -2713,6 +2742,9 @@ export default class OperonPlugin extends Plugin {
 		if (notReady) return { ...notReady, operonId };
 		if (typeof operonId !== 'string' || !operonId.trim() || !isOperonPublicTransitionTaskInput(input)) {
 			return this.publicMutationResult(false, typeof operonId === 'string' ? operonId : null, 'invalid-input', 'Invalid task transition payload.');
+		}
+		if (this.indexer.hasDuplicateOperonIdConflict(operonId)) {
+			return this.publicMutationResult(false, operonId, 'conflict', 'Resolve duplicate operonId instances before transitioning this task.');
 		}
 		const task = this.indexer.getTask(operonId);
 		if (!task) return this.publicMutationResult(false, operonId, 'not-found');
@@ -2787,6 +2819,9 @@ export default class OperonPlugin extends Plugin {
 		if (notReady) return { ...notReady, operonId };
 		if (typeof operonId !== 'string' || !operonId.trim() || !isOperonPublicConvertTaskInput(input)) {
 			return this.publicMutationResult(false, typeof operonId === 'string' ? operonId : null, 'invalid-input', 'Invalid task conversion payload.');
+		}
+		if (this.indexer.hasDuplicateOperonIdConflict(operonId)) {
+			return this.publicMutationResult(false, operonId, 'conflict', 'Resolve duplicate operonId instances before converting this task.');
 		}
 		const task = this.indexer.getTask(operonId);
 		if (!task) return this.publicMutationResult(false, operonId, 'not-found');
@@ -2935,6 +2970,9 @@ export default class OperonPlugin extends Plugin {
 		if (notReady) return { ...notReady, operonId };
 		if (typeof operonId !== 'string' || !operonId.trim() || !isOperonPublicRelocateTaskInput(input)) {
 			return this.publicMutationResult(false, typeof operonId === 'string' ? operonId : null, 'invalid-input', 'Invalid task relocation payload.');
+		}
+		if (this.indexer.hasDuplicateOperonIdConflict(operonId)) {
+			return this.publicMutationResult(false, operonId, 'conflict', 'Resolve duplicate operonId instances before relocating this task.');
 		}
 		const task = this.indexer.getTask(operonId);
 		if (!task) return this.publicMutationResult(false, operonId, 'not-found');
@@ -14624,17 +14662,31 @@ export default class OperonPlugin extends Plugin {
 			return null;
 		}
 
+		await this.indexer.reindexFilePath(createdFilePath);
+		const createdTask = this.indexer.getTask(created.operonId);
+		try {
+			await this.finalizeTaskCreatorCreatedTask(
+				created.operonId,
+				draft,
+				createdTask?.fieldValues['parentTask'],
+			);
+		} catch (error) {
+			if (!options.rollbackOnFinalizeFailure) throw error;
+			const rolledBack = await this.deleteInlineTaskById(
+				createdFilePath,
+				created.operonId,
+				createdLineNumber,
+			).catch(() => false);
+			await this.indexer.reindexFilePath(createdFilePath).catch(() => undefined);
+			const finalizationMessage = error instanceof Error ? error.message : String(error);
+			throw new Error(`${rolledBack
+				? 'Inline task creation was rolled back after finalization failed.'
+				: 'Inline task finalization failed and rollback could not be proven.'} ${finalizationMessage}`);
+		}
 		this.showTaskNotice('inline-created', {
 			description: draft.description,
 			operonId: created.operonId,
 		});
-		await this.indexer.reindexFilePath(createdFilePath);
-		const createdTask = this.indexer.getTask(created.operonId);
-		await this.finalizeTaskCreatorCreatedTask(
-			created.operonId,
-			draft,
-			createdTask?.fieldValues['parentTask'],
-		);
 		this.refreshViews();
 		this.refreshMarkdownAfterInlineAuthoring(createdFilePath);
 		return {
