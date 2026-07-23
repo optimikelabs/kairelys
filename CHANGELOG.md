@@ -9,6 +9,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Validation
 
+## [2.6.3] - 2026-07-23
+
+### Agent integration
+- Replaced the partial public-field gate with an exhaustive canonical write-policy matrix.
+- Restored public writes for `reminderDatetimes` and `reminderRules`, which are managed through
+  Operon's Task Editor rather than editable Table columns.
+- Reserved `status`, `dateCompleted` and `dateCancelled` for `transitionTask`, preventing generic
+  field updates from producing an open task with terminal dates.
+- Limited public creation and adoption seeds to open workflow statuses; terminal status, checkbox
+  and date changes are applied together through `transitionTask`.
+- Rejected inline-field containers in public descriptions so text-only create/update calls cannot
+  inject `operonId`, terminal dates or other managed metadata during reparsing.
+- Rejected terminal checkbox, workflow status and terminal-date metadata after Tasks-line parsing,
+  before public adoption can write the converted task.
+- Required unique task and parent identities across public updates, transitions, conversions,
+  relocations, creation and adoption final-state proofs.
+- Rejected unknown payload keys, invalid calendar dates and non-canonical vault paths instead of
+  silently ignoring or normalizing an agent request into a different operation.
+- Required public vault paths to be canonical byte-for-byte, including no leading or trailing
+  whitespace, and limited the reminder-field exception to built-in system mappings.
+- Read unmanaged YAML property expectations from current file content instead of MetadataCache,
+  keeping immediate post-create compare-and-set writes correct when the cache is still stale.
+- Switched public inline relocation/conversion reads and shared insert/delete helpers to current
+  vault content and atomic `Vault.process` mutations, avoiding stale-read overwrites.
+- Rejected every `{{` opener in public descriptions and applied canonical path validation to saved
+  filter scopes, preventing parser loss and silent request retargeting.
+- Revalidated the live indexed state before task-creator finalization and again before public
+  success, rolling back terminal defaults inherited from targets or file templates.
+- Added rollback-on-finalization-failure for public inline creation and adoption.
+- Made every inline task-creator placement atomic and required an exact live source-line match
+  before relocation or rollback can delete a task, preserving concurrent human and agent edits.
+- Required inline descriptions to round-trip through the real parser without becoming implicit
+  time or tag metadata, and required the exact adopted line before source restoration.
+
+### Validation
+- Public API contract coverage increased from 51 to 150 assertions and now classifies every
+  canonical key plus editable and read-only custom fields.
+- Full validation passed in an exact fresh Linux checkout: `npm run check`, production build and
+  `npm audit` with 0 vulnerabilities.
+
 ## [2.6.2] - 2026-07-23
 
 ### Agent integration

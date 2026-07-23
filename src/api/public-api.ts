@@ -1,3 +1,5 @@
+import { isReminderStorageKey } from '../types/keys';
+
 export const OPERON_PUBLIC_API_VERSION = '1' as const;
 
 export interface OperonPublicApiCapabilities {
@@ -103,6 +105,28 @@ function hasOnlyOptionalStrings(value: PublicRecord, keys: readonly string[]): b
 	return keys.every(key => value[key] === undefined || typeof value[key] === 'string');
 }
 
+function hasOnlyKeys(value: PublicRecord, keys: readonly string[]): boolean {
+	const allowed = new Set(keys);
+	return Object.keys(value).every(key => allowed.has(key));
+}
+
+function isPublicDateKey(value: unknown): value is string {
+	if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false;
+	const [year, month, day] = value.split('-').map(Number);
+	const parsed = new Date(Date.UTC(year, month - 1, day));
+	return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+}
+
+function isPublicVaultPath(value: unknown, options: { markdown: boolean; allowEmpty?: boolean }): value is string {
+	if (typeof value !== 'string') return false;
+	const normalized = value.trim();
+	if (normalized !== value) return false;
+	if (!normalized) return options.allowEmpty === true;
+	if (/^[\\/]/u.test(normalized) || /^[a-zA-Z]:/u.test(normalized) || normalized.includes('\\')) return false;
+	if (normalized.split('/').some(segment => !segment || segment === '.' || segment === '..')) return false;
+	return !options.markdown || /\.md$/iu.test(normalized);
+}
+
 function isStringRecord(value: unknown): value is Record<string, string> {
 	return isRecord(value) && Object.values(value).every(entry => typeof entry === 'string');
 }
@@ -130,17 +154,55 @@ function isPublicTagArray(value: unknown): value is string[] {
 		});
 }
 
+/** Public descriptions must stay plain text so reparsing cannot create managed inline fields. */
+export function isPublicTaskDescriptionSafe(value: unknown): value is string {
+	return typeof value === 'string' && !/[\r\n]/u.test(value) && !value.includes('{{');
+}
+
+interface PublicDescriptionParseResult {
+	description: string;
+	tags: readonly string[];
+	timePrefix: unknown;
+	operonId: string | null;
+	fields: readonly { key: string }[];
+}
+
+/** Inline descriptions must round-trip through the real parser without creating metadata. */
+export function isPublicTaskDescriptionRoundTripSafe(
+	value: unknown,
+	parse: (line: string) => PublicDescriptionParseResult | null,
+): value is string {
+	if (!isPublicTaskDescriptionSafe(value) || !value || value !== value.trim()) return false;
+	const probeOperonId = 'public-description-round-trip-probe';
+	const parsed = parse(`- [ ] ${value} {{operonId:: ${probeOperonId}}}`);
+	return parsed !== null
+		&& parsed.operonId === probeOperonId
+		&& parsed.description === value
+		&& parsed.tags.length === 0
+		&& parsed.timePrefix === null
+		&& parsed.fields.every(field => field.key === 'operonId');
+}
+
 export function isOperonPublicAdoptInlineTaskInput(value: unknown): value is OperonPublicAdoptInlineTaskInput {
 	return isRecord(value)
-		&& typeof value.targetPath === 'string'
+		&& hasOnlyKeys(value, ['targetPath', 'line', 'expectedLine', 'statusId'])
+		&& isPublicVaultPath(value.targetPath, { markdown: true })
 		&& typeof value.line === 'number'
 		&& typeof value.expectedLine === 'string'
 		&& hasOnlyOptionalStrings(value, ['statusId']);
 }
 
 export function isOperonPublicCreateTaskInput(value: unknown): value is OperonPublicCreateTaskInput {
-	if (!isRecord(value) || (value.source !== 'inline' && value.source !== 'file') || typeof value.description !== 'string') return false;
+	if (!isRecord(value) || (value.source !== 'inline' && value.source !== 'file')
+		|| !isPublicTaskDescriptionSafe(value.description)) return false;
+	if (!hasOnlyKeys(value, [
+		'source', 'description', 'statusId', 'tags', 'fields', 'properties',
+		'fileTemplateId', 'targetDateKey', 'targetFolder', 'targetPath',
+	])) return false;
 	if (!hasOnlyOptionalStrings(value, ['statusId', 'fileTemplateId', 'targetDateKey', 'targetFolder', 'targetPath'])) return false;
+	if (value.targetDateKey !== undefined && !isPublicDateKey(value.targetDateKey)) return false;
+	if (value.targetPath !== undefined && !isPublicVaultPath(value.targetPath, { markdown: true, allowEmpty: true })) return false;
+	if (value.targetFolder !== undefined && !isPublicVaultPath(value.targetFolder, { markdown: false, allowEmpty: true })) return false;
 	if (value.tags !== undefined && !isPublicTagArray(value.tags)) return false;
 	if (value.fields !== undefined && !isStringRecord(value.fields)) return false;
 	return value.properties === undefined || isRawPropertyRecord(value.properties);
@@ -148,31 +210,39 @@ export function isOperonPublicCreateTaskInput(value: unknown): value is OperonPu
 
 export function isOperonPublicUpdateTaskInput(value: unknown): value is OperonPublicUpdateTaskInput {
 	if (!isRecord(value) || !hasOnlyOptionalStrings(value, ['description'])) return false;
-	if (typeof value.description === 'string' && /[\r\n]/u.test(value.description)) return false;
+	if (!hasOnlyKeys(value, ['fields', 'properties', 'description', 'tags'])) return false;
+	if (value.description !== undefined && !isPublicTaskDescriptionSafe(value.description)) return false;
 	if (value.tags !== undefined && !isPublicTagArray(value.tags)) return false;
 	if (value.fields !== undefined && !isStringRecord(value.fields)) return false;
 	return value.properties === undefined || isRawPropertyRecord(value.properties);
 }
 
 export function isOperonPublicTransitionTaskInput(value: unknown): value is OperonPublicTransitionTaskInput {
-	return isRecord(value) && hasOnlyOptionalStrings(value, ['status', 'statusId']);
+	return isRecord(value)
+		&& hasOnlyKeys(value, ['status', 'statusId'])
+		&& hasOnlyOptionalStrings(value, ['status', 'statusId']);
 }
 
 export function isOperonPublicConvertTaskInput(value: unknown): value is OperonPublicConvertTaskInput {
 	if (!isRecord(value)
 		|| (value.target !== 'inline' && value.target !== 'file')
+		|| !hasOnlyKeys(value, ['target', 'fileTemplateId', 'targetPath', 'targetFolder'])
 		|| !hasOnlyOptionalStrings(value, ['fileTemplateId', 'targetPath', 'targetFolder'])) return false;
 	if (value.target === 'inline') {
-		return typeof value.targetPath === 'string'
-			&& /\.md$/iu.test(value.targetPath.trim())
+		return isPublicVaultPath(value.targetPath, { markdown: true })
 			&& value.fileTemplateId === undefined
 			&& value.targetFolder === undefined;
 	}
-	return value.targetPath === undefined;
+	return value.targetPath === undefined
+		&& (value.targetFolder === undefined || isPublicVaultPath(value.targetFolder, { markdown: false, allowEmpty: true }));
 }
 
 export function isOperonPublicFilterQueryInput(value: unknown): value is OperonPublicFilterQueryInput {
-	return isRecord(value) && typeof value.filterSetId === 'string' && hasOnlyOptionalStrings(value, ['scopePath']);
+	if (!isRecord(value)
+		|| !hasOnlyKeys(value, ['filterSetId', 'scopePath'])
+		|| typeof value.filterSetId !== 'string'
+		|| !hasOnlyOptionalStrings(value, ['scopePath'])) return false;
+	return value.scopePath === undefined || isPublicVaultPath(value.scopePath, { markdown: false, allowEmpty: true });
 }
 
 /** Keep public saved-filter queries aligned with the contexts used by Operon's UI surfaces. */
@@ -193,13 +263,39 @@ export function buildOperonPublicFilterEvaluationOptions<TTask, TProjectSerialSc
 }
 
 export function isOperonPublicRelocateTaskInput(value: unknown): value is OperonPublicRelocateTaskInput {
-	return isRecord(value) && typeof value.targetPath === 'string';
+	return isRecord(value)
+		&& hasOnlyKeys(value, ['targetPath'])
+		&& isPublicVaultPath(value.targetPath, { markdown: true });
 }
 
 export interface PublicWritableKeyMapping {
 	canonicalKey: string;
 	sync: 'yes' | 'no' | 'auto';
+	isSystem?: boolean;
 	isInternal?: boolean;
+}
+
+/** Fields whose invariants are owned by transitionTask rather than generic field writes. */
+export function isPublicTransitionOwnedField(key: string): boolean {
+	return key === 'status' || key === 'dateCompleted' || key === 'dateCancelled';
+}
+
+/** Creation and adoption seed only open workflow states; terminal invariants belong to transitionTask. */
+export function isPublicInitialWorkflowStateAllowed(checkbox: 'open' | 'done' | 'cancelled'): boolean {
+	return checkbox === 'open';
+}
+
+/** Initial create/adopt state must not smuggle terminal workflow metadata around transitionTask. */
+export function isPublicInitialTaskStateAllowed(input: {
+	checkbox: 'open' | 'done' | 'cancelled';
+	statusCheckbox?: 'open' | 'done' | 'cancelled' | null;
+	dateCompleted?: string;
+	dateCancelled?: string;
+}): boolean {
+	return isPublicInitialWorkflowStateAllowed(input.checkbox)
+		&& (!input.statusCheckbox || isPublicInitialWorkflowStateAllowed(input.statusCheckbox))
+		&& !input.dateCompleted?.trim()
+		&& !input.dateCancelled?.trim();
 }
 
 /** Public mutations may write only explicitly synchronized, non-internal managed fields. */
@@ -208,7 +304,9 @@ export function isPublicManagedFieldWritable(
 	mappings: readonly PublicWritableKeyMapping[],
 	isEditableField: (key: string) => boolean,
 ): boolean {
-	if (!key || key === 'operonId' || key === 'status' || key === '_checkbox') return false;
+	if (!key || key === 'operonId' || key === '_checkbox' || isPublicTransitionOwnedField(key)) return false;
 	const mapping = mappings.find(candidate => candidate.canonicalKey === key);
-	return mapping?.sync === 'yes' && mapping.isInternal !== true && isEditableField(key);
+	return mapping?.sync === 'yes'
+		&& mapping.isInternal !== true
+		&& (isEditableField(key) || (mapping.isSystem === true && isReminderStorageKey(key)));
 }

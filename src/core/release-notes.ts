@@ -13,6 +13,25 @@ const RELEASE_NOTE_LIMIT = 1;
 
 export const OPERON_RELEASE_NOTES: OperonReleaseNote[] = [
 	{
+		version: '2.6.3',
+		date: '2026-07-23',
+		title: 'Complete public field-write policy',
+		showOnUpdate: true,
+		bannerUrl: false,
+		body: `
+### Agent integration
+- Public managed-field writes are now governed by an exhaustive canonical-key matrix.
+- Agents can write fixed and relative reminder fields through Public API V1.
+- Completion and cancellation dates must pass through \`transitionTask\`, keeping workflow status,
+  checkbox state and terminal dates consistent.
+- Public creation and adoption seed only open statuses; agents use \`transitionTask\` for terminal
+  states so their dates are always applied by the workflow engine.
+
+### Compatibility
+- Preserved the Public API V1 contract, Operon task Markdown and canonical \`operonId\` field.
+`.trim(),
+	},
+	{
 		version: '2.6.2',
 		date: '2026-07-23',
 		title: 'Public API query and description safety',
