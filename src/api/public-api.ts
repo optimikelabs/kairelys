@@ -120,6 +120,7 @@ function isPublicDateKey(value: unknown): value is string {
 function isPublicVaultPath(value: unknown, options: { markdown: boolean; allowEmpty?: boolean }): value is string {
 	if (typeof value !== 'string') return false;
 	const normalized = value.trim();
+	if (normalized !== value) return false;
 	if (!normalized) return options.allowEmpty === true;
 	if (/^[\\/]/u.test(normalized) || /^[a-zA-Z]:/u.test(normalized) || normalized.includes('\\')) return false;
 	if (normalized.split('/').some(segment => !segment || segment === '.' || segment === '..')) return false;
@@ -257,6 +258,7 @@ export function isOperonPublicRelocateTaskInput(value: unknown): value is Operon
 export interface PublicWritableKeyMapping {
 	canonicalKey: string;
 	sync: 'yes' | 'no' | 'auto';
+	isSystem?: boolean;
 	isInternal?: boolean;
 }
 
@@ -293,5 +295,5 @@ export function isPublicManagedFieldWritable(
 	const mapping = mappings.find(candidate => candidate.canonicalKey === key);
 	return mapping?.sync === 'yes'
 		&& mapping.isInternal !== true
-		&& (isEditableField(key) || isReminderStorageKey(key));
+		&& (isEditableField(key) || (mapping.isSystem === true && isReminderStorageKey(key)));
 }
