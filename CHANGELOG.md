@@ -17,9 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Operon's Task Editor rather than editable Table columns.
 - Reserved `status`, `dateCompleted` and `dateCancelled` for `transitionTask`, preventing generic
   field updates from producing an open task with terminal dates.
+- Limited public creation and adoption seeds to open workflow statuses; terminal status, checkbox
+  and date changes are applied together through `transitionTask`.
 
 ### Validation
-- Public API contract coverage increased from 51 to 93 assertions and now classifies every
+- Public API contract coverage increased from 51 to 96 assertions and now classifies every
   canonical key plus editable and read-only custom fields.
 - Full validation passed in an exact fresh Linux checkout: `npm run check`, production build and
   `npm audit` with 0 vulnerabilities.

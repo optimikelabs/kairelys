@@ -24,6 +24,8 @@ export const OPERON_RELEASE_NOTES: OperonReleaseNote[] = [
 - Agents can write fixed and relative reminder fields through Public API V1.
 - Completion and cancellation dates must pass through \`transitionTask\`, keeping workflow status,
   checkbox state and terminal dates consistent.
+- Public creation and adoption seed only open statuses; agents use \`transitionTask\` for terminal
+  states so their dates are always applied by the workflow engine.
 
 ### Compatibility
 - Preserved the Public API V1 contract, Operon task Markdown and canonical \`operonId\` field.
